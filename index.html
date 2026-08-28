@@ -1,437 +1,78 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Consulta Estoque Kingspan Araquari</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<style>
-  :root {
-    --bg: #eef2f6;
-    --panel: #ffffff;
-    --ink: #111111;
-    --muted: #5a6472;
-    --blue: #004894;
-    --blue-dark: #003368;
-    --gold: #c7a679;
-    --border: #e2e6ec;
-    --row-alt: #f7f9fb;
-  }
-  * { box-sizing: border-box; }
-  html { -webkit-text-size-adjust: 100%; }
-  body {
-    margin: 0;
-    font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-    background: var(--bg);
-    color: var(--ink);
-    padding: 24px;
-  }
-  .wrap { max-width: 1200px; margin: 0 auto; }
-  img { max-width: 100%; }
+-- Apaga a tabela se já existir uma versão incompleta (seguro rodar de novo)
+drop table if exists fichas_tecnicas;
 
-  .hero {
-    position: relative;
-    border-radius: 16px;
-    padding: 22px 26px;
-    margin-bottom: 20px;
-    background: linear-gradient(120deg, var(--blue) 0%, var(--blue-dark) 55%, #001c3d 100%);
-    overflow: hidden;
-    box-shadow: 0 8px 24px rgba(0,50,100,0.18);
-  }
-  .hero::after {
-    content: "";
-    position: absolute; right: -60px; top: -60px;
-    width: 220px; height: 220px; border-radius: 50%;
-    background: radial-gradient(circle, rgba(199,166,121,0.35) 0%, rgba(199,166,121,0) 70%);
-  }
-  .hero-top { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; position: relative; z-index: 1; }
-  .logo-card {
-    background: white; border-radius: 10px; padding: 8px 14px;
-    display: flex; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.12);
-  }
-  .logo-card img { height: 32px; width: auto; display: block; }
-  .hero-tag { color: var(--gold); font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 700; }
-  .hero h1 {
-    color: #111111; background: white; display: inline-block; margin: 0;
-    font-size: 22px; padding: 6px 14px; border-radius: 8px; position: relative; z-index: 1;
-  }
-  .hero .subtitle { color: rgba(255,255,255,0.85); font-size: 13.5px; margin-top: 10px; position: relative; z-index: 1; }
+-- Tabela com imagem, uso e ficha técnica de cada item
+create table fichas_tecnicas (
+  item text primary key,
+  imagem_url text,
+  descricao text,
+  uso text,
+  ficha_tecnica_url text,
+  produto_url text
+);
 
-  .stats { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
-  .stat-pill {
-    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
-    padding: 10px 16px; font-size: 13px; color: var(--muted);
-    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
-  }
-  .stat-pill strong { display: block; font-size: 18px; color: var(--ink); }
+alter table fichas_tecnicas enable row level security;
 
-  .edit-toggle-row { display: flex; justify-content: flex-end; margin-bottom: 10px; }
-  .btn {
-    padding: 9px 14px; border: 1px solid var(--border); background: white;
-    border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--ink); font-weight: 600;
-  }
-  .btn:hover { background: var(--row-alt); }
-  .btn-primary { background: var(--blue); color: white; border-color: var(--blue-dark); }
-  .btn-primary:hover { background: var(--blue-dark); }
+-- Qualquer pessoa logada pode consultar
+create policy "Leitura para logados"
+  on fichas_tecnicas for select
+  to authenticated
+  using (true);
 
-  .edit-panel {
-    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
-    padding: 16px; margin-bottom: 16px; display: none;
-  }
-  .edit-panel.open { display: block; }
-  .edit-panel h3 { margin: 0 0 8px 0; font-size: 15px; color: var(--blue-dark); }
-  .edit-panel p { font-size: 12.5px; color: var(--muted); margin: 4px 0 10px 0; }
-  .edit-panel textarea {
-    width: 100%; min-height: 180px; font-family: ui-monospace, Consolas, monospace;
-    font-size: 12.5px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; resize: vertical;
-  }
-  .edit-actions { display: flex; gap: 10px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
-  .pin-gate {
-    background: #fff8e6; border: 1px solid #f0ce7d; border-radius: 8px;
-    padding: 14px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
-  }
-  .pin-gate input { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; width: 120px; }
-  .status-msg { font-size: 12.5px; margin-left: 6px; }
-  .status-ok { color: var(--blue-dark); }
-  .status-err { color: #b3441c; }
+-- Só o admin pode cadastrar/editar fichas
+create policy "Escrita apenas admin"
+  on fichas_tecnicas for all
+  to authenticated
+  using (auth.jwt() ->> 'email' = 'robson_alves1995@live.com')
+  with check (auth.jwt() ->> 'email' = 'robson_alves1995@live.com');
 
-  .panel {
-    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
-    overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-  }
-  .controls {
-    display: flex; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border);
-    flex-wrap: wrap; align-items: center; background: var(--row-alt);
-  }
-  .controls input[type="text"] {
-    flex: 1; min-width: 220px; padding: 10px 14px; border: 1px solid var(--border);
-    border-radius: 10px; font-size: 14px; outline: none; background: white; color: var(--ink);
-  }
-  table { width: 100%; min-width: 620px; border-collapse: collapse; font-size: 13.5px; }
-  thead th {
-    background: var(--blue); color: white; text-align: left; padding: 12px;
-    position: sticky; top: 0; cursor: pointer; user-select: none; white-space: nowrap; font-weight: 600;
-  }
-  thead th:hover { background: var(--blue-dark); }
-  thead th .arrow { font-size: 10px; opacity: 0.9; margin-left: 4px; color: var(--gold); }
-  tbody td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; color: var(--ink); }
-  tbody tr:nth-child(even) { background: var(--row-alt); }
-  tbody tr:hover { background: #fbf3e7; }
-  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; }
-  td.item { font-weight: 700; color: var(--ink); white-space: nowrap; }
-  td.loc { white-space: nowrap; color: var(--muted); }
-  .scroll-area { max-height: 68vh; overflow: auto; -webkit-overflow-scrolling: touch; }
-  .empty-msg { padding: 30px; text-align: center; color: var(--muted); }
-  .footer-note { margin-top: 14px; font-size: 12px; color: var(--muted); text-align: center; }
-  .loading-msg { padding: 30px; text-align: center; color: var(--muted); }
-  @media (max-width: 640px) {
-    body { padding: 12px; }
-    .hero { padding: 16px; border-radius: 12px; }
-    .hero-top { gap: 10px; margin-bottom: 10px; }
-    .logo-card { padding: 6px 10px; }
-    .logo-card img { height: 24px; }
-    .hero-tag { font-size: 10px; }
-    .hero h1 { font-size: 17px; padding: 5px 10px; display: block; width: fit-content; }
-    .hero .subtitle { font-size: 12px; }
+-- Todos os itens já identificados no site oficial da Kingspan (meutelhado.com.br)
+insert into fichas_tecnicas (item, imagem_url, descricao, uso, ficha_tecnica_url, produto_url) values
 
-    .stats { gap: 8px; margin-bottom: 12px; }
-    .stat-pill { flex: 1 1 calc(50% - 8px); padding: 8px 12px; }
-    .stat-pill strong { font-size: 16px; }
+('130153', 'https://t56141.vtexassets.com/arquivos/ids/156092-800-auto?v=638150486441000000&width=800&height=auto&aspect=true',
+ 'Arruela de Vedação NEOBOND ID 1/4 x OD16mm',
+ 'Usada sob a cabeça do parafuso para vedar o furo de fixação em telhas e chapas metálicas, evitando infiltração de água.',
+ 'https://downloads.kingspan-isoeste.com.br/catalogos/Kingspan-Isoeste-Cat%C3%A1logo-de-Produtos-PT-BR.pdf',
+ 'https://www.meutelhado.com.br/arruela-de-vedacao-neobond-id-1-4-x-od16mm/p'),
 
-    .edit-toggle-row { justify-content: stretch; }
-    .edit-toggle-row .btn { width: 100%; text-align: center; }
+('144060', 'https://t56141.vtexassets.com/arquivos/ids/158258-800-auto?v=638488689588470000&width=800&height=auto&aspect=true',
+ 'Massa Vedante na cor Cinza para Telhas - 600ml',
+ 'Aplicada com pistola para vedar e finalizar junções e acessórios na instalação de isotelhas.',
+ 'https://downloads.kingspan-isoeste.com.br/catalogos/Kingspan-Isoeste-Cat%C3%A1logo-de-Produtos-PT-BR.pdf',
+ 'https://www.meutelhado.com.br/massa-vedante-telhas--cinza----600ml-144060/p'),
 
-    .edit-panel { padding: 12px; }
-    .pin-gate { padding: 12px; }
-    .pin-gate span { width: 100%; }
-    .pin-gate input { flex: 1; min-width: 0; }
-    .edit-actions { flex-direction: column; align-items: stretch; }
-    .edit-actions .btn { width: 100%; text-align: center; }
-    .status-msg { margin-left: 0; text-align: center; }
+('144059', 'https://t56141.vtexassets.com/arquivos/ids/158257-800-auto?v=638488689208730000&width=800&height=auto&aspect=true',
+ 'Massa Vedante na cor Branco Neve para Telhas - 600ml',
+ 'Aplicada com pistola para vedar e finalizar junções e acessórios na instalação de isotelhas.',
+ 'https://downloads.kingspan-isoeste.com.br/catalogos/Kingspan-Isoeste-Cat%C3%A1logo-de-Produtos-PT-BR.pdf',
+ 'https://www.meutelhado.com.br/massa-vedante-telhas--branco----600ml-144059/p'),
 
-    .controls { flex-direction: column; align-items: stretch; padding: 12px; }
-    .controls input[type="text"] { min-width: 0; width: 100%; }
-    .controls .btn { width: 100%; text-align: center; }
+('144062', 'https://t56141.vtexassets.com/arquivos/ids/158256-800-auto?v=638488688871030000&width=800&height=auto&aspect=true',
+ 'Massa Vedante na cor Terracota para Telhas - 600ml',
+ 'Aplicada com pistola para vedar e finalizar junções e acessórios em telhas na cor terracota (RAL8023).',
+ 'https://downloads.kingspan-isoeste.com.br/catalogos/Kingspan-Isoeste-Cat%C3%A1logo-de-Produtos-PT-BR.pdf',
+ 'https://www.meutelhado.com.br/massa-vedante-telhas--ral8023--144062/p'),
 
-    .scroll-area { max-height: 60vh; }
-    table { font-size: 12.5px; }
-    thead th, tbody td { padding: 8px 10px; }
-  }
+('131556i', 'https://t56141.vtexassets.com/arquivos/ids/165710-800-auto?v=639135246056730000&width=800&height=auto&aspect=true',
+ 'Fita Preta Inferior para Isoluz 50mm x 33m Semipermeável',
+ 'Fita de vedação aplicada na parte inferior durante a instalação de telhas translúcidas Isoluz, formando barreira semipermeável contra umidade.',
+ 'https://downloads.kingspan-isoeste.com.br/catalogos/Kingspan-Isoeste-Cat%C3%A1logo-de-Produtos-PT-BR.pdf',
+ 'https://www.meutelhado.com.br/fita-preta-inferior-para-isoluz-50mm-x-33m-semipermeavel-131556i/p'),
 
-  @media (max-width: 380px) {
-    .stat-pill { flex: 1 1 100%; }
-  }
+('142797', 'https://t56141.vtexassets.com/arquivos/ids/160997-800-auto?v=638803327286400000&width=800&height=auto&aspect=true',
+ 'Perfil Andorinha',
+ 'Perfil metálico de acabamento usado no encontro/junção entre telhas trapezoidais térmicas.',
+ 'https://downloads.kingspan-isoeste.com.br/catalogos/Kingspan-Isoeste-Cat%C3%A1logo-de-Produtos-PT-BR.pdf',
+ 'https://www.meutelhado.com.br/perfil-andorinha-prexprimer-142797/p'),
 
-  .scroll-hint {
-    display: none; font-size: 11.5px; color: var(--muted);
-    text-align: center; padding: 6px 0 2px 0;
-  }
-  @media (max-width: 640px) {
-    .scroll-hint { display: block; }
-  }
+('142913', 'https://t56141.vtexassets.com/arquivos/ids/158262-800-auto?v=638496723357270000&width=800&height=auto&aspect=true',
+ 'Parafuso para Fixação em Aço - PB 12.1/4-14 X 4 P4',
+ 'Fixação de isotelhas trapezoidais em estruturas metálicas; acompanha arruela de vedação integrada.',
+ 'https://downloads.kingspan-isoeste.com.br/catalogos/Kingspan-Isoeste-Cat%C3%A1logo-de-Produtos-PT-BR.pdf',
+ 'https://www.meutelhado.com.br/parafuso-para-fixacao-em-aco-isotelha-trapezoidal-pb-12-1-4-14-x-4-p4/p'),
 
-  @media print {
-    body { background: white; padding: 0; }
-    .controls, .edit-toggle-row, .edit-panel { display: none; }
-    .scroll-area { max-height: none; overflow: visible; }
-    thead th { position: static; }
-  }
-</style>
-</head>
-<body>
-<div class="wrap">
-  <div class="hero">
-    <div class="hero-top">
-      <div class="logo-card"><img src="data:image/png;base64,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" alt="Kingspan Isoeste"></div>
-      <div class="hero-tag">Portal de Consulta</div>
-    </div>
-    <h1>Consulta Estoque Kingspan Araquari</h1>
-    <div class="subtitle">Consulta de itens, quantidades e localizações no almoxarifado</div>
-  </div>
-
-  <div class="stats">
-    <div class="stat-pill">Itens listados<strong id="stat-count">-</strong></div>
-    <div class="stat-pill">Atualizado em<strong id="stat-updated">-</strong></div>
-  </div>
-
-  <div class="edit-toggle-row">
-    <button class="btn" id="toggleEditBtn">Atualizar dados (área interna)</button>
-  </div>
-
-  <div class="edit-panel" id="editPanel">
-    <div id="pinGateArea" class="pin-gate">
-      <span>Digite o PIN para liberar a edição:</span>
-      <input type="password" id="pinInput" placeholder="PIN" maxlength="12">
-      <button class="btn btn-primary" id="pinSubmitBtn">Entrar</button>
-      <span class="status-msg status-err" id="pinMsg"></span>
-    </div>
-    <div id="editFormArea" style="display:none;">
-      <h3>Colar nova lista de itens</h3>
-      <p>Cole os dados no formato: <b>Item [TAB] Descrição [TAB] UM [TAB] Localização [TAB] Quantidade</b> — uma linha por item. Isso substitui a lista inteira no banco de dados para todos que abrirem este link.</p>
-      <textarea id="pasteArea" placeholder="Cole aqui os dados (separados por TAB)..."></textarea>
-      <div class="edit-actions">
-        <button class="btn btn-primary" id="saveDataBtn">Salvar no banco de dados</button>
-        <button class="btn" id="cancelEditBtn">Cancelar</button>
-        <span class="status-msg" id="saveMsg"></span>
-      </div>
-    </div>
-  </div>
-
-  <div class="panel">
-    <div class="controls">
-      <input type="text" id="searchBox" placeholder="Buscar por código, descrição ou localização...">
-      <button class="btn" id="clearBtn">Limpar filtro</button>
-      <button class="btn" id="printBtn">Imprimir / Salvar PDF</button>
-    </div>
-    <div class="scroll-hint">Arraste para o lado para ver todas as colunas →</div>
-    <div class="scroll-area">
-      <table id="dataTable">
-        <thead>
-          <tr>
-            <th data-key="item">Item <span class="arrow"></span></th>
-            <th data-key="desc">Descrição <span class="arrow"></span></th>
-            <th data-key="um">UM <span class="arrow"></span></th>
-            <th data-key="loc">Localização <span class="arrow"></span></th>
-            <th data-key="qtd">Quantidade <span class="arrow"></span></th>
-          </tr>
-        </thead>
-        <tbody id="tableBody"></tbody>
-      </table>
-      <div class="loading-msg" id="loadingMsg">Carregando dados do banco...</div>
-      <div class="empty-msg" id="emptyMsg" style="display:none;">Nenhum item encontrado.</div>
-    </div>
-  </div>
-  <div class="footer-note">Dados armazenados no Supabase. Última atualização mostrada acima.</div>
-</div>
-
-<script>
-// ---- Configuração do Supabase ----
-const SUPABASE_URL = "https://muhfzfdynbpzdjconpio.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im11aGZ6ZmR5bmJwemRqY29ucGlvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc4NDcyNDYsImV4cCI6MjEwMzQyMzI0Nn0.IZ803oFvTdZvPGhmpcNAHFkV8oQ2XOy720D-YtPWYow";
-const EDIT_PIN = "2026";
-
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-// Dados iniciais (usados apenas para popular a tabela na primeira vez, se ela estiver vazia)
-const SEED_DATA = [{"item": "141590", "desc": "PAR. PB 12-14 2\" TCP3", "um": "Pç", "loc": "A-01-01-01", "qtd": "15925"}, {"item": "144236", "desc": "PAR FIX PB 12-14 X 1\"  P3", "um": "Pç", "loc": "A-01-01-03", "qtd": "13757"}, {"item": "140497", "desc": "BUCHA PLÁSTICA (PEAD) S-8", "um": "Pç", "loc": "A-01-01-05", "qtd": "38454"}, {"item": "143326", "desc": "PAR SEXT. 3/8\"  X 3/4\" GALV.", "um": "Pç", "loc": "A-01-02-01", "qtd": "5591"}, {"item": "141310", "desc": "PORCA SEXT GALV 3/8", "um": "Pç", "loc": "A-01-02-02", "qtd": "19369"}, {"item": "130153", "desc": "ARRUELA DE VEDACAO NEOBOND ID 1/4 X OD16MM", "um": "Pç", "loc": "A-01-02-03", "qtd": "38107"}, {"item": "140501", "desc": "PAR PHILIPS C/PA 4,8 X 38MM", "um": "Pç", "loc": "A-01-02-04", "qtd": "95742"}, {"item": "141652", "desc": "ACAB DE CANTO ARREDONDADO EM ALUMINIO (SL)", "um": "Pç", "loc": "A-01-03-01", "qtd": "3788"}, {"item": "140554", "desc": "ACAB DE CANTO ARREDONDADO EM ALUMINIO PRE-PINT (SL)", "um": "Pç", "loc": "A-01-03-02", "qtd": "337"}, {"item": "144266", "desc": "PAR HARDBOLT M8 X 75MM", "um": "PÇ", "loc": "A-01-03-03", "qtd": "2264"}, {"item": "132496", "desc": "CAPINHA P/ PARAFUSO ISOLUZ - 14/16 SW 8 - RAL5010", "um": "Pç", "loc": "A-01-03-04", "qtd": "5000"}, {"item": "144269", "desc": "PAR. FIX. TITECON M5 X 32MM - CHT PHS2", "um": "Pç", "loc": "A-01-03-05", "qtd": "4365"}, {"item": "139030", "desc": "PAR FIX PA 12-18 X 25MM PONTA AGULHA ARRUELA E16 JF3 INOX", "um": "UN", "loc": "A-01-03-06", "qtd": "8677"}, {"item": "131511i", "desc": "PAR FIX TROLDTEKT STRUCTURE SCREW IMP.", "um": "Pç", "loc": "A-01-03-07", "qtd": "1130"}, {"item": "144249", "desc": "PAR COSTURA PB1/4 - 14 X 7/8\" P1 RAL9003", "um": "Pç", "loc": "A-01-04-01", "qtd": "2100"}, {"item": "144295", "desc": "PAR FIX PB 1/4 - 14 X 7/8\" HWH 5/16\" P01 - INOX 304", "um": "Pç", "loc": "A-01-04-02", "qtd": "462"}, {"item": "930444", "desc": "PARAFUSO DABO VHT-R-4.8X60", "um": "PÇ", "loc": "A-01-04-03", "qtd": "91"}, {"item": "142943", "desc": "PAR FIX LSF PB 12-14 X 3/4\" P1", "um": "Pç", "loc": "A-01-04-04", "qtd": "3700"}, {"item": "132283", "desc": "PAR COSTURA PB1/4 - 14 X 7/8\" P1 - RAL 8012", "um": "UN", "loc": "A-01-04-05", "qtd": "4964"}, {"item": "142946", "desc": "BUCHA FU10 NYLON", "um": "Pç", "loc": "A-01-04-06", "qtd": "500"}, {"item": "144291", "desc": "PAR COSTURA PB1/4-14 X 7/8 P1 - RAL7035", "um": "Pç", "loc": "A-01-04-07", "qtd": "128"}, {"item": "930364i", "desc": "971314-FIXA DRILL TEC PARAFUSO STD 12 4\"", "um": "Pç", "loc": "A-01-05-01", "qtd": "470"}, {"item": "146229", "desc": "GRAMPO DE METAL \"R\" 2.5 X 50MM - INOX", "um": "PÇ", "loc": "A-01-05-02", "qtd": "500"}, {"item": "149832", "desc": "CHUMBADOR MECÂNICO CBC - JAQUETA E CONE 1/4", "um": "PÇ", "loc": "A-01-05-03", "qtd": "117"}, {"item": "144289", "desc": "PAR FIX PB12-14 X 3/4 P3 - RAL5010", "um": "Pç", "loc": "A-01-05-04", "qtd": "250"}, {"item": "930091", "desc": "307476 - ARREMATE DE ENCONTRO DE MEMBRANAS T-JOINT- BRANCO", "um": "Pç", "loc": "A-01-05-05", "qtd": "2"}, {"item": "132514", "desc": "PARAFUSO DABO VHT-R-4.8X35", "um": "PÇ", "loc": "A-01-05-06", "qtd": "1000"}, {"item": "144197", "desc": "PORCA SEXT GALV 1/4", "um": "Pç", "loc": "A-01-05-07", "qtd": "550"}, {"item": "141599", "desc": "REBITE POP ALUMINIO BRANCO 3,2 X 10MM", "um": "Ct", "loc": "A-01-05-08", "qtd": "10"}, {"item": "144268", "desc": "PAR. FIX. TITECON M6 X 125MM SEXT. 5/16\"", "um": "Pç", "loc": "A-01-06-01", "qtd": "32000"}, {"item": "144271", "desc": "PAR FIX PB 12.1/4-14 X 4 P4 - RAL9003", "um": "Pç", "loc": "A-01-06-02", "qtd": "20000"}, {"item": "802785", "desc": "FITA VEDA ROSCA 18 X 50MM - AMANCO", "um": "Pç", "loc": "A-02-03-01", "qtd": "34"}, {"item": "142661", "desc": "ADESIVO DE VINIL TRANSPARENTE \"NÃO PISE\" - 210 X 74MM", "um": "Pç", "loc": "A-02-03-04", "qtd": "681"}, {"item": "142660", "desc": "ADESIVO DE VINIL TRANSPARENTE \"PISE AQUI\" - 210 X 74MM", "um": "Pç", "loc": "A-02-03-05", "qtd": "749"}, {"item": "801765", "desc": "TESOURA P/ CORTE DE AÇO (DIREITA) - IRWIN", "um": "Pç", "loc": "A-02-03-06", "qtd": "10"}, {"item": "801766", "desc": "TESOURA P/ CORTE DE AÇO (ESQUERDA) - IRWIN", "um": "Pç", "loc": "A-02-03-07", "qtd": "9"}, {"item": "802389", "desc": "FITA ISOLANTE", "um": "Pç", "loc": "A-02-03-09", "qtd": "30"}, {"item": "132719", "desc": "PORCA INOX M4", "um": "Pç", "loc": "A-02-04-01", "qtd": "250"}, {"item": "141672", "desc": "BORRACHA P/ VEDAÇÃO PORTA (SL)", "um": "M", "loc": "A-02-04-01", "qtd": "20"}, {"item": "933031i", "desc": "PAR 10 - 1 1/2\" Sextavado ponta agulha (SHINGLE STONE)", "um": "PÇ", "loc": "A-02-04-02", "qtd": "2000"}, {"item": "144259", "desc": "PAR FIX PB 12.1/4-14 X 3.1/4 P4 - RAL1015", "um": "Pç", "loc": "A-02-04-03", "qtd": "789"}, {"item": "130248", "desc": "PAR COSTURA PB1/4-14 X 7/8 P1 - RAL8023", "um": "Pç", "loc": "A-02-04-04", "qtd": "8242"}, {"item": "131249", "desc": "PAR FIX PB12.1/4-14 X 2\" P4 - RAL7035", "um": "UN", "loc": "A-02-04-05", "qtd": "1800"}, {"item": "131243", "desc": "PAR FIX PB12.1/4-14 X 2\" P1 (AÇO LEVE LSF/MADEIRA) RAL9003", "um": "UN", "loc": "A-02-04-06", "qtd": "1250"}, {"item": "930450i", "desc": "PARAFUSO DABO TKR 4-4.8 x 110", "um": "PÇ", "loc": "A-02-04-07", "qtd": "750"}, {"item": "140002", "desc": "CHUMBADOR ARS 3/8", "um": "Pç", "loc": "A-02-04-08", "qtd": "423"}, {"item": "141640", "desc": "PAR FIX PB 5.5/6.3 x 172mm P4", "um": "Pç", "loc": "A-02-05-01", "qtd": "1000"}, {"item": "144258", "desc": "PAR COSTURA PB1/4-14 X 7/8 P1 - RAL1015", "um": "Pç", "loc": "A-02-05-03", "qtd": "6340"}, {"item": "133480", "desc": "PAR FIX PB 12.1/4-14 X 4 P4 - RAL1015", "um": "Pç", "loc": "A-02-05-04", "qtd": "1000"}, {"item": "147294", "desc": "PAR PA 6,0 X 100MM C/ ARRUELA - INOX", "um": "PÇ", "loc": "A-02-05-05", "qtd": "2000"}, {"item": "130802", "desc": "PARAFUSO P/ CHAPA FINA EJOT DABO VHT- R - 4.8 X 200", "um": "PÇ", "loc": "A-02-05-06", "qtd": "300"}, {"item": "147285", "desc": "OLHO MÁGICO - PORTA GSL", "um": "Pç", "loc": "A-02-05-07", "qtd": "4"}, {"item": "124051", "desc": "STRIKE", "um": "UN", "loc": "A-02-05-08", "qtd": "15"}, {"item": "141580", "desc": "PAR COSTURA PB1/4-14 X 7/8 P1", "um": "Pç", "loc": "A-02-06-01", "qtd": "80000"}, {"item": "141591", "desc": "PAR FIX PB 12.1/4-14 X 3.1/4 P4", "um": "Pç", "loc": "A-02-06-01", "qtd": "25000"}, {"item": "142914", "desc": "PAR FIX PB 12-1/4\"\"-14 X 2.3/8\"\" P4", "um": "Pç", "loc": "A-03-01-01", "qtd": "6555"}, {"item": "144268", "desc": "PAR. FIX. TITECON M6 X 125MM SEXT. 5/16\"", "um": "Pç", "loc": "A-03-01-02", "qtd": "3816"}, {"item": "142918", "desc": "PAR. FIX. TITECON M6 X 100MM SEXT. 5/16\"", "um": "Pç", "loc": "A-03-01-03", "qtd": "9847"}, {"item": "141557", "desc": "REBITE POP ALUMINIO BRANCO 4,0 X 15MM", "um": "Ct", "loc": "A-03-02-01", "qtd": "2926"}, {"item": "142913", "desc": "PAR FIX PB 12.1/4-14 X 4 P4", "um": "Pç", "loc": "A-03-02-02", "qtd": "10807"}, {"item": "130339", "desc": "PAR FIX PB 12-24 X 1.1/2\" P5", "um": "Pç", "loc": "A-03-03-01", "qtd": "2390"}, {"item": "141714", "desc": "PARAFUSO VHT R 4,8 X 120MM", "um": "PÇ", "loc": "A-03-03-02", "qtd": "2080"}, {"item": "132720", "desc": "REBITE ROSCADO M4,0 x 10MM", "um": "Ct", "loc": "A-03-03-03", "qtd": "197"}, {"item": "132243", "desc": "PAR. FIX. TITECON M6 X 45MM SEXT. 5/16\"", "um": "Pç", "loc": "A-03-03-04", "qtd": "12302"}, {"item": "930390i", "desc": "PARAFUSO FIXAÇÃO 35MM P/MADEIRA - TELHA RESIDENCE RAL8012", "um": "PÇ", "loc": "A-03-03-05", "qtd": "4980"}, {"item": "996686", "desc": "PARAFUSO JBS - R 7.5 X 80", "um": "PÇ", "loc": "A-03-03-06", "qtd": "2000"}, {"item": "130770", "desc": "PAR INOX MQ/ CH/ PH/ MA 4x40", "um": "Pç", "loc": "A-03-03-07", "qtd": "200"}, {"item": "142899", "desc": "ANEL DE VEDAÇAO 5/16", "um": "Pç", "loc": "A-03-04-01", "qtd": "2200"}, {"item": "930571i", "desc": "PAR 8- 3/4\" Sextavado c/ arruela EPDM ponta agulha (SHINGLE)", "um": "PÇ", "loc": "A-03-04-02", "qtd": "1500"}, {"item": "933032i", "desc": "PAR 10 - 1\" Cabeça chata PHS ponta agulha (SHINGLE STONE)", "um": "PÇ", "loc": "A-03-04-03", "qtd": "1750"}, {"item": "930570i", "desc": "Par 10 - 3\" Sextavado ponta agulha (SHINGLE STONE)", "um": "Pç", "loc": "A-03-04-04", "qtd": "1250"}, {"item": "930728i", "desc": "PAR 10 - 1 1/2\" PANCAKE PONTA AGULHA (SHINGLE STONE)", "um": "PÇ", "loc": "A-03-04-05", "qtd": "11230"}, {"item": "131246", "desc": "PAR FIX PB12.1/4-14 X 2\" P4 - RAL1015", "um": "UN", "loc": "A-03-04-06", "qtd": "2200"}, {"item": "930450", "desc": "PARAFUSO DABO TKR 4-4.8 x 110", "um": "PÇ", "loc": "A-03-04-07", "qtd": "3000"}, {"item": "131263", "desc": "PARAFUSO COSTURA PB 1/4 -14 X 7/8\" P1 - INOX", "um": "Pç", "loc": "A-03-05-01", "qtd": "840"}, {"item": "144268", "desc": "PAR. FIX. TITECON M6 X 125MM SEXT. 5/16\"", "um": "Pç", "loc": "A-03-05-01", "qtd": "25600"}, {"item": "132249", "desc": "PAR PB 4,2x13MM P02 K-LATH INOX", "um": "Pç", "loc": "A-03-05-02", "qtd": "11900"}, {"item": "144271", "desc": "PAR FIX PB 12.1/4-14 X 4 P4 - RAL9003", "um": "Pç", "loc": "A-03-05-02", "qtd": "35000"}, {"item": "710000", "desc": "CANETA ESFEROGRAFICA PRETA", "um": "Pç", "loc": "ARMARIO 01", "qtd": "140"}, {"item": "710043", "desc": "PILHA AA", "um": "Pç", "loc": "ARMARIO 01", "qtd": "156"}, {"item": "712082", "desc": "GRAMPO P/ GRAMPEADOR 26/6 (CX C/5000 UNID)", "um": "CX", "loc": "ARMARIO 01", "qtd": "10"}, {"item": "712091", "desc": "EXTRATOR DE GRAMPO", "um": "pç", "loc": "ARMARIO 01", "qtd": "36"}, {"item": "712105", "desc": "CANETA ESFEROGRAFICA AZUL", "um": "Pç", "loc": "ARMARIO 01", "qtd": "50"}, {"item": "712108", "desc": "PILHA AAA", "um": "Pç", "loc": "ARMARIO 01", "qtd": "64"}, {"item": "712109", "desc": "ESTILETE GRANDE", "um": "Pç", "loc": "ARMARIO 01", "qtd": "70"}, {"item": "712110", "desc": "CANETA MARCA TEXTO", "um": "Pç", "loc": "ARMARIO 01", "qtd": "36"}, {"item": "712120", "desc": "LAMINA DE ESTILETE (GRANDE)", "um": "Pç", "loc": "ARMARIO 01", "qtd": "140"}, {"item": "712123", "desc": "MARCADOR PERMANENTE 2.0MM AZUL", "um": "Pç", "loc": "ARMARIO 01", "qtd": "12"}, {"item": "142916", "desc": "PAR FIX PB 12-14 X 1.1/2\" P3", "um": "Pç", "loc": "B-01-01-01", "qtd": "2215"}, {"item": "144271", "desc": "PAR FIX PB 12.1/4-14 X 4 P4 - RAL9003", "um": "Pç", "loc": "B-01-01-02", "qtd": "13092"}, {"item": "141591", "desc": "PAR FIX PB 12.1/4-14 X 3.1/4 P4", "um": "Pç", "loc": "B-01-01-03", "qtd": "29027"}, {"item": "140003", "desc": "PAR FIX PB 12.1/4-14 X 5 P4", "um": "Pç", "loc": "B-01-02-01", "qtd": "2169"}, {"item": "141594", "desc": "PAR PB 8 x 1/2 P02 K-LATH RAL9003", "um": "Pç", "loc": "B-01-02-02", "qtd": "132285"}, {"item": "141314", "desc": "ARRUELA LISA GALV 3/8", "um": "Pç", "loc": "B-01-02-03", "qtd": "21355"}, {"item": "141580", "desc": "PAR COSTURA PB1/4-14 X 7/8 P1", "um": "Pç", "loc": "B-01-02-04", "qtd": "60320"}, {"item": "131556i", "desc": "FITA PRETA INFERIOR PARA ISOLUZ 50MM X 33M SEMIPERMEÁVEL", "um": "UN", "loc": "B-01-03-01", "qtd": "80"}, {"item": "131555i", "desc": "FITA BRANCA SUPERIOR PARA ISOLUZ 50MM X 33M IMPERMEÁVEL", "um": "UN", "loc": "B-01-03-02", "qtd": "135"}, {"item": "144267", "desc": "PAR FIX PB 12.1/4-14 X 4\" P1", "um": "Pç", "loc": "B-01-03-03", "qtd": "5336"}, {"item": "144261", "desc": "PAR FIX PB 12.1/4 -14 X 6 P4", "um": "Pç", "loc": "B-01-03-04", "qtd": "981"}, {"item": "150024", "desc": "PAR INOX FENDA C/E 4,8 X 38MM", "um": "Pç", "loc": "B-01-03-05", "qtd": "11250"}, {"item": "139026", "desc": "PAR FIX PB12-14 X 3/4 P3 - RAL7035", "um": "Pç", "loc": "B-01-04-01", "qtd": "140"}, {"item": "140525", "desc": "PORCA SEXT GALV 5/16", "um": "Pç", "loc": "B-01-04-02", "qtd": "244"}, {"item": "130801", "desc": "PARAFUSO P/GESSO-TROMBETA M4,2X70MM-PONTA AGULHA FOSFATIZADO", "um": "PÇ", "loc": "B-01-04-03", "qtd": "3000"}, {"item": "143159", "desc": "ARRUELA 32MM - THRULOK", "um": "Pç", "loc": "B-01-04-04", "qtd": "127"}, {"item": "131570", "desc": "PAR FIX PB 12.1/4-14 X 4 P4 - RAL7035", "um": "Pç", "loc": "B-01-04-05", "qtd": "270"}, {"item": "142942", "desc": "ARRUELA GALVANIZADA 5/16 (TELHA)", "um": "Pç", "loc": "B-01-04-06", "qtd": "699"}, {"item": "144395", "desc": "PARAFUSO DABO TKR 4.8X35", "um": "Pç", "loc": "B-01-04-07", "qtd": "400"}, {"item": "131630", "desc": "PAR FIX PB12.1/4-14 X 2\" P4", "um": "UN", "loc": "B-01-04-08", "qtd": "1101"}, {"item": "140497", "desc": "BUCHA PLÁSTICA (PEAD) S-8", "um": "Pç", "loc": "B-01-05-01", "qtd": "42000"}, {"item": "141559", "desc": "REBITE DE ALUMINIO 4,0 X 16MM", "um": "Ct", "loc": "B-01-05-01", "qtd": "1000"}, {"item": "140003", "desc": "PAR FIX PB 12.1/4-14 X 5 P4", "um": "Pç", "loc": "B-01-05-02", "qtd": "30400"}, {"item": "144275", "desc": "PAR FIX PB 12.1/4-14 X 5 P4 - RAL9003", "um": "Pç", "loc": "B-02-01-01", "qtd": "4230"}, {"item": "141315", "desc": "ARRUELA DE VEDACAO NEOBOND ID 1/4 X OD 7/8", "um": "Pç", "loc": "B-02-01-02", "qtd": "19552"}, {"item": "142938", "desc": "PAR. FIX. TITECON M6 X 70MM SEXT. 5/16\"", "um": "Pç", "loc": "B-02-01-03", "qtd": "1422"}, {"item": "540711", "desc": "PAR ME FIX PB 10 16x5/8\" PANCAKE PHS2 TCP3 XIN BRA 5", "um": "PÇ", "loc": "B-02-01-04", "qtd": "29016"}, {"item": "132500", "desc": "ARRUELA DE VEDAÇÃO GOIVA P/ ISOLUZ AZUL RAL5010", "um": "Pç", "loc": "B-02-01-05", "qtd": "3585"}, {"item": "144079", "desc": "PAR FIX PB12-14 X 3/4 P3", "um": "Pç", "loc": "B-02-02-01", "qtd": "33261"}, {"item": "141639", "desc": "REBITE POP ALUMINIO CINZA 4,0 X 15MM - RAL9006", "um": "Ct", "loc": "B-02-02-03", "qtd": "657"}, {"item": "132738", "desc": "REBITE ALUMINIO 4,8 X 22MM", "um": "Ct", "loc": "B-02-02-04", "qtd": "414"}, {"item": "141558", "desc": "REBITE INOX 4,0 X 15MM", "um": "Ct", "loc": "B-02-02-05", "qtd": "1584"}, {"item": "144278", "desc": "PAR FIX PB12-14 X 3/4 P3 - RAL9003", "um": "Pç", "loc": "B-02-03-01", "qtd": "19890"}, {"item": "142915", "desc": "PAR FIX PB 12-14 X 1.3/4 CABEÇA CHATA C/ ASA P3", "um": "Pç", "loc": "B-02-03-02", "qtd": "7099"}, {"item": "144235", "desc": "PAR FIX PB1/4-14 X 7/8 P3", "um": "Pç", "loc": "B-02-03-03", "qtd": "2950"}, {"item": "144254", "desc": "PAR P/ MADEIRA 6,0 X 90MM RAL8023 CE", "um": "Pç", "loc": "B-02-03-04", "qtd": "7345"}, {"item": "144284", "desc": "PAR. FIX. TITECON M5 X 45MM - CHT PHS2", "um": "Pç", "loc": "B-02-03-05", "qtd": "3125"}, {"item": "143213", "desc": "JUNÇÃO P/ HASTE ROSCADA GALV 3/8\"", "um": "Pç", "loc": "B-02-03-06", "qtd": "1287"}, {"item": "131629", "desc": "PAR FIX PB12.1/4-14 X 2\" P1 (AÇO LEVE LSF/MADEIRA)", "um": "UN", "loc": "B-02-04-01", "qtd": "1020"}, {"item": "131569", "desc": "PAR COSTURA PB1/4-14 X 7/8 P1 - RAL9006", "um": "Pç", "loc": "B-02-04-02", "qtd": "259"}, {"item": "132513", "desc": "PARAFUSO DABO TKR 4-4.8 X 90", "um": "PÇ", "loc": "B-02-04-03", "qtd": "250"}, {"item": "144367", "desc": "PAR COSTURA PB1/4-14 X 7/8 P1 - RAL7016", "um": "Pç", "loc": "B-02-04-04", "qtd": "2122"}, {"item": "930377", "desc": "PARAFUSO DABO VHT-R-4.8X50", "um": "PÇ", "loc": "B-02-04-06", "qtd": "420"}, {"item": "140534", "desc": "ARRUELA LISA GALV 5/16", "um": "Pç", "loc": "B-02-04-07", "qtd": "7755"}, {"item": "600817", "desc": "FITA ARQUEAR 13MM", "um": "Pç", "loc": "B-02-05-01", "qtd": "12"}, {"item": "142913", "desc": "PAR FIX PB 12.1/4-14 X 4 P4", "um": "Pç", "loc": "B-02-05-02", "qtd": "40000"}, {"item": "144255", "desc": "PAR P/ MADEIRA 6,0 X 90MM ZI", "um": "Pç", "loc": "B-03-01-01", "qtd": "6355"}, {"item": "130249", "desc": "PAR FIX PB 12.1/4-14 X 3.1/4 P4 - RAL8023", "um": "Pç", "loc": "B-03-01-02", "qtd": "7560"}, {"item": "130001", "desc": "CHUMBADOR PARABOLT 5/16 X 3 1/4", "um": "Pç", "loc": "B-03-01-03", "qtd": "2174"}, {"item": "142001", "desc": "PAR FIX PB 12-14 X 3.1/4 CABEÇA CHATA C/ ASA P4", "um": "Pç", "loc": "B-03-01-04", "qtd": "3822"}, {"item": "144281", "desc": "PAR COSTURA PB1/4-14 X 7/8 P1 - RAL9003", "um": "Pç", "loc": "B-03-01-05", "qtd": "33839"}, {"item": "130520", "desc": "REBITE HERMETICO 4,0 X 15MM", "um": "Ct", "loc": "B-03-02-01", "qtd": "219"}, {"item": "140505", "desc": "REBITE ALUMINIO  3,2 X 10MM", "um": "Ct", "loc": "B-03-02-02", "qtd": "645"}, {"item": "141559", "desc": "REBITE DE ALUMINIO 4,0 X 16MM", "um": "Ct", "loc": "B-03-02-03", "qtd": "630"}, {"item": "130251", "desc": "REBITE HERMETICO 4,0 X 15MM - RAL8023", "um": "Ct", "loc": "B-03-02-04", "qtd": "196"}, {"item": "130519", "desc": "REBITE ALUMINIO 4,8 X 15MM", "um": "Ct", "loc": "B-03-02-05", "qtd": "80"}, {"item": "141747", "desc": "PAR FIX PB 6.5/7 X 120MM ARRUELA E19 P1", "um": "Pç", "loc": "B-03-03-01", "qtd": "3100"}, {"item": "130594", "desc": "ESPAÇADOR PARA MONTAGEM DE CREATIVE WALL", "um": "UN", "loc": "B-03-03-02", "qtd": "727"}, {"item": "930389i", "desc": "PARAFUSO FIXAÇÃO 35MM P/MADEIRA - TELHA RESIDENCE RAL7016", "um": "PÇ", "loc": "B-03-03-03", "qtd": "10744"}, {"item": "147293", "desc": "PAR PA 6,0 X 100MM C/ ARRUELA - ORGANOMETÁLICO", "um": "PÇ", "loc": "B-03-03-04", "qtd": "4000"}, {"item": "930463", "desc": "BUCHA HTK-2G-50x35", "um": "PÇ", "loc": "B-03-03-05", "qtd": "180"}, {"item": "144368", "desc": "PAR FIX PB12-14 X 3/4 P3 - RAL7016", "um": "Pç", "loc": "B-03-03-06", "qtd": "3700"}, {"item": "132511", "desc": "BUCHA HTK-2G-50X145", "um": "PÇ", "loc": "B-03-04-01", "qtd": "800"}, {"item": "131247", "desc": "PAR FIX PB12.1/4-14 X 2\" P4 - RAL8023", "um": "UN", "loc": "B-03-04-02", "qtd": "4200"}, {"item": "144242", "desc": "PAR P/ CONCRETO 6,0 X 70MM RAL7016", "um": "Pç", "loc": "B-03-04-03", "qtd": "3601"}, {"item": "144241", "desc": "PAR P/ CONCRETO 6,0 X 70MM RAL7035", "um": "Pç", "loc": "B-03-04-04", "qtd": "2000"}, {"item": "144239", "desc": "PAR P/ CONCRETO 6,0 X 70MM RAL8023", "um": "Pç", "loc": "B-03-04-05", "qtd": "2500"}, {"item": "144238", "desc": "PAR P/ CONCRETO 6,0 X 70MM RAL1015", "um": "Pç", "loc": "B-03-04-06", "qtd": "2000"}, {"item": "132738", "desc": "REBITE ALUMINIO 4,8 X 22MM", "um": "Ct", "loc": "B-03-05-01", "qtd": "350"}, {"item": "144261", "desc": "PAR FIX PB 12.1/4 -14 X 6 P4", "um": "Pç", "loc": "B-03-05-01", "qtd": "11600"}, {"item": "143100", "desc": "FITA TELHA/TERÇA 50MM X 2MM X 10M", "um": "RL", "loc": "B-03-05-02", "qtd": "235"}, {"item": "144002", "desc": "PAR FIX PB 1/4 - 20 X 5\" CABEÇA CHATA C/ASA P03", "um": "Pç", "loc": "C-01-01-01", "qtd": "3042"}, {"item": "144085", "desc": "PAR FIX PB12-14 X 2 1/4 CABEÇA CHATA COM ASA P3", "um": "Pç", "loc": "C-01-01-02", "qtd": "9280"}, {"item": "141742", "desc": "PAR FIX PB 12.1/4-14 X 3.1/4 P4", "um": "Pç", "loc": "C-01-01-03", "qtd": "4977"}, {"item": "141741", "desc": "PAR FIX PB 12-1-4 -14 X 2.3-8 P4", "um": "Pç", "loc": "C-01-01-04", "qtd": "5000"}, {"item": "130497", "desc": "PAR FIX PB 12 X 1.1/2\" P1", "um": "Pç", "loc": "C-01-01-05", "qtd": "1600"}, {"item": "131197", "desc": "FITA DUPLA FACE VHB 4910 9.5MM X 1,0MM X 10M", "um": "RL", "loc": "C-01-01-06", "qtd": "52"}, {"item": "714379", "desc": "ETIQUETA DE ROLO 100 X 100MM", "um": "UN", "loc": "C-01-02-01", "qtd": "203"}, {"item": "712196", "desc": "PAPEL SULFITE RECICLADO", "um": "RE", "loc": "C-01-02-02", "qtd": "101"}, {"item": "714385", "desc": "ETIQUETA DE ROLO 150 X 210MM", "um": "UN", "loc": "C-01-02-03", "qtd": "86"}, {"item": "712493", "desc": "MANGUEIRA PU 10MM", "um": "M", "loc": "C-01-03-01", "qtd": "500"}, {"item": "712504", "desc": "MANGUEIRA PU 16MM", "um": "M", "loc": "C-01-03-02", "qtd": "550"}, {"item": "714386", "desc": "RIBBON MISTO - K200 (160MM X 450M)", "um": "Pç", "loc": "C-01-03-05", "qtd": "60"}, {"item": "714381", "desc": "RIBBON MISTO - K200 (110MM X 450M)", "um": "UN", "loc": "C-01-03-06", "qtd": "88"}, {"item": "143164i", "desc": "MEMBRANA PVC S/ REFORÇO 250 X 1.5MM X 20M RAL7046", "um": "Pç", "loc": "C-01-04-01", "qtd": "4"}, {"item": "710167", "desc": "PAPEL HIGIÊNICO FOLHA SIMPLES ROLO 8X 400M ESSENZ HRS118", "um": "FD", "loc": "C-01-05-01", "qtd": "60"}, {"item": "800042", "desc": "PAPEL MANILHA MARROM 1200MM", "um": "Pç", "loc": "C-02-01-02", "qtd": "19"}, {"item": "144088", "desc": "ARRUELA DE FIXAÇÃO PASSANTE COM PORCA", "um": "Pç", "loc": "C-02-02-01", "qtd": "1181"}, {"item": "144246", "desc": "PAR FIX PB12.1/4 - 14 X 3.1/4\" P4 RAL9003", "um": "Pç", "loc": "C-02-02-02", "qtd": "40158"}, {"item": "130140", "desc": "ARRUELA LISA GALV. 10  X 32 X 3MM", "um": "Pç", "loc": "C-02-02-03", "qtd": "325"}, {"item": "144072", "desc": "ARRUELA LISA 1/4", "um": "Pç", "loc": "C-02-02-04", "qtd": "580"}, {"item": "141623", "desc": "PAR PB 8 x 1/2 P02 K-LATH (SEM PINTURA)", "um": "Pç", "loc": "C-02-02-05", "qtd": "7200"}, {"item": "144290", "desc": "PAR FIX 3,5 X 25MM (GN25) FOSFATIZADO PONTA AGULHA P/ GESSO", "um": "Pç", "loc": "C-02-02-06", "qtd": "153"}, {"item": "132482", "desc": "PRATO DE FIXAÇÃO COBERTURA COM MEMBRANA 0,8 X 40MM", "um": "Pç", "loc": "C-02-02-07", "qtd": "12900"}, {"item": "143101", "desc": "FITA TELHA/TERÇA METÁLICA", "um": "M", "loc": "C-02-03-01", "qtd": "3570"}, {"item": "712416", "desc": "ESCOVA DE AÇO TIPO COPO ONDULADA 4\" - STARRET", "um": "Pç", "loc": "C-02-03-03", "qtd": "50"}, {"item": "141347", "desc": "PAR FIX PB12-14 X 3/4 P3 - RAL1011", "um": "Pç", "loc": "C-02-03-04", "qtd": "5418"}, {"item": "144286", "desc": "PAR FIX PB 18. 9 X 1\" P1", "um": "Pç", "loc": "C-02-03-05", "qtd": "500"}, {"item": "131473", "desc": "PAR P/ MADEIRA 6,5 X 65MM EJOGUARD", "um": "PÇ", "loc": "C-02-03-06", "qtd": "100"}, {"item": "140368", "desc": "FITA LATERAL 95MM - ESQUERDA - P100", "um": "M", "loc": "C-02-04-01", "qtd": "80000"}, {"item": "140365", "desc": "FITA LATERAL 65MM - ESQUERDA", "um": "M", "loc": "C-02-04-02", "qtd": "87000"}, {"item": "132215", "desc": "TAMPA PLÁSTICA AIRBRISE 50MM X 150MM PRETA", "um": "Pç", "loc": "C-02-05-02", "qtd": "3215"}, {"item": "130614", "desc": "JOELHO PVC SOLDÁVEL 20 X Ø 1/2\" C/ ROSCA  - AMANCO", "um": "PÇ", "loc": "C-03-01-03", "qtd": "1170"}, {"item": "130401", "desc": "T  SOLDAVEL 20MM - AMANCO", "um": "Pç", "loc": "C-03-01-04", "qtd": "1900"}, {"item": "130400", "desc": "JOELHO 90º SOLDAVEL 20MM - AMANCO", "um": "Pç", "loc": "C-03-01-05", "qtd": "850"}, {"item": "149771", "desc": "FILME DE PROTEÇÃO P/ TRANSPASSE DE ISOTELHA LARG 150MM", "um": "Kg", "loc": "C-03-02-01", "qtd": "145,4"}, {"item": "123312", "desc": "FILME DE PROTEÇÃO P/ TRANSPASSE DE ISOTELHA LARG 300MM", "um": "Kg", "loc": "C-03-02-02", "qtd": "243,8"}, {"item": "149772", "desc": "FILME DE PROTEÇÃO P/ TRANSPASSE DE ISOTELHA LARG 200MM", "um": "Kg", "loc": "C-03-02-04", "qtd": "87,3"}, {"item": "123311", "desc": "FILME DE PROTEÇÃO P/ TRANSPASSE DE ISOTELHA LARG 250MM", "um": "Kg", "loc": "C-03-02-05", "qtd": "124,31"}, {"item": "804386", "desc": "APLICADOR DE MASSA VEDANTE ( 600 ML)", "um": "Pç", "loc": "C-03-03-01", "qtd": "21"}, {"item": "143136", "desc": "VALVULA EQ DE PRESSAO PEQUENA (C/AQUEC)", "um": "Pç", "loc": "C-03-03-02", "qtd": "21"}, {"item": "131912", "desc": "REGISTRO POSTERIOR UNIVERSAL", "um": "Pç", "loc": "C-03-03-03", "qtd": "1"}, {"item": "131250", "desc": "PAR FIX PB12.1/4-14 X 2\" P4 - RAL7016", "um": "UN", "loc": "C-03-03-04", "qtd": "7827"}, {"item": "142913", "desc": "PAR FIX PB 12.1/4-14 X 4 P4", "um": "Pç", "loc": "C-03-04-01", "qtd": "29200"}, {"item": "143112", "desc": "VEDA ONDA SUPERIOR TP-40 - PUR", "um": "Pç", "loc": "C-03-04-02", "qtd": "482"}, {"item": "142234", "desc": "VALVULA EQ DE PRESSAO GRANDE (C/ TUBO DE AQUEC)", "um": "PÇ", "loc": "C-03-05-01", "qtd": "20"}, {"item": "141650", "desc": "CANTONEIRA ALUM. ARREDONDADA (SL) (111003)", "um": "M", "loc": "CANT A-01", "qtd": "2880"}, {"item": "130063", "desc": "PERFIL ALUM. PORTA CADEIRINHA C/ VEDAÇÃO GSL50 (111015)", "um": "M", "loc": "CANT A-02", "qtd": "180"}, {"item": "132004", "desc": "PERFIL ALUM. FACHADA I -  RAL9006 (111017)", "um": "M", "loc": "CANT A-02", "qtd": "12"}, {"item": "132005", "desc": "PERFIL ALUM. FACHADA II - RAL9006 (111018)", "um": "M", "loc": "CANT A-02", "qtd": "12"}, {"item": "132118", "desc": "PERFIL ACABAMENTO ABERTURAS EVO. ALUM. BASE-RAL9006(132057)", "um": "M", "loc": "CANT A-02", "qtd": "24"}, {"item": "140986", "desc": "RODA FORRO ARREDONDADO ALUMÍNIO", "um": "M", "loc": "CANT A-02", "qtd": "12"}, {"item": "140992", "desc": "PERFIL VISOR VIDRO SIMPLES - RAL9003 ALUMÍNIO", "um": "M", "loc": "CANT A-02", "qtd": "1440"}, {"item": "146255", "desc": "PERFIL ALUM. U 20 X 50 X 20MM ANODIZADO (146251)", "um": "M", "loc": "CANT A-02", "qtd": "894"}, {"item": "131968", "desc": "PERFIL ALUM. FACHADA I - RAL9003  (131965)", "um": "M", "loc": "CANT A-03", "qtd": "330"}, {"item": "131969", "desc": "PERFIL ALUM. FACHADA II - RAL9003 (131966)", "um": "M", "loc": "CANT A-03", "qtd": "330"}, {"item": "131965", "desc": "PERFIL ALUM. FACHADA I -  (111017)", "um": "M", "loc": "CANT A-04", "qtd": "144"}, {"item": "131966", "desc": "PERFIL ALUM. FACHADA II - (111018)", "um": "M", "loc": "CANT A-04", "qtd": "6"}, {"item": "132113", "desc": "PERFIL ALUM. FACHADA I - RAL 5002 (111017)", "um": "M", "loc": "CANT A-04", "qtd": "6"}, {"item": "132114", "desc": "PERFIL ALUM. FACHADA II - RAL 5002 (111018)", "um": "M", "loc": "CANT A-04", "qtd": "6"}, {"item": "140553", "desc": "CANTONEIRA ALUM. PRE-PINT.60 X 60 X 2MM (SL)(111024)", "um": "M", "loc": "CANT A-04", "qtd": "276"}, {"item": "140990", "desc": "PERFIL ALUM. U 15 X 50 X15MM (SL)(111023) - RAL9003 ALUMÍNIO", "um": "M", "loc": "CANT A-04", "qtd": "258"}, {"item": "141657", "desc": "PERFIL ALUM. BATENTE P/ PORTA DE CORRER (SL)(111047)", "um": "M", "loc": "CANT A-04", "qtd": "12"}, {"item": "142279", "desc": "PERFIL U 50 X 100 X 50MM - RAL9003/PRIM 0,50 EXT", "um": "M", "loc": "CANT B-01", "qtd": "39"}, {"item": "146072", "desc": "PERFIL U 50 X 120 X 50MM - RAL9003/PRIM 0,50 EXT", "um": "M", "loc": "CANT B-02", "qtd": "483"}, {"item": "140533", "desc": "CANTONEIRA 50 X 125MM EXT - RAL9003 0,50MM", "um": "M", "loc": "CANT B-03", "qtd": "894"}, {"item": "144312", "desc": "CANTONEIRA 40 X 40MM EXT - RAL9003 0,50MM", "um": "M", "loc": "CANT B-04", "qtd": "2499"}, {"item": "140527", "desc": "CANTONEIRA 50 X 50MM INT - RAL9003 0,50MM", "um": "M", "loc": "CANT C-01", "qtd": "156"}, {"item": "140528", "desc": "CANTONEIRA 50 X 50MM EXT - RAL9003 0,50MM", "um": "M", "loc": "CANT C-02", "qtd": "437"}, {"item": "140535", "desc": "CANTONEIRA 50 X 100MM EXT - RAL9003 0,50MM", "um": "M", "loc": "CANT C-03", "qtd": "846"}, {"item": "140531", "desc": "PERFIL U 19 X 50 X 19MM - RAL9003/PRIM 0,50 EXT", "um": "M", "loc": "CANT C-04", "qtd": "195"}, {"item": "142797", "desc": "PERFIL ANDORINHA RAL9003/PRIMER 0,50MM", "um": "M", "loc": "CANT D-01", "qtd": "624"}, {"item": "144308", "desc": "CANTONEIRA 30 X 30MM INT - RAL9003 0,50MM", "um": "M", "loc": "CANT D-01", "qtd": "978"}, {"item": "144313", "desc": "CANTONEIRA 40 X 40MM INT - RAL9003 0,50MM", "um": "M", "loc": "CANT D-02", "qtd": "2118"}, {"item": "141571", "desc": "PERFIL U 19 X 100 X 19MM - RAL9003/PRIM 0,50 EXT", "um": "M", "loc": "CANT D-03", "qtd": "774"}, {"item": "140529", "desc": "PERFIL T 25 X 70MM - RAL9003/PRIM 0,50 EXT", "um": "M", "loc": "CANT D-04", "qtd": "489"}, {"item": "140552", "desc": "CANTONEIRA ALUM.  ARREDONDADA RAL9003  (SL) (111003)", "um": "M", "loc": "CANT E-01", "qtd": "2008"}, {"item": "141573", "desc": "PERFIL U 19 X 150 X 19MM - RAL9003/PRIM 0,50 EXT", "um": "M", "loc": "CANT E-02", "qtd": "582"}, {"item": "132052", "desc": "SUPORTE INFERIOR EVO. ALUM. NATURAL INÍCIO RECORTADO", "um": "M", "loc": "CANT E-03", "qtd": "156"}, {"item": "132150", "desc": "PERFIL SUPORTE INFERIOR EVO 50MM NO PISO ALUMINIO", "um": "M", "loc": "CANT E-03", "qtd": "186"}, {"item": "133054", "desc": "PERFIL ALUM. U 19 X 50 X 19MM BRANCO BM (111051)", "um": "M", "loc": "CANT E-03", "qtd": "666"}, {"item": "143618", "desc": "RODA FORRO ARREDONDADO PRE -PINT (RAL9003)", "um": "M", "loc": "CANT E-03", "qtd": "312"}, {"item": "132002", "desc": "PERFIL ALUM. FACHADA I -  RAL7035 (111017)", "um": "M", "loc": "CANT E-04", "qtd": "144"}, {"item": "132003", "desc": "PERFIL ALUM. FACHADA II - RAL7035 (111018)", "um": "M", "loc": "CANT E-04", "qtd": "144"}, {"item": "132026", "desc": "PERFIL ALUM. FACHADA I -  RAL6002 (111017)", "um": "M", "loc": "CANT E-04", "qtd": "78"}, {"item": "132027", "desc": "PERFIL ALUM. FACHADA II - RAL6002 (111018)", "um": "M", "loc": "CANT E-04", "qtd": "78"}, {"item": "141654", "desc": "CANTONEIRA ALUM. 60 X 60 X 2MM (SL)(111024)", "um": "M", "loc": "CANT E-04", "qtd": "918"}, {"item": "141669", "desc": "CANTONEIRA ALUM. 19 X 19 X 2MM (SL)(111013)", "um": "M", "loc": "CANT E-04", "qtd": "384"}, {"item": "141687", "desc": "CANTONEIRA ALUM. PRÉ-PINT 19 X 19 X 2MM (SL)(141669)", "um": "M", "loc": "CANT E-04", "qtd": "216"}, {"item": "146066", "desc": "PERFIL U 50 X 50 X 50MM - RAL9003/PRIM 0,50 EXT", "um": "M", "loc": "CANT F-01", "qtd": "897"}, {"item": "141565", "desc": "CANTONEIRA 50 X 150MM EXT - RAL9003 0,50MM", "um": "M", "loc": "CANT F-02", "qtd": "432"}, {"item": "141576", "desc": "PERFIL U 19 X 32 X 19MM - RAL9003/PRIM 0,50 EXT", "um": "M", "loc": "CANT F-03", "qtd": "636"}, {"item": "146122", "desc": "PERFIL ANDORINHA RAL9003/PRIMER 0,50MM P50", "um": "Pç", "loc": "CANT F-04", "qtd": "508"}, {"item": "146068", "desc": "PERFIL U 50 X 70 X 50MM - RAL9003/PRIM 0,50 EXT", "um": "M", "loc": "CANT G-01", "qtd": "534"}, {"item": "144314", "desc": "CANTONEIRA 40 X 140MM EXT - RAL9003 0,50MM", "um": "M", "loc": "CANT G-02", "qtd": "18"}, {"item": "141581", "desc": "PERFIL U 19 X 70 X 19MM - RAL9003/PRIM 0,50 EXT", "um": "M", "loc": "CANT G-03", "qtd": "1149"}, {"item": "141566", "desc": "CANTONEIRA 50 X 175MM EXT - RAL9003 0,50MM", "um": "M", "loc": "CANT G-04", "qtd": "366"}, {"item": "111017", "desc": "P. AL FACHADA I (131965)", "um": "M", "loc": "CHAO", "qtd": "1722"}, {"item": "111018", "desc": "P. AL FACHADA II (131966)", "um": "M", "loc": "CHAO", "qtd": "1830"}, {"item": "130402", "desc": "TUBO PVC SOLDAVEL 1/2\"  (BARRA 6M) - AMANCO", "um": "Pç", "loc": "CHAO", "qtd": "220"}, {"item": "131718", "desc": "PERFIL CARTOLA P/ FORRO EM LAJE DE CONCRETO", "um": "Pç", "loc": "CHAO", "qtd": "171"}, {"item": "131951", "desc": "DOBRADIÇA PORTA VAI E VEM  14013", "um": "Pç", "loc": "CHAO", "qtd": "12"}, {"item": "132492", "desc": "CHAPA DE AÇO GALV 100 X 100 X 3MM", "um": "Pç", "loc": "CHAO", "qtd": "6265"}, {"item": "133120", "desc": "FILME PROTETIVO DE POLIETILENO COM UV LARG. 1150 X 0,040MM", "um": "KG", "loc": "CHAO", "qtd": "161,5"}, {"item": "133121", "desc": "FILME PROTETIVO DE POLIETILENO LARG. 1150MM - VERMELHO", "um": "KG", "loc": "CHAO", "qtd": "1193,6"}, {"item": "140004", "desc": "TUBO PVC 100 X 300 - AMANCO", "um": "Pç", "loc": "CHAO", "qtd": "1161"}, {"item": "140097", "desc": "CANTONEIRA 38 X 38MM EM PVC RÍGIDO (ÂNGULO RETO)", "um": "M", "loc": "CHAO", "qtd": "1656"}, {"item": "140360", "desc": "GAXETA VEDAÇÃO ¾ EVOLUTION", "um": "M", "loc": "CHAO", "qtd": "96"}, {"item": "141357", "desc": "FILME ALUMINIO 1000 X 0,051MM", "um": "Kg", "loc": "CHAO", "qtd": "967,5"}, {"item": "142558", "desc": "PERFIL ALUM. T 85 X 75 X 2MM (111005)", "um": "M", "loc": "CHAO", "qtd": "3390"}, {"item": "142559", "desc": "PERFIL ALUM. T 85 X 75 X 2MM (PINTADO)", "um": "M", "loc": "CHAO", "qtd": "3714"}, {"item": "142699", "desc": "SUPORTE U AIRBRISE 50x150 - 48X148X48 L=50MM GALVA 2MM", "um": "PÇ", "loc": "CHAO", "qtd": "64"}, {"item": "142977", "desc": "RUFO DE TOPO DENTADO TP-40 PIR 3TP-RAL9003 0,50MM", "um": "PÇ", "loc": "CHAO", "qtd": "4"}, {"item": "143123", "desc": "CANTONEIRA ARREDONDADA EM PVC PEQ.", "um": "M", "loc": "CHAO", "qtd": "410"}, {"item": "143185", "desc": "CHAPA DE AÇO GALV 100 X 100 X 2MM", "um": "Pç", "loc": "CHAO", "qtd": "17968"}, {"item": "143212", "desc": "HASTE ROSCADA GALV 3/8 X 1000MM C/ FIX", "um": "Pç", "loc": "CHAO", "qtd": "2150"}, {"item": "143215", "desc": "HASTE ROSCADA GALV 3/8 X 1000MM", "um": "Pç", "loc": "CHAO", "qtd": "2863"}, {"item": "143217", "desc": "HASTE ROSCADA GALV 3/8 X 2000MM C/ FIX", "um": "Pç", "loc": "CHAO", "qtd": "1080"}, {"item": "143218", "desc": "HASTE ROSCADA GALV 3/8 X 3000MM C/ FIX", "um": "Pç", "loc": "CHAO", "qtd": "1851"}, {"item": "143408", "desc": "CHAPA DE AÇO GALV 250 X 250 X 3,00MM C/ PORCA 3/8\" SOLDADA", "um": "Pç", "loc": "CHAO", "qtd": "2972"}, {"item": "144018", "desc": "HASTE ROSCADA GALV 3/8 X 2000MM", "um": "Pç", "loc": "CHAO", "qtd": "800"}, {"item": "144019", "desc": "HASTE ROSCADA GALV 3/8 X 3000MM", "um": "Pç", "loc": "CHAO", "qtd": "1036"}, {"item": "144059", "desc": "MASSA VEDANTE TELHAS (BRANCO) - 600ML", "um": "Pç", "loc": "CHAO", "qtd": "2352"}, {"item": "146139", "desc": "SUP. CONTRAVENTO - 50X50X100X4,75MM GALV - LONG. MET", "um": "PÇ", "loc": "CHAO", "qtd": "2143"}, {"item": "146140", "desc": "SUP. CONTRAVENTO - 50X150X100X4,75MM GALV - CONCR.", "um": "PÇ", "loc": "CHAO", "qtd": "43"}, {"item": "147000", "desc": "CLIP FIXO ZIPADA-RAL9003/PRIM 0,65MM", "um": "Pç", "loc": "CHAO", "qtd": "348"}, {"item": "147002", "desc": "BASE DESLIZANTE-RAL9003/PRIM 0,80MM", "um": "Pç", "loc": "CHAO", "qtd": "3555"}, {"item": "147013", "desc": "CLIP FIXO ZIPADA-GALVA 0,65MM", "um": "Pç", "loc": "CHAO", "qtd": "1650"}, {"item": "147014", "desc": "CLIP DESLIZANTE ZIPADA-GALVA 0,65MM", "um": "Pç", "loc": "CHAO", "qtd": "80"}, {"item": "149244", "desc": "SUPORTE INFERIOR P/ FACHADAS CORTADAS 50MM", "um": "Pç", "loc": "CHAO", "qtd": "334"}, {"item": "149245", "desc": "SUPORTE INFERIOR P/ FACHADAS CORTADAS 70MM", "um": "Pç", "loc": "CHAO", "qtd": "2695"}, {"item": "150010", "desc": "VISOR SALA LIMPA 950 X 2000 X 100MM", "um": "Pç", "loc": "CHAO", "qtd": "11"}, {"item": "151780", "desc": "CLIPE INFINITY E LYNE WALL 0,43MM - L=80MM", "um": "UN", "loc": "CHAO", "qtd": "18916"}, {"item": "540712", "desc": "RB-SUPORTE INFERIOR EVOLUTION/ISOFACHADA 50MM", "um": "Pç", "loc": "CHAO", "qtd": "644"}, {"item": "540713", "desc": "RB-SUPORTE INFERIOR EVOLUTION/ISOFACHADA 70MM", "um": "Pç", "loc": "CHAO", "qtd": "7"}, {"item": "600002", "desc": "TAMBOR PLASTICO 20 L (BOMBONA)", "um": "Pç", "loc": "CHAO", "qtd": "40"}, {"item": "600004", "desc": "TAMBOR PLASTICO 50 L (BOMBONA)", "um": "Pç", "loc": "CHAO", "qtd": "121"}, {"item": "600007", "desc": "FILME STRETCH 500 X 0,025MM - ROLO COM 18KG", "um": "Kg", "loc": "CHAO", "qtd": "652"}, {"item": "600014", "desc": "FILME PLÁSTICO BRANCO C/ LOGO - 1500 X 0,060MM", "um": "Kg", "loc": "CHAO", "qtd": "3539,3"}, {"item": "600016", "desc": "CALÇO EPE / SKIN 60 BR 260 X 150 X 40 MM", "um": "Pç", "loc": "CHAO", "qtd": "8160"}, {"item": "700027", "desc": "SACO PEAD TRANSP LISO 12+124+12 X 160 X 0,03", "um": "UN", "loc": "CHAO", "qtd": "8750"}, {"item": "710166", "desc": "PAPEL TOALHA SIMPLES INTERFOLHA 3 DOBRAS 2400 FS 22X23CM", "um": "FD", "loc": "CHAO", "qtd": "80"}, {"item": "710167", "desc": "PAPEL HIGIÊNICO FOLHA SIMPLES ROLO 8X 400M ESSENZ HRS118", "um": "FD", "loc": "CHAO", "qtd": "91"}, {"item": "996815", "desc": "COLA CASCOLA EXTRA FORTE ( 16,3 LT)", "um": "BD", "loc": "CHAO", "qtd": "1"}, {"item": "600012", "desc": "FILME STRETCH 50 X 0,025MM", "um": "Kg", "loc": "CHÃO", "qtd": "554,83"}, {"item": "800759", "desc": "SERRA CIRC WIDEA 9.1/4POL  X 80 DT  BOSCH (COD:2608642197)", "um": "Pç", "loc": "D-01-03-03", "qtd": "68"}, {"item": "143107", "desc": "VEDA ONDA SUPERIOR ZIP450 20MM S/ADESIVO", "um": "Pç", "loc": "D-01-03-04", "qtd": "440"}, {"item": "930099i", "desc": "310508 - PASSARELA DE TPO ( WALKWAY ) 863,6MM X 15,24M", "um": "Pç", "loc": "D-01-03-05", "qtd": "1"}, {"item": "143039", "desc": "VEDA ONDA SUPERIOR TELHA ONDULADA - ESP.20MM X 45MM ALT.", "um": "Pç", "loc": "D-02-03-02", "qtd": "8"}, {"item": "132214", "desc": "TAMPA PLÁSTICA AIRBRISE 50MM X 95MM PRETA", "um": "Pç", "loc": "D-02-03-03", "qtd": "2900"}, {"item": "139035", "desc": "CLIPE CONECTOR MC4 PARA MÓDULO", "um": "PÇ", "loc": "D-02-03-04", "qtd": "664"}, {"item": "139036", "desc": "CLIPE CONECTOR MC4 PARA ISOTELHA", "um": "PÇ", "loc": "D-02-03-05", "qtd": "640"}, {"item": "600837", "desc": "SACO PLASTICO C/T 085 X 160 X 12 X 0,04 - CHAPAS", "um": "Pç", "loc": "D-02-04-01", "qtd": "1720"}, {"item": "712620", "desc": "CAIXA P/ ARQUIVO MORTO", "um": "UN", "loc": "D-03-01-01", "qtd": "150"}, {"item": "930443", "desc": "PARAFUSO DABO TKR 4.8X60", "um": "PÇ", "loc": "D-03-02-01", "qtd": "7889"}, {"item": "130145", "desc": "PAR TAPPER 1/4\" X 2.3/4\"-SILVER SEXTAVADO 5/16", "um": "Pç", "loc": "D-03-02-02", "qtd": "2500"}, {"item": "131244", "desc": "PAR FIX PB12.1/4-14 X 2\" P1 (AÇO LEVE LSF/MADEIRA) RAL7035", "um": "UN", "loc": "D-03-02-03", "qtd": "2000"}, {"item": "131241", "desc": "PAR FIX PB12.1/4-14 X 2\" P1 (AÇO LEVE LSF/MADEIRA) RAL1015", "um": "UN", "loc": "D-03-02-04", "qtd": "5528"}, {"item": "131626", "desc": "PAR FIX CABEÇA LENTILHA TORX PB 6-5.5 X 25MM P3 INOX 316", "um": "Pç", "loc": "D-03-02-05", "qtd": "18261"}, {"item": "710015", "desc": "CATÁLOGO DE RECOMENDAÇÕES GERAIS (DESCARGA DE TELHAS)", "um": "Pç", "loc": "D-03-03-01", "qtd": "2000"}, {"item": "132248", "desc": "TAMPA PLÁSTICA UNDERLINE 4 POLEGADAS PRETA", "um": "PÇ", "loc": "D-03-03-02", "qtd": "608"}, {"item": "141153", "desc": "SERRA CIRCULAR INFINIT SAN 355 X 2,0 X 2,6 X 25,4 X 120Z", "um": "Pç", "loc": "D-03-03-03", "qtd": "4"}, {"item": "132309", "desc": "TAMPA PLÁSTICA AIRBRISE 40MM X 80MM PRETA", "um": "Pç", "loc": "D-03-03-04", "qtd": "2456"}, {"item": "144010", "desc": "MANTA ALUMINIZADA  VED1000 - 10CM X  10,21M (COD 10171)", "um": "M", "loc": "D-03-03-06", "qtd": "255,25"}, {"item": "144293", "desc": "PAR FIX PB12 14 X 3.1/4\" P1", "um": "Pç", "loc": "D-03-03-07", "qtd": "12150"}, {"item": "132247", "desc": "TAMPA PLÁSTICA UNDERLINE 6 POLEGADAS PRETA", "um": "PÇ", "loc": "D-03-04-01", "qtd": "1947"}, {"item": "143113", "desc": "VEDA ONDA INFERIOR TP-40", "um": "Pç", "loc": "D-03-04-02", "qtd": "964"}, {"item": "149859", "desc": "SERRA FITA SUL CORTE KOMBAT 20 X 0,90 X 10/14 X 7,22", "um": "Pç", "loc": "D-03-05-01", "qtd": "95"}, {"item": "132305", "desc": "TAMPA PLÁSTICA AIRBRISE 100MM X 200MM PRETA", "um": "Pç", "loc": "D-03-05-02", "qtd": "436"}, {"item": "140371", "desc": "FITA LATERAL 150MM - ESQUERDA - P150", "um": "M", "loc": "E-01-02-03", "qtd": "24000"}, {"item": "140372", "desc": "FITA LATERAL 150MM - DIREITA - P150", "um": "M", "loc": "E-01-02-04", "qtd": "16000"}, {"item": "140659", "desc": "LONA PLÁSTICA PRETA (BOBINA 8 X 50M) - NOVO", "um": "M2", "loc": "E-01-03-02", "qtd": "3200"}, {"item": "140363", "desc": "FITA LATERAL 50MM - DIREITA", "um": "M", "loc": "E-01-04-02", "qtd": "216000"}, {"item": "140368", "desc": "FITA LATERAL 95MM - ESQUERDA - P100", "um": "M", "loc": "E-02-01-01", "qtd": "36000"}, {"item": "140367", "desc": "FITA LATERAL 95MM - DIREITA - P100", "um": "M", "loc": "E-02-01-02", "qtd": "69000"}, {"item": "149736", "desc": "FITA LATERAL 25MM - ESQUERDA", "um": "M", "loc": "E-02-02-01", "qtd": "308000"}, {"item": "149737", "desc": "FITA LATERAL 25MM - DIREITA", "um": "M", "loc": "E-02-02-02", "qtd": "236000"}, {"item": "140364", "desc": "FITA LATERAL 50MM - ESQUERDA", "um": "M", "loc": "E-02-03-01", "qtd": "28000"}, {"item": "140363", "desc": "FITA LATERAL 50MM - DIREITA", "um": "M", "loc": "E-02-03-02", "qtd": "88000"}, {"item": "141557", "desc": "REBITE POP ALUMINIO BRANCO 4,0 X 15MM", "um": "Ct", "loc": "E-02-03-02", "qtd": "2100"}, {"item": "140374", "desc": "FITA LATERAL 200MM - ESQUERDA - P200", "um": "M", "loc": "E-02-05-01", "qtd": "32000"}, {"item": "140373", "desc": "FITA LATERAL 200MM - DIREITA - P200", "um": "M", "loc": "E-02-05-02", "qtd": "33000"}, {"item": "140365", "desc": "FITA LATERAL 65MM - ESQUERDA", "um": "M", "loc": "E-03-01-01", "qtd": "77000"}, {"item": "140366", "desc": "FITA LATERAL 65MM - DIREITA", "um": "M", "loc": "E-03-01-02", "qtd": "84000"}, {"item": "140375", "desc": "FITA LATERAL 38MM - ESQUERDA", "um": "M", "loc": "E-03-02-01", "qtd": "176000"}, {"item": "140376", "desc": "FITA LATERAL 38MM - DIREITA", "um": "M", "loc": "E-03-02-02", "qtd": "220000"}, {"item": "140366", "desc": "FITA LATERAL 65MM - DIREITA", "um": "M", "loc": "E-03-03-01", "qtd": "92000"}, {"item": "996613i", "desc": "FITA BUTÍLICA P/ VEDAÇÃO DE PAINEL DE POLICARBONATO 50MMX35M", "um": "RL", "loc": "E-03-03-02", "qtd": "43"}, {"item": "140365", "desc": "FITA LATERAL 65MM - ESQUERDA", "um": "M", "loc": "E-03-04-01", "qtd": "100000"}, {"item": "145400", "desc": "CLIPE CONCEPT WALL 0,65MM", "um": "Pç", "loc": "E-03-04-02", "qtd": "10000"}, {"item": "712594", "desc": "BOTINA DE SEGURANÇA C/BIQUEIRA COMPOSITE Nº44", "um": "PR", "loc": "EPI PALLET 01", "qtd": "5"}, {"item": "712595", "desc": "BOTINA DE SEGURANÇA C/BIQUEIRA COMPOSITE Nº45", "um": "PR", "loc": "EPI PALLET 01", "qtd": "2"}, {"item": "712596", "desc": "BOTINA DE SEGURANÇA C/BIQUEIRA COMPOSITE Nº36", "um": "PR", "loc": "EPI PALLET 01", "qtd": "1"}, {"item": "712597", "desc": "BOTINA DE SEGURANÇA C/BIQUEIRA COMPOSITE Nº37", "um": "PR", "loc": "EPI PALLET 01", "qtd": "4"}, {"item": "712598", "desc": "BOTINA DE SEGURANÇA C/BIQUEIRA COMPOSITE Nº38", "um": "PR", "loc": "EPI PALLET 01", "qtd": "10"}, {"item": "712599", "desc": "BOTINA DE SEGURANÇA C/BIQUEIRA COMPOSITE Nº39", "um": "PR", "loc": "EPI PALLET 01", "qtd": "8"}, {"item": "712607", "desc": "BOTINA DE SEGURANÇA C/BIQUEIRA COMPOSITE Nº47", "um": "PR", "loc": "EPI PALLET 01", "qtd": "3"}, {"item": "712608", "desc": "BOTINA DE SEGURANÇA C/BIQUEIRA COMPOSITE Nº46", "um": "PR", "loc": "EPI PALLET 01", "qtd": "2"}, {"item": "712522", "desc": "CAMISA SOCIAL MASC. ML AZUL MARINHO - M", "um": "Pç", "loc": "EPI PALLET 02", "qtd": "42"}, {"item": "712523", "desc": "CAMISA SOCIAL MASC. ML AZUL MARINHO - G", "um": "Pç", "loc": "EPI PALLET 02", "qtd": "49"}, {"item": "712525", "desc": "CAMISA SOCIAL MASC. ML AZUL MARINHO - XG", "um": "Pç", "loc": "EPI PALLET 02", "qtd": "10"}, {"item": "712526", "desc": "CAMISA SOCIAL MASC. ML AZUL MARINHO - XGG (G1)", "um": "Pç", "loc": "EPI PALLET 02", "qtd": "14"}, {"item": "712527", "desc": "CAMISA SOCIAL MASC. ML AZUL MARINHO - P", "um": "Pç", "loc": "EPI PALLET 02", "qtd": "40"}, {"item": "712534", "desc": "CAMISETA COM PROTEÇÃO UV - TAM P", "um": "Pç", "loc": "EPI PALLET 02", "qtd": "20"}, {"item": "712535", "desc": "CAMISETA COM PROTEÇÃO UV - TAM M", "um": "Pç", "loc": "EPI PALLET 02", "qtd": "40"}, {"item": "712536", "desc": "CAMISETA COM PROTEÇÃO UV - TAM G", "um": "Pç", "loc": "EPI PALLET 02", "qtd": "20"}, {"item": "712537", "desc": "CAMISETA COM PROTEÇÃO UV - GG", "um": "Pç", "loc": "EPI PALLET 02", "qtd": "20"}, {"item": "712538", "desc": "CAMISETA COM PROTEÇÃO UV - EXG (G2)", "um": "Pç", "loc": "EPI PALLET 02", "qtd": "20"}, {"item": "712548", "desc": "CAMISETA EM MALHA PV AZUL MARINHO - TAMANHO XGG (G1)", "um": "Pç", "loc": "EPI PALLET 02", "qtd": "14"}, {"item": "712565", "desc": "CAMISETA EM MALHA PV AZUL MARINHO - TAMANHO G", "um": "Pç", "loc": "EPI PALLET 02", "qtd": "20"}, {"item": "800086", "desc": "CAMISETA EM MALHA PV AZUL MARINHO - TAMANHO M", "um": "Pç", "loc": "EPI PALLET 02", "qtd": "30"}, {"item": "800100", "desc": "CAMISETA EM MALHA PV AZUL MARINHO ML - TAM.EXGG (G3)", "um": "Pç", "loc": "EPI PALLET 02", "qtd": "12"}, {"item": "800102", "desc": "CAMISETA GOLA POLO AZUL MARINHO - TAMANHO EXGG (G3)", "um": "Pç", "loc": "EPI PALLET 02", "qtd": "7"}, {"item": "800147", "desc": "CAMISETA EM MALHA PV AZUL MARINHO ML - TAM.XGG (G1)", "um": "Pç", "loc": "EPI PALLET 02", "qtd": "7"}, {"item": "800765", "desc": "CAMISA DE BRIGADA - TAMANHO P", "um": "Pç", "loc": "EPI PALLET 02", "qtd": "8"}, {"item": "800766", "desc": "CAMISA DE BRIGADA - TAMANHO M", "um": "Pç", "loc": "EPI PALLET 02", "qtd": "26"}, {"item": "800767", "desc": "CAMISA DE BRIGADA - TAMANHO G", "um": "Pç", "loc": "EPI PALLET 02", "qtd": "12"}, {"item": "800768", "desc": "CAMISA DE BRIGADA - TAMANHO GG", "um": "Pç", "loc": "EPI PALLET 02", "qtd": "14"}, {"item": "800769", "desc": "CAMISA DE BRIGADA - TAM. EXGG (G3)", "um": "Pç", "loc": "EPI PALLET 02", "qtd": "8"}, {"item": "712516", "desc": "CAMISA SOCIAL FEMIN. ML AZUL FRANÇA - GG", "um": "Pç", "loc": "EPI PALLET 03", "qtd": "10"}, {"item": "712518", "desc": "CAMISA SOCIAL FEMIN. ML AZUL MARINHO - P", "um": "Pç", "loc": "EPI PALLET 03", "qtd": "20"}, {"item": "712519", "desc": "CAMISA SOCIAL FEMIN. ML AZUL MARINHO - M", "um": "Pç", "loc": "EPI PALLET 03", "qtd": "55"}, {"item": "712520", "desc": "CAMISA SOCIAL FEMIN. ML AZUL MARINHO - G", "um": "Pç", "loc": "EPI PALLET 03", "qtd": "70"}, {"item": "712544", "desc": "CAMISA SOCIAL FEMIN. ML AZUL MARINHO - EXG (G2)", "um": "Pç", "loc": "EPI PALLET 03", "qtd": "5"}, {"item": "712577", "desc": "CAMISA SOCIAL FEMIN. ML AZUL MARINHO - PP", "um": "Pç", "loc": "EPI PALLET 03", "qtd": "12"}, {"item": "800786", "desc": "CAMISETA FEMININA GOLA POLO AZUL MARINHO ? TAM PP", "um": "Pç", "loc": "EPI PALLET 03", "qtd": "31"}, {"item": "800787", "desc": "CAMISETA FEMININA GOLA POLO AZUL MARINHO - TAM P", "um": "Pç", "loc": "EPI PALLET 03", "qtd": "10"}, {"item": "800788", "desc": "CAMISETA FEMININA GOLA POLO AZUL MARINHO - TAM M", "um": "Pç", "loc": "EPI PALLET 03", "qtd": "41"}, {"item": "800789", "desc": "CAMISETA FEMININA GOLA POLO AZUL MARINHO - TAM G", "um": "Pç", "loc": "EPI PALLET 03", "qtd": "20"}, {"item": "800790", "desc": "CAMISETA FEMININA GOLA POLO AZUL MARINHO - TAM GG", "um": "Pç", "loc": "EPI PALLET 03", "qtd": "56"}, {"item": "710074", "desc": "CAPA DE CHUVA", "um": "Pç", "loc": "EPI PALLET 04", "qtd": "2"}, {"item": "712205", "desc": "AVENTAL EM COURO TIPO BARBEIRO", "um": "Pç", "loc": "EPI PALLET 04", "qtd": "5"}, {"item": "712252", "desc": "AVENTAL EM COURO TIPO SOLDADOR", "um": "Pç", "loc": "EPI PALLET 04", "qtd": "1"}, {"item": "712352", "desc": "LUVA NITRILICA CANO LONGO TAMANHO M", "um": "PR", "loc": "EPI PALLET 04", "qtd": "55"}, {"item": "712353", "desc": "LUVA NITRILICA CANO LONGO TAMANHO G", "um": "PR", "loc": "EPI PALLET 04", "qtd": "31"}, {"item": "712357", "desc": "CINTO DE SEGURANÇA (PARAQUEDISTA)", "um": "PÇ", "loc": "EPI PALLET 04", "qtd": "6"}, {"item": "714510", "desc": "JAQUETA S/ CAPUS - TAM EXGG (G3)", "um": "Pç", "loc": "EPI PALLET 04", "qtd": "2"}, {"item": "710079", "desc": "CAPA DE CHUVA TIPO MOTOQUEIRO - P", "um": "Pç", "loc": "EPI PALLET 05", "qtd": "9"}, {"item": "710080", "desc": "CAPA DE CHUVA TIPO MOTOQUEIRO - M", "um": "Pç", "loc": "EPI PALLET 05", "qtd": "23"}, {"item": "710081", "desc": "CAPA DE CHUVA TIPO MOTOQUEIRO - G", "um": "Pç", "loc": "EPI PALLET 05", "qtd": "5"}, {"item": "710082", "desc": "CAPA DE CHUVA TIPO MOTOQUEIRO - GG", "um": "Pç", "loc": "EPI PALLET 05", "qtd": "8"}, {"item": "712211", "desc": "LUVA TRICOTADA EMBORRACHADA N°8", "um": "PR", "loc": "EPI PALLET 05", "qtd": "48"}, {"item": "712356", "desc": "OCULOS DE PROTEÇÃO (ESCURO)", "um": "Pç", "loc": "EPI PALLET 05", "qtd": "20"}, {"item": "712358", "desc": "LUVA TRICOTADA EMBORRACHADA N°9", "um": "PR", "loc": "EPI PALLET 05", "qtd": "40"}, {"item": "712370", "desc": "CAPACETE DE SEGURANÇA CLASSE B", "um": "Pç", "loc": "EPI PALLET 05", "qtd": "8"}, {"item": "712407", "desc": "LUVA NITRILICA DESCARTÁVEL AZUL - TAM ''G''", "um": "CX", "loc": "EPI PALLET 05", "qtd": "18"}, {"item": "712580", "desc": "LUVA HYFLEX Nº 8", "um": "PR", "loc": "EPI PALLET 05", "qtd": "36"}, {"item": "712581", "desc": "LUVA HYFLEX Nº 9", "um": "PR", "loc": "EPI PALLET 05", "qtd": "36"}, {"item": "140659", "desc": "LONA PLÁSTICA PRETA (BOBINA 8 X 50M) - NOVO", "um": "M2", "loc": "F-01-01-02", "qtd": "2247"}, {"item": "800009", "desc": "SELO DE AÇO P/ FITA 1\"  X 60 MM SIMPLES", "um": "Kg", "loc": "F-01-02-01", "qtd": "50"}, {"item": "143010", "desc": "ACAB TRAPEZOIDAL C/P TP-40 PIR 3TP 20MM-RAL9003 0,43", "um": "M", "loc": "F-01-02-03", "qtd": "79"}, {"item": "140370", "desc": "FITA LATERAL 120MM - DIREITA - P120", "um": "M", "loc": "F-01-03-01", "qtd": "29000"}, {"item": "140369", "desc": "FITA LATERAL 120MM - ESQUERDA - P120", "um": "M", "loc": "F-01-03-02", "qtd": "22000"}, {"item": "710167", "desc": "PAPEL HIGIÊNICO FOLHA SIMPLES ROLO 8X 400M ESSENZ HRS118", "um": "FD", "loc": "F-01-05-01", "qtd": "50"}, {"item": "145400", "desc": "CLIPE CONCEPT WALL 0,65MM", "um": "Pç", "loc": "F-02-01-01", "qtd": "12000"}, {"item": "145400", "desc": "CLIPE CONCEPT WALL 0,65MM", "um": "Pç", "loc": "F-02-01-02", "qtd": "26442"}, {"item": "143034", "desc": "ACAB TRAPEZOIDAL C/P TP-40 PIR 3TP 50MM-RAL9003 0,43", "um": "M", "loc": "F-02-02-01", "qtd": "890"}, {"item": "143019", "desc": "ACAB TRAPEZOIDAL C/P TP-40 PIR 3TP 30MM-RAL9003 0,43", "um": "M", "loc": "F-02-02-02", "qtd": "256"}, {"item": "800005", "desc": "FITA FILAMENTOSA 50 X 50MM", "um": "Pç", "loc": "F-02-03-01", "qtd": "84"}, {"item": "712229", "desc": "FITA CREPE 50MM X 50M", "um": "Pç", "loc": "F-02-03-02", "qtd": "53"}, {"item": "600820", "desc": "FITA ADESIVA 45 X 100M", "um": "Pç", "loc": "F-02-03-03", "qtd": "1180"}, {"item": "142919", "desc": "TINTA EMBORRACHADA BRANCA - GALÃO 3,60L", "um": "UN", "loc": "F-02-04-01", "qtd": "35"}, {"item": "600820", "desc": "FITA ADESIVA 45 X 100M", "um": "Pç", "loc": "F-02-04-01", "qtd": "648"}, {"item": "143104", "desc": "FITA DE VEDACAO TACKY TAPE (13,71M X 9,5MM)", "um": "M", "loc": "F-03-01-01", "qtd": "8163,62"}, {"item": "143105", "desc": "FITA DE VEDACAO TACKY TAPE (12,2M X 22,2MM)", "um": "M", "loc": "F-03-01-02", "qtd": "85,4"}, {"item": "149750", "desc": "FITA LATERAL INOVACEL BRANCA COM LOGO LAD DIREITO 50MM", "um": "M", "loc": "F-03-02-01", "qtd": "10000"}, {"item": "143043", "desc": "ACAB TRAPEZOIDAL C/P TP-40 PIR 3TP 70MM-RAL9003 0,43", "um": "M", "loc": "F-03-02-02", "qtd": "310"}, {"item": "149751", "desc": "FITA LATERAL INOVACEL BRANCA COM LOGO LAD ESQUERDO 50MM", "um": "M", "loc": "F-03-02-02", "qtd": "10000"}, {"item": "930079", "desc": "V302939 - ARRUELA FIXAÇÃO MEMBRANA TPO HPVX 2 3/8\"", "um": "Pç", "loc": "F-03-02-03", "qtd": "670"}, {"item": "147102", "desc": "FITA EVA 1 FACE ADESIVA 2MM X 20MM X 10M", "um": "RL", "loc": "F-03-03-01", "qtd": "337"}, {"item": "132245", "desc": "TAMPA PLÁSTICA AIRBRISE 70MM X 175MM PRETA", "um": "Pç", "loc": "F-03-04-02", "qtd": "70"}, {"item": "140364", "desc": "FITA LATERAL 50MM - ESQUERDA", "um": "M", "loc": "F-03-05-01", "qtd": "216000"}, {"item": "140366", "desc": "FITA LATERAL 65MM - DIREITA", "um": "M", "loc": "F-03-05-02", "qtd": "120000"}, {"item": "140558", "desc": "IMPERMEABILIZANTE PRETO - 18 KG", "um": "Kg", "loc": "G-01-01-01", "qtd": "648"}, {"item": "140558", "desc": "IMPERMEABILIZANTE PRETO - 18 KG", "um": "Kg", "loc": "G-01-01-02", "qtd": "648"}, {"item": "140509", "desc": "ASFALTO SOLUÇAO", "um": "L", "loc": "G-01-02-01", "qtd": "648"}, {"item": "140509", "desc": "ASFALTO SOLUÇAO", "um": "L", "loc": "G-01-02-02", "qtd": "648"}, {"item": "140509", "desc": "ASFALTO SOLUÇAO", "um": "L", "loc": "G-01-03-01", "qtd": "180"}, {"item": "149752", "desc": "FITA LATERAL INOVACEL BRANCA COM LOGO LAD DIREITO 70MM", "um": "M", "loc": "G-01-03-02", "qtd": "10000"}, {"item": "149753", "desc": "FITA LATERAL INOVACEL BRANCA COM LOGO LAD ESQUERDO 70MM", "um": "M", "loc": "G-01-03-02", "qtd": "10000"}, {"item": "149754", "desc": "FITA LATERAL INOVACEL BRANCA COM LOGO LAD DIREITO 100MM", "um": "M", "loc": "G-01-03-02", "qtd": "10000"}, {"item": "149755", "desc": "FITA LATERAL INOVACEL BRANCA COM LOGO LAD ESQUERDO 100MM", "um": "M", "loc": "G-01-03-02", "qtd": "10000"}, {"item": "140558", "desc": "IMPERMEABILIZANTE PRETO - 18 KG", "um": "Kg", "loc": "G-01-04-01", "qtd": "648"}, {"item": "140558", "desc": "IMPERMEABILIZANTE PRETO - 18 KG", "um": "Kg", "loc": "G-01-04-02", "qtd": "648"}, {"item": "140558", "desc": "IMPERMEABILIZANTE PRETO - 18 KG", "um": "Kg", "loc": "G-02-01-01", "qtd": "648"}, {"item": "140558", "desc": "IMPERMEABILIZANTE PRETO - 18 KG", "um": "Kg", "loc": "G-02-01-02", "qtd": "648"}, {"item": "141662", "desc": "MASSA VEDANTE ( SL ) (BRANCO) - 280ML", "um": "Pç", "loc": "G-02-02-01", "qtd": "925"}, {"item": "141668", "desc": "MASSA VEDANTE PAINEIS (CINZA) 600ML", "um": "Pç", "loc": "G-02-02-02", "qtd": "597"}, {"item": "124723", "desc": "ADESIVO P/ PAINEL CURVO PU55 20 PRETO 405G/310ML", "um": "UN", "loc": "G-02-03-01", "qtd": "600"}, {"item": "141686", "desc": "MASSA VEDANTE PAINEIS (BRANCO) - 600ML", "um": "PÇ", "loc": "G-02-03-01", "qtd": "1008"}, {"item": "930352", "desc": "COLA CASCOLA (16,3 LT)", "um": "Pç", "loc": "G-02-03-01", "qtd": "4"}, {"item": "144059", "desc": "MASSA VEDANTE TELHAS (BRANCO) - 600ML", "um": "Pç", "loc": "G-02-03-02", "qtd": "1008"}, {"item": "931099", "desc": "LIMPADOR DE TPO PARA SOLDA UNA 256 (14,6KG)", "um": "Pç", "loc": "G-02-03-02", "qtd": "4"}, {"item": "141681", "desc": "MASSA VEDANTE ( SL ) (CINZA)", "um": "Pç", "loc": "G-03-01-02", "qtd": "575"}, {"item": "800073", "desc": "COLA HOT MELT GRANULADA", "um": "Kg", "loc": "G-03-01-02", "qtd": "400"}, {"item": "141671", "desc": "MASSA VEDANTE ( SL ) (PRETO)", "um": "Pç", "loc": "G-03-02-01", "qtd": "262"}, {"item": "144062", "desc": "MASSA VEDANTE TELHAS (RAL8023)", "um": "Pç", "loc": "G-03-02-02", "qtd": "10"}, {"item": "144068", "desc": "SILICONE P/ TELHAS (INCOLOR)", "um": "Pç", "loc": "G-03-02-03", "qtd": "86"}, {"item": "124723", "desc": "ADESIVO P/ PAINEL CURVO PU55 20 PRETO 405G/310ML", "um": "UN", "loc": "G-03-02-04", "qtd": "400"}, {"item": "132592", "desc": "LUBRIFICANTE INDUSTRIAL QUIMATIC 10", "um": "Pç", "loc": "G-03-02-05", "qtd": "24"}, {"item": "141708", "desc": "MASSA VEDANTE CINZA SIKAFLEX 221 (400 ML)", "um": "Pç", "loc": "G-03-03-01", "qtd": "126"}, {"item": "141707", "desc": "MASSA VEDANTE BRANCA SIKAFLEX 221 (400 ML)", "um": "Pç", "loc": "G-03-03-02", "qtd": "443"}, {"item": "143105", "desc": "FITA DE VEDACAO TACKY TAPE (12,2M X 22,2MM)", "um": "M", "loc": "G-03-04-01", "qtd": "4550,6"}, {"item": "140381", "desc": "FITA MULTIUSO ALUMINIZADA SIKA 20CM X 10M", "um": "RL", "loc": "G-03-04-02", "qtd": "147"}, {"item": "140558", "desc": "IMPERMEABILIZANTE PRETO - 18 KG", "um": "Kg", "loc": "H-01", "qtd": "648"}, {"item": "140509", "desc": "ASFALTO SOLUÇAO", "um": "L", "loc": "H-02", "qtd": "450"}, {"item": "140558", "desc": "IMPERMEABILIZANTE PRETO - 18 KG", "um": "Kg", "loc": "H-03", "qtd": "648"}, {"item": "140558", "desc": "IMPERMEABILIZANTE PRETO - 18 KG", "um": "Kg", "loc": "H-04", "qtd": "648"}, {"item": "712617", "desc": "ESTOPA DE PANO (RETALHO)", "um": "Kg", "loc": "H-07", "qtd": "180"}, {"item": "140558", "desc": "IMPERMEABILIZANTE PRETO - 18 KG", "um": "Kg", "loc": "H-08", "qtd": "612"}, {"item": "141872", "desc": "FILME PROT. POLI. AMADEIRADO SEM UV LARG. 1150 X 0,030MM", "um": "KG", "loc": "H-09", "qtd": "662,9"}, {"item": "141872", "desc": "FILME PROT. POLI. AMADEIRADO SEM UV LARG. 1150 X 0,030MM", "um": "KG", "loc": "H-10", "qtd": "673,3"}, {"item": "141872", "desc": "FILME PROT. POLI. AMADEIRADO SEM UV LARG. 1150 X 0,030MM", "um": "KG", "loc": "H-11", "qtd": "671,7"}, {"item": "141872", "desc": "FILME PROT. POLI. AMADEIRADO SEM UV LARG. 1150 X 0,030MM", "um": "KG", "loc": "H-12", "qtd": "654,7"}, {"item": "700027", "desc": "SACO PEAD TRANSP LISO 12+124+12 X 160 X 0,03", "um": "UN", "loc": "H-13", "qtd": "7250"}, {"item": "700027", "desc": "SACO PEAD TRANSP LISO 12+124+12 X 160 X 0,03", "um": "UN", "loc": "H-14", "qtd": "7500"}, {"item": "931110", "desc": "COLA DE CONTATO PARA TPO UNIFLEX 2050 (14KG)", "um": "BD", "loc": "H-31", "qtd": "29"}, {"item": "712617", "desc": "ESTOPA DE PANO (RETALHO)", "um": "Kg", "loc": "H-32", "qtd": "240"}, {"item": "143104", "desc": "FITA DE VEDACAO TACKY TAPE (13,71M X 9,5MM)", "um": "M", "loc": "I-01-01-01", "qtd": "8774,4"}, {"item": "144060", "desc": "MASSA VEDANTE TELHAS (CINZA) - 600ML", "um": "Pç", "loc": "I-01-01-02", "qtd": "1008"}, {"item": "143105", "desc": "FITA DE VEDACAO TACKY TAPE (12,2M X 22,2MM)", "um": "M", "loc": "I-01-02-02", "qtd": "2440"}, {"item": "600010", "desc": "FILME STRETCH 100 X 0,025MM - ROLO COM 3KG", "um": "Kg", "loc": "I-01-02-02", "qtd": "504"}, {"item": "600010", "desc": "FILME STRETCH 100 X 0,025MM - ROLO COM 3KG", "um": "Kg", "loc": "I-01-03-01", "qtd": "280"}, {"item": "600010", "desc": "FILME STRETCH 100 X 0,025MM - ROLO COM 3KG", "um": "Kg", "loc": "I-01-03-02", "qtd": "492"}, {"item": "600016", "desc": "CALÇO EPE / SKIN 60 BR 260 X 150 X 40 MM", "um": "Pç", "loc": "I-01-04-01", "qtd": "864"}, {"item": "600016", "desc": "CALÇO EPE / SKIN 60 BR 260 X 150 X 40 MM", "um": "Pç", "loc": "I-01-04-02", "qtd": "864"}, {"item": "600007", "desc": "FILME STRETCH 500 X 0,025MM - ROLO COM 18KG", "um": "Kg", "loc": "I-02-01-01", "qtd": "580"}, {"item": "600007", "desc": "FILME STRETCH 500 X 0,025MM - ROLO COM 18KG", "um": "Kg", "loc": "I-02-01-02", "qtd": "580"}, {"item": "600010", "desc": "FILME STRETCH 100 X 0,025MM - ROLO COM 3KG", "um": "Kg", "loc": "I-02-02-01", "qtd": "504"}, {"item": "600010", "desc": "FILME STRETCH 100 X 0,025MM - ROLO COM 3KG", "um": "Kg", "loc": "I-02-02-02", "qtd": "504"}, {"item": "600007", "desc": "FILME STRETCH 500 X 0,025MM - ROLO COM 18KG", "um": "Kg", "loc": "I-02-03-01", "qtd": "652"}, {"item": "600007", "desc": "FILME STRETCH 500 X 0,025MM - ROLO COM 18KG", "um": "Kg", "loc": "I-02-03-02", "qtd": "652"}, {"item": "600016", "desc": "CALÇO EPE / SKIN 60 BR 260 X 150 X 40 MM", "um": "Pç", "loc": "I-02-04-01", "qtd": "864"}, {"item": "600007", "desc": "FILME STRETCH 500 X 0,025MM - ROLO COM 18KG", "um": "Kg", "loc": "I-03-01-01", "qtd": "652"}, {"item": "600007", "desc": "FILME STRETCH 500 X 0,025MM - ROLO COM 18KG", "um": "Kg", "loc": "I-03-01-02", "qtd": "611"}, {"item": "600007", "desc": "FILME STRETCH 500 X 0,025MM - ROLO COM 18KG", "um": "Kg", "loc": "I-03-02-01", "qtd": "652"}, {"item": "600007", "desc": "FILME STRETCH 500 X 0,025MM - ROLO COM 18KG", "um": "Kg", "loc": "I-03-02-02", "qtd": "652"}, {"item": "600007", "desc": "FILME STRETCH 500 X 0,025MM - ROLO COM 18KG", "um": "Kg", "loc": "I-03-03-01", "qtd": "652"}, {"item": "600007", "desc": "FILME STRETCH 500 X 0,025MM - ROLO COM 18KG", "um": "Kg", "loc": "I-03-03-02", "qtd": "652"}, {"item": "804388", "desc": "REMOVEDOR P/ LIMPEZA 1000ML", "um": "UN", "loc": "INFLAMAVEL H-20", "qtd": "581"}, {"item": "712297", "desc": "ALCOOL HIDRATADO 96º 1L", "um": "Pç", "loc": "INFLAMAVEL H-21", "qtd": "338"}, {"item": "141308", "desc": "TINTA SPRAY 300ML RAL6037", "um": "Pç", "loc": "INFLAMAVEL H-22", "qtd": "14"}, {"item": "141646", "desc": "SELANTE INTUMESCENTE FM APPROVALS (300ml)", "um": "PÇ", "loc": "INFLAMAVEL H-23", "qtd": "198"}, {"item": "142657", "desc": "ADESIVO SPRAY", "um": "Pç", "loc": "INFLAMAVEL H-24", "qtd": "13"}, {"item": "712230", "desc": "LOCTITE 495 100GRS", "um": "Pç", "loc": "INFLAMAVEL H-25", "qtd": "237"}, {"item": "141287", "desc": "TINTA SPRAY ISOCOLOR 350ML BRANCO RAL9003", "um": "Pç", "loc": "INFLAMAVEL H-26", "qtd": "30"}, {"item": "132692", "desc": "TINTA SPRAY ISOCOLOR 350ML ALUMINIO RAL9005", "um": "Pç", "loc": "INFLAMAVEL H-27", "qtd": "36"}, {"item": "140001", "desc": "DILUENTE P/ RETOQUE GALÃO 4,5 LITROS", "um": "Pç", "loc": "INFLAMAVEL H-28", "qtd": "1"}, {"item": "141186", "desc": "DESMOLDANTE FAINATEX BASE OLEO MINERAL (ECOPIR)", "um": "KG", "loc": "INFLAMAVEL H-29", "qtd": "211,2"}, {"item": "141185", "desc": "DESMOLDANTE FAINATEX BASE OLEO MINERAL (ROBOR)", "um": "KG", "loc": "INFLAMAVEL H-30", "qtd": "264"}, {"item": "141686", "desc": "MASSA VEDANTE PAINEIS (BRANCO) - 600ML", "um": "PÇ", "loc": "J-01-01-01", "qtd": "823"}, {"item": "144059", "desc": "MASSA VEDANTE TELHAS (BRANCO) - 600ML", "um": "Pç", "loc": "J-01-01-02", "qtd": "439"}, {"item": "141686", "desc": "MASSA VEDANTE PAINEIS (BRANCO) - 600ML", "um": "PÇ", "loc": "J-01-02-01", "qtd": "1008"}, {"item": "141686", "desc": "MASSA VEDANTE PAINEIS (BRANCO) - 600ML", "um": "PÇ", "loc": "J-01-02-02", "qtd": "1008"}, {"item": "142845", "desc": "GANCHO GALVANIZADO 5/16 X 500MM", "um": "Pç", "loc": "J-01-03-01", "qtd": "2030"}, {"item": "132117", "desc": "RÉGUA DE POLICARBONATO", "um": "UN", "loc": "J-02-01-02", "qtd": "9000"}, {"item": "800042", "desc": "PAPEL MANILHA MARROM 1200MM", "um": "Pç", "loc": "J-02-01-02", "qtd": "24"}, {"item": "141686", "desc": "MASSA VEDANTE PAINEIS (BRANCO) - 600ML", "um": "PÇ", "loc": "J-02-02-01", "qtd": "1008"}, {"item": "141686", "desc": "MASSA VEDANTE PAINEIS (BRANCO) - 600ML", "um": "PÇ", "loc": "J-02-02-02", "qtd": "1008"}, {"item": "144060", "desc": "MASSA VEDANTE TELHAS (CINZA) - 600ML", "um": "Pç", "loc": "J-03-01-01", "qtd": "199"}, {"item": "133121", "desc": "FILME PROTETIVO DE POLIETILENO LARG. 1150MM - VERMELHO", "um": "KG", "loc": "J-03-02-01", "qtd": "496"}, {"item": "133121", "desc": "FILME PROTETIVO DE POLIETILENO LARG. 1150MM - VERMELHO", "um": "KG", "loc": "J-03-02-02", "qtd": "378,4"}, {"item": "131197", "desc": "FITA DUPLA FACE VHB 4910 9.5MM X 1,0MM X 10M", "um": "RL", "loc": "J-03-03-01", "qtd": "1500"}, {"item": "930076", "desc": "V302937 - ARRUELA FIXAÇÃO PIR 3\"", "um": "Pç", "loc": "J-03-03-02", "qtd": "14270"}, {"item": "712617", "desc": "ESTOPA DE PANO (RETALHO)", "um": "Kg", "loc": "J-03-04-01", "qtd": "240"}, {"item": "134480", "desc": "SUPORTE L 200 X 117 X 2,70MM GALV. - RAL9003 (3 METROS)", "um": "PÇ", "loc": "OBRAS HAVAN", "qtd": "64"}, {"item": "140610", "desc": "CANTONEIRA 50 X 50 X 4,75MM - RAL5003 (L= 80MM)", "um": "Pç", "loc": "OBRAS HAVAN", "qtd": "880"}, {"item": "142691", "desc": "PERFIL U 50 X 111 X 50 X 2,70MM - RAL9003 (3 METROS)", "um": "Pç", "loc": "OBRAS HAVAN", "qtd": "159"}, {"item": "142696", "desc": "PERFIL U 50 X 61 X 50 X 2,70MM - RAL9003 (3 METROS)", "um": "PÇ", "loc": "OBRAS HAVAN", "qtd": "20"}, {"item": "147286", "desc": "PERFIL U 50 X 111 X 50 X 2,70MM - RAL9003 - EXT (3 METROS)", "um": "PÇ", "loc": "OBRAS HAVAN", "qtd": "246"}, {"item": "138316", "desc": "VISOR SALA LIMPA 1000 X 1000 X 50MM - S/LOGO - BORDA BRANCA", "um": "Pç", "loc": "REC", "qtd": "1"}, {"item": "140958", "desc": "JAQUETA S/ CAPUS - TAMANHO P", "um": "Pç", "loc": "REC", "qtd": "19"}, {"item": "140959", "desc": "JAQUETA S/ CAPUS - TAMANHO G", "um": "Pç", "loc": "REC", "qtd": "20"}, {"item": "141282", "desc": "TINTA P/RETOQUE RAL9003 /GALAO 3,6 L", "um": "Pç", "loc": "REC", "qtd": "5"}, {"item": "600844", "desc": "PLASTICO BOLHA 1.30 x 100 m", "um": "Pç", "loc": "REC", "qtd": "2"}, {"item": "714501", "desc": "JAQUETA C/ CAPUZ - M", "um": "Pç", "loc": "REC", "qtd": "18"}, {"item": "800056", "desc": "TRENA MANUAL AÇO (10 METROS) - STARRET", "um": "Pç", "loc": "REC", "qtd": "30"}, {"item": "800056", "desc": "TRENA MANUAL AÇO (10 METROS) - STARRET", "um": "Pç", "loc": "SALA DE CALIBRAÇÃO", "qtd": "20"}, {"item": "712620", "desc": "CAIXA P/ ARQUIVO MORTO", "um": "UN", "loc": "rec", "qtd": "150"}, {"item": "714501", "desc": "JAQUETA C/ CAPUZ - M", "um": "Pç", "loc": "REC", "qtd": "18"}, {"item": "800056", "desc": "TRENA MANUAL AÇO (10 METROS) - STARRET", "um": "Pç", "loc": "SALA DE CALIBRAÇÃO", "qtd": "20"}];
-
-let currentData = [];
-let sortKey = null;
-let sortDir = 1;
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({
-    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-  })[c]);
-}
-
-function parseQtd(v) {
-  if (typeof v !== 'string') return v;
-  return parseFloat(v.replace(/\./g, '').replace(',', '.')) || 0;
-}
-
-function render(rows) {
-  const tbody = document.getElementById('tableBody');
-  const emptyMsg = document.getElementById('emptyMsg');
-  document.getElementById('loadingMsg').style.display = 'none';
-  if (rows.length === 0) {
-    tbody.innerHTML = '';
-    emptyMsg.style.display = 'block';
-    return;
-  }
-  emptyMsg.style.display = 'none';
-  tbody.innerHTML = rows.map(r => `
-    <tr>
-      <td class="item">${escapeHtml(r.item)}</td>
-      <td>${escapeHtml(r.descricao)}</td>
-      <td>${escapeHtml(r.um)}</td>
-      <td class="loc">${escapeHtml(r.localizacao)}</td>
-      <td class="num">${escapeHtml(r.quantidade)}</td>
-    </tr>
-  `).join('');
-}
-
-function applyFilterAndSort() {
-  const q = document.getElementById('searchBox').value.trim().toLowerCase();
-  let rows = currentData;
-  if (q) {
-    rows = rows.filter(r =>
-      String(r.item).toLowerCase().includes(q) ||
-      String(r.descricao).toLowerCase().includes(q) ||
-      String(r.localizacao).toLowerCase().includes(q) ||
-      String(r.um).toLowerCase().includes(q)
-    );
-  }
-  if (sortKey) {
-    const keyMap = { item: 'item', desc: 'descricao', um: 'um', loc: 'localizacao', qtd: 'quantidade' };
-    const realKey = keyMap[sortKey];
-    rows = [...rows].sort((a, b) => {
-      let va = a[realKey], vb = b[realKey];
-      if (sortKey === 'qtd') { va = parseQtd(va); vb = parseQtd(vb); }
-      else { va = String(va).toLowerCase(); vb = String(vb).toLowerCase(); }
-      if (va < vb) return -1 * sortDir;
-      if (va > vb) return 1 * sortDir;
-      return 0;
-    });
-  }
-  render(rows);
-}
-
-function updateStats() {
-  document.getElementById('stat-count').textContent = currentData.length;
-  let latest = null;
-  for (const r of currentData) {
-    if (r.atualizado_em && (!latest || r.atualizado_em > latest)) latest = r.atualizado_em;
-  }
-  document.getElementById('stat-updated').textContent = latest
-    ? new Date(latest).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
-    : '-';
-}
-
-async function loadData() {
-  const { data, error } = await sb.from('estoque').select('*').order('id', { ascending: true });
-  if (error) {
-    document.getElementById('loadingMsg').textContent = 'Erro ao carregar dados: ' + error.message;
-    return;
-  }
-  if (!data || data.length === 0) {
-    // Tabela vazia: popular com os dados iniciais
-    await seedInitialData();
-    return loadData();
-  }
-  currentData = data;
-  updateStats();
-  applyFilterAndSort();
-}
-
-async function seedInitialData() {
-  const rows = SEED_DATA.map(r => ({
-    item: r.item, descricao: r.desc, um: r.um, localizacao: r.loc, quantidade: r.qtd
-  }));
-  await sb.from('estoque').insert(rows);
-}
-
-function parsePastedTsv(text) {
-  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
-  const records = [];
-  for (const line of lines) {
-    const cols = line.split('\t');
-    if (cols.length < 5) continue;
-    const [item, desc, um, loc, qtd] = cols;
-    if (item.toLowerCase() === 'item' && desc.toLowerCase().startsWith('descri')) continue;
-    records.push({ item: item.trim(), descricao: desc.trim(), um: um.trim(), localizacao: loc.trim(), quantidade: qtd.trim() });
-  }
-  return records;
-}
-
-document.getElementById('searchBox').addEventListener('input', applyFilterAndSort);
-document.getElementById('clearBtn').addEventListener('click', () => {
-  document.getElementById('searchBox').value = '';
-  applyFilterAndSort();
-});
-document.getElementById('printBtn').addEventListener('click', () => window.print());
-
-document.querySelectorAll('thead th').forEach(th => {
-  th.addEventListener('click', () => {
-    const key = th.dataset.key;
-    if (sortKey === key) { sortDir *= -1; } else { sortKey = key; sortDir = 1; }
-    document.querySelectorAll('thead th .arrow').forEach(a => a.textContent = '');
-    th.querySelector('.arrow').textContent = sortDir === 1 ? '▲' : '▼';
-    applyFilterAndSort();
-  });
-});
-
-const editPanel = document.getElementById('editPanel');
-const pinGateArea = document.getElementById('pinGateArea');
-const editFormArea = document.getElementById('editFormArea');
-const pinInput = document.getElementById('pinInput');
-const pinMsg = document.getElementById('pinMsg');
-const pasteArea = document.getElementById('pasteArea');
-const saveMsg = document.getElementById('saveMsg');
-
-document.getElementById('toggleEditBtn').addEventListener('click', () => {
-  editPanel.classList.toggle('open');
-});
-
-document.getElementById('pinSubmitBtn').addEventListener('click', () => {
-  if (pinInput.value === EDIT_PIN) {
-    pinGateArea.style.display = 'none';
-    editFormArea.style.display = 'block';
-    pasteArea.value = currentData.map(r => [r.item, r.descricao, r.um, r.localizacao, r.quantidade].join('\t')).join('\n');
-  } else {
-    pinMsg.textContent = 'PIN incorreto.';
-  }
-});
-
-document.getElementById('cancelEditBtn').addEventListener('click', () => {
-  editPanel.classList.remove('open');
-});
-
-document.getElementById('saveDataBtn').addEventListener('click', async () => {
-  const records = parsePastedTsv(pasteArea.value);
-  if (records.length === 0) {
-    saveMsg.textContent = 'Nenhum item válido encontrado no texto colado.';
-    saveMsg.className = 'status-msg status-err';
-    return;
-  }
-  saveMsg.textContent = 'Salvando no banco de dados...';
-  saveMsg.className = 'status-msg';
-  try {
-    // Apaga tudo e insere a nova lista (abordagem simples e previsível)
-    const { error: delError } = await sb.from('estoque').delete().neq('id', 0);
-    if (delError) throw delError;
-    const { error: insError } = await sb.from('estoque').insert(records);
-    if (insError) throw insError;
-    saveMsg.textContent = `Atualizado! ${records.length} itens publicados para todos que abrirem o link.`;
-    saveMsg.className = 'status-msg status-ok';
-    await loadData();
-  } catch (e) {
-    saveMsg.textContent = 'Erro ao salvar: ' + e.message;
-    saveMsg.className = 'status-msg status-err';
-  }
-});
-
-loadData();
-</script>
-</body>
-</html>
+('141580', 'https://t56141.vtexassets.com/arquivos/ids/165706-800-auto?v=639106733365870000&width=800&height=auto&aspect=true',
+ 'Parafuso de Costura para Vedação e Acabamentos PB1/4-14 x 7/8 P1',
+ 'Usado na sobreposição/costura entre telhas e acabamentos, reforçando a vedação contra vazamentos.',
+ 'https://downloads.kingspan-isoeste.com.br/catalogos/Kingspan-Isoeste-Cat%C3%A1logo-de-Produtos-PT-BR.pdf',
+ 'https://www.meutelhado.com.br/parafuso-costura-para-vedacao-de-acabamentos-pb1-4-14-x-7-8-p1/p');
