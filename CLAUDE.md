@@ -197,10 +197,11 @@ confundir a caixa de SQL do Supabase com a caixa de editar arquivo do GitHub.
    estava saindo deste repositório. Reconectar **somente com o `main` correto** — publicar um
    `main` quebrado derruba o portal.
 
-4. **Governança (falar com a TI).** Dado operacional das três unidades em conta pessoal, GitHub
-   pessoal e plano gratuito. Enquanto não há usuários, mover para uma organização da Kingspan é
-   barato; depois vira projeto. Contato: **Mauricio Filho**, Coordenador de TI · Sistemas & Dados
-   (mauricio.filho@kingspanisoeste.com.br).
+4. **Hospedagem com ponto único de falha.** O repositório está numa conta pessoal do GitHub e o
+   banco num projeto Supabase de conta pessoal, ambos com um único dono. Se aquela conta se
+   perder, o acesso ao banco vai com ela e ninguém mais consegue recuperar. Duas melhorias
+   baratas: adicionar um segundo membro ao projeto no Supabase (`Settings → Members`) e manter o
+   export das tabelas em dia. Vale reavaliar a hospedagem antes de o sistema entrar em uso real.
 
 5. **`index.html` é um arquivo único de 2.080 linhas.** Com duas pessoas trabalhando, dá conflito
    em quase toda edição. Dividir em `estoque.js`, `bobinas.js`, `styles.css` etc.
