@@ -1,0 +1,212 @@
+# CLAUDE.md — Portal de Estoque Kingspan Isoeste
+
+Contexto do projeto para qualquer agente de IA ou pessoa que for mexer neste repositório.
+Sempre em **português do Brasil**.
+
+**Atualizado:** 02/09/2026
+**Mantenedores:** Robson (dono do projeto e admin geral) · Victor Dobner (colaborador)
+
+> Este arquivo é lido automaticamente pelo Claude Code ao abrir a pasta do projeto.
+> Não é preciso colar contexto no início da conversa.
+> Quando o sistema mudar, atualize este arquivo **no mesmo commit** da mudança.
+
+---
+
+## 1. Visão geral
+
+Portal web de consulta e contagem de estoque para a Kingspan Isoeste, cobrindo três unidades
+(106 Araquari-SC, 101 Anápolis-GO, 105 Cambuí-MG), com login individual, permissões por papel,
+contagem física em tempo real, fichas técnicas de itens com foto, e um módulo separado para
+auditoria de bobinas de aço.
+
+**Estado atual: em desenvolvimento. Ainda não há usuários em operação.**
+
+**Stack:** HTML + CSS + JavaScript puro em um único arquivo `index.html` (~2.080 linhas, 200 KB),
+sem frameworks e **sem etapa de build** — o arquivo servido é o próprio código-fonte.
+Banco de dados, autenticação e tempo real no Supabase. Publicado no Vercel, versionado no GitHub.
+
+---
+
+## 2. Onde tudo está
+
+| O quê | Onde |
+|---|---|
+| Portal publicado | https://consulta-estoque-kingspan-araquari.vercel.app/ |
+| Repositório | https://github.com/Robson1795/Portal-de-Consultas |
+| Projeto Vercel | consulta-estoque-kingspan-araquari |
+| Projeto Supabase | ID `muhfzfdynbpzdjconpio` — https://muhfzfdynbpzdjconpio.supabase.co |
+
+---
+
+## 3. Como trabalhar neste repositório
+
+**O repositório é a fonte de verdade do código.** Não a conversa do Claude, não o arquivo no
+computador de alguém, não o que está publicado no Vercel.
+
+Fluxo:
+
+1. `git pull` antes de começar.
+2. Criar uma branch para a mudança (`git checkout -b assunto-da-mudanca`).
+3. Editar os arquivos na pasta, commitar e `git push`.
+4. Abrir Pull Request. O Vercel gera um link de preview da branch — testar ali.
+5. Aprovado, juntar no `main`. É o `main` que vai para produção.
+
+**Não editar arquivo pela interface web do GitHub, e não colar arquivo inteiro por lá.**
+Foi assim que o código do portal foi perdido três vezes (ver seção 10).
+
+### Regra que não pode ser esquecida
+
+**Script SQL roda no painel do Supabase** (`SQL Editor → New query → Run`), **nunca** no GitHub.
+As duas telas são um campo de texto onde se cola código e se clica em salvar — a troca é fácil de
+fazer e apaga o portal. Os scripts do projeto ficam em `sql/` (ver `sql/README.md`).
+
+---
+
+## 4. Credenciais — não ficam neste arquivo
+
+Este arquivo é versionado, e no Git o histórico é permanente: senha commitada não se apaga depois.
+**Nunca escreva chave, senha ou PIN aqui.** Peça ao Robson quando precisar.
+
+O que é útil saber sem expor valor nenhum:
+
+- A **chave anon do Supabase** está no `index.html` e é pública por desenho. Isso é aceitável:
+  a proteção real são as políticas de RLS de cada tabela.
+- Existem quatro senhas embutidas no JavaScript: um PIN de edição, uma senha de contagem por
+  unidade e uma senha do módulo de bobinas (`EDIT_PIN` e `PINS_CONTAGEM` por volta da linha 570,
+  `SENHA_AUDITORIA` por volta da linha 1799).
+  ⚠️ **Elas não são segurança.** Estão em texto claro num arquivo que qualquer pessoa baixa —
+  basta abrir o portal e apertar Ctrl+U. Funcionam como trava contra clique acidental.
+  Quem protege dado é o RLS.
+
+---
+
+## 5. Papéis e permissões
+
+| Quem | O que pode fazer |
+|---|---|
+| **Admin geral** (Robson) | Tudo: editar estoque de qualquer unidade, aprovar contas, editar fichas, editar bobinas. Entra sem precisar de aprovação |
+| **Usuário comum aprovado** | Consulta; participa da contagem física se souber a senha da unidade |
+| **Gerente de unidade** (`gerentes_unidade`) | Edita o estoque só da própria unidade. Hoje: Joel (106), David (101), João Ricardo (105) |
+| **Editor de fichas técnicas** | Admin + Joel — editam embalagem (caixa master/fracionada) |
+| **Editor de bobinas** (`editores_bobinas`) | Admin + Jhonatan Palace, Victor Dobner, Izabella — colam a planilha de bobinas |
+| **Novo cadastro** | Fica "aguardando aprovação" até o admin liberar em `usuarios_permitidos` |
+
+**Login sem e-mail real:** quem se cadastra só com um nome de usuário (sem @) tem o login
+convertido para `usuario@portal.kingspanisoeste.local`, para não gastar o limite de e-mails do
+Supabase gratuito. Quem tem e-mail real digita o e-mail completo. Por isso os editores aparecem
+no banco com o domínio `.local`, e não com o e-mail corporativo.
+
+---
+
+## 6. Banco de dados (Supabase)
+
+Dez tabelas. Os scripts que as criam estão em `sql/` — mas confira a seção 10 antes de rodar.
+
+| Tabela | Para quê | Observação |
+|---|---|---|
+| `estoque` | Estoque principal, uma linha por item **por endereço** | O mesmo item aparece em vários endereços da mesma unidade — é normal |
+| `fichas_tecnicas` | Foto, uso e embalagem por item | Global, não é por unidade. PK: `item` |
+| `acessos` | Log de cada login | Preenchido pelo app |
+| `usuarios_permitidos` | Aprovação manual de conta | Usuário cria a própria linha com `aprovado=false`; só o admin aprova |
+| `gerentes_unidade` | Quem edita o estoque de cada unidade | PK: `unidade` + `email` |
+| `contagem_fisica` | Contagem do estoque geral | PK: `item` + `unidade` + `localizacao`. Tempo real |
+| `atribuicoes_corredor` | Responsável por contar cada corredor | PK: `unidade` + `corredor`. Tempo real |
+| `editores_bobinas` | Quem atualiza a planilha de bobinas | PK: `email` |
+| `bobinas_aco` | Saldo do sistema das bobinas | Colunas em uso: `id, item, descricao, est, dep, localizacao, lote, um, qtd_liquida` |
+| `contagem_bobinas` | Contagem física das bobinas | PK: `codigo`. Tempo real |
+
+---
+
+## 7. Funcionalidades (estoque geral)
+
+- **Login/cadastro** com aprovação manual; admin entra direto.
+- **Multi-unidade:** botões 106 / 101 / 105 trocam a lista.
+- **Busca** livre (item, descrição, localização, UM) e dois formatos especiais:
+  - `corredor A-B` → endereços tipo `A-01-01-01` cujo corredor está entre A e B.
+  - `CANT A-G` → endereços tipo `CANT A`, `CANT B`… até G.
+- **Filtros:** localização parcial, UM, estoque zerado, com foto, com divergência.
+- **Ficha do item (🖼️):** foto, uso recomendado, embalagem.
+- **Comparar entre unidades (⇄):** o mesmo item nas três unidades, somado por unidade,
+  do maior para o menor, com total geral.
+- **Padrão de caixas (📦):** quantas caixas master + fracionadas + peças soltas correspondem
+  ao saldo do sistema.
+- **Impressão:** respeita o filtro atual; com `corredor A-B` ou `CANT A-G`, agrupa, quebra
+  página a cada troca de corredor e repete o cabeçalho em cada folha.
+- **Modo Contagem (📋, senha por unidade):** estoque físico por item+endereço com diferença na
+  hora (✅ / +X / −X), cálculo de caixas, tempo real entre todos na mesma unidade, "quem já
+  contou" por pessoa e corredor, responsável por corredor, limpar item ou tudo.
+  A senha é liberada uma vez por sessão do navegador.
+- **Atualizar dados (admin/gerente):** cola planilha TSV (Item, Descrição, UM, Localização,
+  Quantidade); substitui só os itens da unidade selecionada e grava `atualizado_por`.
+
+---
+
+## 8. Módulo "Bobinas de Aço"
+
+Aba separada, por um link acima da tabela principal, protegida por senha de sessão.
+
+- **Planilha de entrada:** TSV com 8 colunas nesta ordem — Item, Descrição Item, Est, Dep,
+  Localizacao, Lote, Un, Qtd Liquida. Cola direto da planilha da empresa.
+- **Tabela:** todas as colunas + Saldo Físico (editável) + Divergência + Saldo Ajustado.
+- **Cards:** total auditado, com divergência, OK.
+- **Tempo real** igual à contagem geral.
+- Ao colar a planilha, o código **apaga todas as linhas de `bobinas_aco` e insere as novas** —
+  é substituição total, não atualização incremental.
+
+---
+
+## 9. Avisos técnicos
+
+- **Supabase Free:** o projeto pausa sozinho após 7 dias sem uso; reativar no painel.
+- **Sem backup automático.** Export manual das 10 tabelas (`Table Editor → Export`, CSV) de vez
+  em quando. O CSV salva os **dados**; a **estrutura** está em `sql/`. Os dois juntos permitem
+  refazer o banco.
+- **Vercel Hobby:** nominalmente só para uso não-comercial.
+- **Cache do navegador:** depois de publicar, sempre Ctrl+F5 antes de concluir que não funcionou.
+
+---
+
+## 10. Problemas conhecidos e pendências
+
+### Já resolvido — fica registrado para não repetir
+
+**Perda do código (28/08 a 02/09/2026).** O `index.html` foi sobrescrito três vezes por scripts
+SQL colados na interface web do GitHub. A última versão boa no histórico era de 27/08, sem os
+módulos de bobinas, contagem em tempo real, fichas técnicas e responsável por corredor. O código
+real (200.120 bytes) existia **só no deploy do Vercel**, que não estava conectado a este
+repositório. Foi recuperado do portal publicado em 02/09 — possível porque é arquivo único sem
+build — e conferido byte a byte contra o que o Claude do Robson tinha gerado. Origem do erro:
+confundir a caixa de SQL do Supabase com a caixa de editar arquivo do GitHub.
+
+### Aberto
+
+1. **`sql/bobinas-aco.sql` está desatualizado.** Ele cria `bobinas_aco` com
+   `codigo, largura, espessura, peso, saldo_sistema`, mas o código em produção usa
+   `item, descricao, est, dep, localizacao, lote, um, qtd_liquida`. Em banco existente o script
+   não faz nada (`create table if not exists`), mas num banco novo criaria a estrutura errada e
+   o módulo de bobinas quebraria. Corrigir o script a partir da estrutura real do Supabase.
+
+2. **RLS libera conta não aprovada.** A checagem de aprovação (`verificarAprovacao`) é
+   JavaScript no navegador: decide qual tela mostrar, não protege o banco. Como as políticas são
+   `to authenticated using (true)`, uma conta ainda não aprovada consegue ler o estoque das três
+   unidades pela API. Em `contagem_bobinas` a escrita também está aberta
+   (`using (true) with check (true)`) — dá para apagar contagem alheia.
+   **Correção proposta em `sql/corrige-permissoes.sql`** (rodar no Supabase, ler os comentários).
+
+3. **Verificar de onde o Vercel publica** (`Vercel → projeto → Settings → Git`). O deploy não
+   estava saindo deste repositório. Reconectar **somente com o `main` correto** — publicar um
+   `main` quebrado derruba o portal.
+
+4. **Governança (falar com a TI).** Dado operacional das três unidades em conta pessoal, GitHub
+   pessoal e plano gratuito. Enquanto não há usuários, mover para uma organização da Kingspan é
+   barato; depois vira projeto. Contato: **Mauricio Filho**, Coordenador de TI · Sistemas & Dados
+   (mauricio.filho@kingspanisoeste.com.br).
+
+5. **`index.html` é um arquivo único de 2.080 linhas.** Com duas pessoas trabalhando, dá conflito
+   em quase toda edição. Dividir em `estoque.js`, `bobinas.js`, `styles.css` etc.
+
+6. **Dados de produto:** cadastrar mais itens com foto e embalagem em `fichas_tecnicas`; fotos das
+   massas vedantes (Chemiseal); aguardando a Multi-Fix sobre catálogo de parafusos com códigos
+   internos.
+
+7. **Unidades 101 e 105 sem dados reais** — só a estrutura está pronta.
