@@ -9,6 +9,12 @@ até agora, e todos são bem mais baratos de corrigir hoje do que depois.
 
 Numeração por severidade. `L###` = linha do `index.html`.
 
+> ⚠️ **Escopo e validade.** Esta auditoria foi feita sobre o `index.html` de 2.084 linhas
+> (commit `bb31bad`). Em 03/09/2026 entrou o **módulo de validação por OCR** (~380 linhas,
+> ver `CLAUDE.md` seção 9), que **não está coberto aqui** — e os números de linha abaixo
+> saíram de lugar. Para localizar um trecho, busque pelo nome da função em vez da linha.
+> Os achados em si continuam valendo: nenhum deles foi corrigido ainda.
+
 ---
 
 ## 🔴 Crítico

@@ -3,7 +3,7 @@
 Contexto do projeto para qualquer agente de IA ou pessoa que for mexer neste repositório.
 Sempre em **português do Brasil**.
 
-**Atualizado:** 02/09/2026
+**Atualizado:** 03/09/2026
 **Mantenedores:** Robson (dono do projeto e admin geral) · Victor Dobner (colaborador)
 
 > Este arquivo é lido automaticamente pelo Claude Code ao abrir a pasta do projeto.
@@ -21,7 +21,7 @@ auditoria de bobinas de aço.
 
 **Estado atual: em desenvolvimento. Ainda não há usuários em operação.**
 
-**Stack:** HTML + CSS + JavaScript puro em um único arquivo `index.html` (~2.080 linhas, 200 KB),
+**Stack:** HTML + CSS + JavaScript puro em um único arquivo `index.html` (~2.500 linhas, 220 KB),
 sem frameworks e **sem etapa de build** — o arquivo servido é o próprio código-fonte.
 Banco de dados, autenticação e tempo real no Supabase. Publicado no Vercel, versionado no GitHub.
 
@@ -52,7 +52,7 @@ Fluxo:
 5. Aprovado, juntar no `main`. É o `main` que vai para produção.
 
 **Não editar arquivo pela interface web do GitHub, e não colar arquivo inteiro por lá.**
-Foi assim que o código do portal foi perdido três vezes (ver seção 10).
+Foi assim que o código do portal foi perdido três vezes (ver seção 11).
 
 ### Ativar a trava de pré-commit (uma vez por cópia do repositório)
 
@@ -84,8 +84,8 @@ O que é útil saber sem expor valor nenhum:
 - A **chave anon do Supabase** está no `index.html` e é pública por desenho. Isso é aceitável:
   a proteção real são as políticas de RLS de cada tabela.
 - Existem quatro senhas embutidas no JavaScript: um PIN de edição, uma senha de contagem por
-  unidade e uma senha do módulo de bobinas (`EDIT_PIN` e `PINS_CONTAGEM` por volta da linha 570,
-  `SENHA_AUDITORIA` por volta da linha 1799).
+  unidade e uma senha do módulo de bobinas (`EDIT_PIN` e `PINS_CONTAGEM` nas linhas 620-621,
+  `SENHA_AUDITORIA` na linha 1861).
   ⚠️ **Elas não são segurança.** Estão em texto claro num arquivo que qualquer pessoa baixa —
   basta abrir o portal e apertar Ctrl+U. Funcionam como trava contra clique acidental.
   Quem protege dado é o RLS.
@@ -112,7 +112,7 @@ no banco com o domínio `.local`, e não com o e-mail corporativo.
 
 ## 6. Banco de dados (Supabase)
 
-Onze tabelas. Os scripts que as criam estão em `sql/` — mas confira a seção 10 antes de rodar.
+Onze tabelas. Os scripts que as criam estão em `sql/` — mas confira a seção 11 antes de rodar.
 
 | Tabela | Para quê | Observação |
 |---|---|---|
@@ -126,7 +126,7 @@ Onze tabelas. Os scripts que as criam estão em `sql/` — mas confira a seção
 | `editores_bobinas` | Quem atualiza a planilha de bobinas | PK: `email` |
 | `bobinas_aco` | Saldo do sistema das bobinas | Colunas em uso: `id, item, descricao, est, dep, localizacao, lote, um, qtd_liquida` |
 | `contagem_bobinas` | Contagem física das bobinas | PK: `codigo`. Tempo real |
-| `contagem_bobinas_ocr` | Não documentada — apareceu no diagnóstico de 02/09/2026 | Provavelmente ligada a leitura de etiqueta por OCR. **Confirmar para que serve** |
+| `contagem_bobinas_ocr` | Validação de bobina por foto da etiqueta (módulo de OCR) | Colunas gravadas: `bobina_id, status, alerta_sistema, motivo_alerta, foto_url, operador` |
 
 ---
 
@@ -168,7 +168,27 @@ Aba separada, por um link acima da tabela principal, protegida por senha de sess
 
 ---
 
-## 9. Avisos técnicos
+## 9. Módulo de validação por OCR (bobinas)
+
+Entrou em 03/09/2026. Botão **"Registrar contagem por foto"** na página de bobinas.
+
+Fluxo: a pessoa fotografa a etiqueta da bobina no pátio → **Tesseract.js** (carregado por CDN,
+roda no próprio celular, sem custo de API) extrai o texto → `acharCodigoBobina()` e
+`acharPesoEtiqueta()` garimpam código e peso do texto bruto → compara com o saldo do sistema →
+mostra um veredito e grava em `contagem_bobinas_ocr`. Divergência dispara
+`dispararAlertaBobina()`.
+
+Funções: `abrirValidacaoBobina` (2202) · `lerEtiquetaComOcr` (2229) · `acharCodigoBobina` (2330)
+· `acharPesoEtiqueta` (2356) · `salvarValidacaoBobina` (2394) · `dispararAlertaBobina` (2458).
+A chave de bobina é `chaveBobina(item, localizacao, lote)` (1943) — não só o item.
+
+⚠️ **Este módulo nunca foi auditado.** A `AUDITORIA.md` cobre o portal até a versão anterior
+a ele. Ponto de atenção conhecido: `contagem_bobinas_ocr` tem leitura aberta a qualquer conta
+autenticada, e grava `foto_url`.
+
+---
+
+## 10. Avisos técnicos
 
 - **Supabase Free:** o projeto pausa sozinho após 7 dias sem uso; reativar no painel.
 - **Sem backup automático.** Export manual das 10 tabelas (`Table Editor → Export`, CSV) de vez
@@ -179,7 +199,7 @@ Aba separada, por um link acima da tabela principal, protegida por senha de sess
 
 ---
 
-## 10. Problemas conhecidos e pendências
+## 11. Problemas conhecidos e pendências
 
 ### Já resolvido — fica registrado para não repetir
 
@@ -190,6 +210,16 @@ real (200.120 bytes) existia **só no deploy do Vercel**, que não estava conect
 repositório. Foi recuperado do portal publicado em 02/09 — possível porque é arquivo único sem
 build — e conferido byte a byte contra o que o Claude do Robson tinha gerado. Origem do erro:
 confundir a caixa de SQL do Supabase com a caixa de editar arquivo do GitHub.
+
+**Segunda deriva, no dia seguinte (03/09/2026).** Poucas horas depois, o módulo de OCR (seção 9)
+foi desenvolvido e publicado direto no Vercel, existindo em nenhum commit — 379 linhas. Foi
+percebido ao comparar o tamanho do arquivo no ar (218.464 bytes) com o do `main` (200.120) e
+recuperado antes do primeiro push, que o teria apagado do ar. **Origem: o Vercel ainda não
+estava ligado ao repositório, então publicar e versionar eram dois atos separados.**
+
+**Resolvido em 03/09/2026:** o Vercel foi conectado a este repositório e a ligação foi conferida
+por fora — o arquivo servido pelo portal e o `index.html` do `main` têm o mesmo md5. Publicar e
+versionar passaram a ser o mesmo ato: `push` no `main` vai ao ar em cerca de 10 segundos.
 
 ### Aberto
 
@@ -218,9 +248,8 @@ confundir a caixa de SQL do Supabase com a caixa de editar arquivo do GitHub.
    Pendência: o diagnóstico trouxe só a cláusula `USING`; falta revisar `WITH CHECK`, que é o
    que vale para `INSERT`.
 
-4. **Verificar de onde o Vercel publica** (`Vercel → projeto → Settings → Git`). O deploy não
-   estava saindo deste repositório. Reconectar **somente com o `main` correto** — publicar um
-   `main` quebrado derruba o portal.
+4. **Auditar o módulo de OCR** (seção 9). Entrou em 03/09/2026, cerca de 380 linhas, e nunca
+   foi lido de ponta a ponta.
 
 5. **Hospedagem com ponto único de falha.** O repositório está numa conta pessoal do GitHub e o
    banco num projeto Supabase de conta pessoal, ambos com um único dono. Se aquela conta se
