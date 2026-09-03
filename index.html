@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Consulta Estoque Kingspan Araquari</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <style>
   :root {
     --bg: #eef2f6;
@@ -220,6 +221,15 @@
   .modal-box h3 { margin: 0 0 4px 0; font-size: 16px; color: var(--blue-dark); }
   .modal-box .modal-item-code { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
   .modal-box .modal-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-top: 12px; margin-bottom: 4px; font-weight: 700; }
+  .bobina-val-input {
+    width: 100%; padding: 14px 12px; border: 2px solid var(--border); border-radius: 10px;
+    font-size: 18px; font-weight: 600;
+  }
+  .bobina-val-input:focus { border-color: var(--blue); outline: none; }
+  #alertaBobinaBanner {
+    background: #fef3c7; border: 1px solid #d97706; color: #92400e; padding: 10px 14px;
+    border-radius: 8px; font-size: 13px; font-weight: 600; margin-bottom: 12px;
+  }
   .modal-box .modal-text { font-size: 13.5px; color: var(--ink); line-height: 1.5; }
   .modal-box .modal-link {
     display: inline-block; margin-top: 14px; padding: 8px 14px; background: var(--blue);
@@ -428,7 +438,14 @@
       <div class="stat-pill">Total auditado<strong id="bob-total">-</strong></div>
       <div class="stat-pill">Com divergência<strong id="bob-divergentes">-</strong></div>
       <div class="stat-pill">OK<strong id="bob-ok">-</strong></div>
+      <div class="stat-pill">Última atualização da planilha<strong id="bob-atualizado-por">-</strong><span id="bob-atualizado-em" style="font-size:12px;">-</span></div>
     </div>
+
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
+      <button class="btn btn-primary" id="registrarFotoBtn" style="padding:14px 20px; font-size:15px; flex:1; min-width:220px;">📷 Registrar contagem por foto</button>
+      <button class="btn" id="exportarOcrBtn" style="padding:14px 16px;">⬇️ Exportar CSV</button>
+    </div>
+    <div id="alertaBobinaBanner" style="display:none;"></div>
 
     <div class="edit-toggle-row" id="bobinasEditToggleRow" style="display:none;">
       <button class="btn" id="toggleBobinasEditBtn">Atualizar planilha de bobinas (admin)</button>
@@ -487,6 +504,39 @@
       <input type="password" id="bobinasPinInput" placeholder="Senha" maxlength="20" style="width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:10px; font-size:14px; text-align:center;">
       <button class="btn btn-primary" id="bobinasPinSubmitBtn" style="width:100%;">Entrar</button>
       <div class="status-msg status-err" id="bobinasPinMsg" style="margin-top:8px;"></div>
+    </div>
+  </div>
+
+  <input type="file" accept="image/*" capture="environment" id="fotoEtiquetaInput" style="display:none;">
+
+  <div class="modal-overlay" id="validacaoModal">
+    <div class="modal-box" style="max-width:420px;">
+      <button class="modal-close" id="validacaoCloseBtn">✕</button>
+      <h3 style="margin-top:0;">Validar contagem</h3>
+
+      <div id="validacaoFotoPreview" style="margin-bottom:12px;"></div>
+      <div id="veredictoBox" style="display:none; border:2px solid; border-radius:10px; padding:14px; text-align:center; margin-bottom:12px;"></div>
+
+      <label class="modal-label">Código da bobina</label>
+      <input type="text" id="valBobinaId" placeholder="Digite ou confira o código" class="bobina-val-input">
+
+      <label class="modal-label">Peso da etiqueta</label>
+      <input type="text" inputmode="decimal" id="valPesoEtiqueta" placeholder="Peso lido/pesado" class="bobina-val-input">
+
+      <div id="valSistemaInfo" style="font-size:12.5px; color:var(--muted); margin:8px 0; padding:10px; background:var(--row-alt); border-radius:8px; display:none;">
+        <div><b>No sistema:</b></div>
+        <div>Peso: <span id="valPesoSistemaTexto">-</span></div>
+        <div>Localização: <span id="valLocalizacaoSistemaTexto">-</span></div>
+      </div>
+
+      <label class="modal-label">Localização real (confira ou corrija)</label>
+      <input type="text" id="valLocalizacaoReal" placeholder="Localização física real" class="bobina-val-input">
+
+      <div style="display:flex; gap:10px; margin-top:16px;">
+        <button id="confirmarOkBtn" style="flex:1; padding:18px 10px; font-size:16px; font-weight:700; background:#2f9e5c; color:white; border:none; border-radius:10px; cursor:pointer;">✅ OK, bate tudo</button>
+        <button id="salvarDivergenteBtn" style="flex:1; padding:18px 10px; font-size:16px; font-weight:700; background:#d97706; color:white; border:none; border-radius:10px; cursor:pointer;">⚠️ Salvar divergência</button>
+      </div>
+      <div class="status-msg" id="validacaoMsg" style="margin-top:10px; text-align:center;"></div>
     </div>
   </div>
 
@@ -571,6 +621,12 @@ const EDIT_PIN = "2026";
 const PINS_CONTAGEM = { '106': 'INV106', '101': 'INV101', '105': 'INV105' };
 const ADMIN_EMAIL = "robson_alves1995@live.com";
 const DOMINIO_USUARIO = "portal.kingspanisoeste.local";
+
+// Nome que aparece destacado em verde na saudacao do cabecalho.
+// Verde claro porque o cabecalho tem fundo azul-escuro; o verde do resto
+// do portal (#2f9e5c) nao teria contraste suficiente ali.
+const NOME_DESTAQUE = "victor hugo";
+const COR_NOME_DESTAQUE = "#6ee7a0";
 
 // Se a pessoa digitar um e-mail de verdade (com @), usa como está.
 // Se digitar só um nome de usuário, converte pra um formato que o Supabase aceita,
@@ -731,7 +787,13 @@ async function mostrarTelaCorreta(session) {
 
   const { aprovado, nome } = await verificarAprovacao(user);
   nomeUsuarioAtual = nomeParaExibir(user, nome);
-  document.getElementById('userNameDisplay').textContent = 'Bem-vindo(a), ' + nomeUsuarioAtual;
+  // innerHTML para poder colorir so o nome. O nome vem de usuarios_permitidos,
+  // digitado pela propria pessoa no cadastro, entao passa por escapeHtml.
+  const nomeSeguro = escapeHtml(nomeUsuarioAtual);
+  const ehDestaque = nomeUsuarioAtual.trim().toLowerCase() === NOME_DESTAQUE;
+  document.getElementById('userNameDisplay').innerHTML = 'Bem-vindo(a), ' + (ehDestaque
+    ? `<span style="color:${COR_NOME_DESTAQUE};">${nomeSeguro}</span>`
+    : nomeSeguro);
 
   if (aprovado) {
     authScreen.style.display = 'none';
@@ -1876,10 +1938,16 @@ async function loadBobinas() {
   renderBobinas();
 }
 
+// Como o mesmo código de bobina aparece em vários endereços/lotes,
+// a contagem é guardada por item + localização + lote.
+function chaveBobina(item, localizacao, lote) {
+  return `${item}||${localizacao || ''}||${lote || ''}`;
+}
+
 async function carregarBobinasContagem() {
   const { data } = await sb.from('contagem_bobinas').select('*');
   bobinasContagemMap = {};
-  (data || []).forEach(r => { bobinasContagemMap[r.codigo] = r.saldo_fisico; });
+  (data || []).forEach(r => { bobinasContagemMap[chaveBobina(r.item, r.localizacao, r.lote)] = r.saldo_fisico; });
 }
 
 function calcularDivergenciaBobina(sistema, fisico) {
@@ -1920,10 +1988,12 @@ function renderBobinas() {
   emptyMsg.style.display = 'none';
 
   tbody.innerHTML = rows.map(r => {
-    const fisico = bobinasContagemMap[r.item];
+    const chave = chaveBobina(r.item, r.localizacao, r.lote);
+    const fisico = bobinasContagemMap[chave];
     const d = calcularDivergenciaBobina(r.qtd_liquida, fisico);
+    const corLinha = d.temValor ? (d.classe === 'diff-ok' ? 'background:#f0fbf4;' : 'background:#fffbeb;') : '';
     return `
-      <tr>
+      <tr style="${corLinha}" data-chave="${escapeHtml(chave)}">
         <td class="item">${escapeHtml(r.item)}</td>
         <td>${escapeHtml(r.descricao || '')}</td>
         <td>${escapeHtml(r.est || '')}</td>
@@ -1933,12 +2003,15 @@ function renderBobinas() {
         <td>${escapeHtml(r.um || '')}</td>
         <td class="num">${escapeHtml(String(r.qtd_liquida))}</td>
         <td>
-          <input type="text" inputmode="decimal" class="contagem-input bobina-input" data-codigo="${escapeHtml(r.item)}"
+          <input type="text" inputmode="decimal" class="contagem-input bobina-input"
+                 data-item="${escapeHtml(r.item)}" data-loc="${escapeHtml(r.localizacao || '')}" data-lote="${escapeHtml(r.lote || '')}"
                  value="${fisico !== undefined && fisico !== null ? escapeHtml(String(fisico)) : ''}" placeholder="—">
-          <button class="contagem-clear-btn bobina-clear-btn" data-codigo="${escapeHtml(r.item)}" type="button" style="display:${d.temValor ? 'inline-block' : 'none'};">Limpar</button>
+          <button class="contagem-clear-btn bobina-clear-btn"
+                  data-item="${escapeHtml(r.item)}" data-loc="${escapeHtml(r.localizacao || '')}" data-lote="${escapeHtml(r.lote || '')}"
+                  type="button" style="display:${d.temValor ? 'inline-block' : 'none'};">Limpar</button>
         </td>
-        <td><span class="diff-badge ${d.classe}" data-codigo="${escapeHtml(r.item)}">${d.texto}</span></td>
-        <td class="num" data-ajustado="${escapeHtml(r.item)}">${d.temValor ? escapeHtml(String(d.ajustado)) : '-'}</td>
+        <td><span class="diff-badge ${d.classe}">${d.texto}</span></td>
+        <td class="num">${d.temValor ? escapeHtml(String(d.ajustado)) : '-'}</td>
       </tr>`;
   }).join('');
 
@@ -1949,7 +2022,7 @@ function atualizarCardsBobinas() {
   const total = bobinasData.length;
   let comValor = 0, divergentes = 0, ok = 0;
   bobinasData.forEach(r => {
-    const fisico = bobinasContagemMap[r.item];
+    const fisico = bobinasContagemMap[chaveBobina(r.item, r.localizacao, r.lote)];
     if (fisico === undefined || fisico === null || fisico === '') return;
     comValor++;
     if (parseNum(fisico) === parseNum(r.qtd_liquida)) ok++; else divergentes++;
@@ -1957,31 +2030,58 @@ function atualizarCardsBobinas() {
   document.getElementById('bob-total').textContent = `${comValor}/${total}`;
   document.getElementById('bob-divergentes').textContent = divergentes;
   document.getElementById('bob-ok').textContent = ok;
+
+  // Quem atualizou a planilha do sistema por ultimo, e quando. Mesma logica
+  // de updateStats() no estoque: vale a linha com atualizado_em mais recente.
+  // Usa bobinasData (tudo), nao as linhas filtradas pela busca.
+  let ultimaEm = null, ultimaPor = null;
+  bobinasData.forEach(r => {
+    if (r.atualizado_em && (!ultimaEm || r.atualizado_em > ultimaEm)) {
+      ultimaEm = r.atualizado_em;
+      ultimaPor = r.atualizado_por;
+    }
+  });
+  if (!ultimaPor && bobinasData.length) {
+    // Se a coluna atualizado_em vier vazia (sem default no banco), ainda
+    // mostra quem atualizou, pegando de qualquer linha que tenha o nome.
+    const comNome = bobinasData.find(r => r.atualizado_por);
+    if (comNome) ultimaPor = comNome.atualizado_por;
+  }
+  document.getElementById('bob-atualizado-por').textContent = ultimaPor || '-';
+  document.getElementById('bob-atualizado-em').textContent = ultimaEm
+    ? new Date(ultimaEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+    : '-';
 }
 
 async function salvarContagemBobina(input) {
-  const codigo = input.dataset.codigo;
+  const item = input.dataset.item;
+  const loc = input.dataset.loc || '';
+  const lote = input.dataset.lote || '';
+  const chave = chaveBobina(item, loc, lote);
   const valor = input.value.trim();
   const linha = input.closest('tr');
   const badge = linha.querySelector('.diff-badge');
-  const ajustadoTd = linha.querySelector(`[data-ajustado="${CSS.escape(codigo)}"]`);
+  const ajustadoTd = linha.querySelectorAll('td')[10];
   const clearBtn = linha.querySelector('.bobina-clear-btn');
-  const bobina = bobinasData.find(r => r.item === codigo);
+  const bobina = bobinasData.find(r => r.item === item && (r.localizacao || '') === loc && (r.lote || '') === lote);
 
   if (valor === '') {
-    delete bobinasContagemMap[codigo];
-    await sb.from('contagem_bobinas').delete().eq('codigo', codigo);
+    delete bobinasContagemMap[chave];
+    await sb.from('contagem_bobinas').delete().eq('item', item).eq('localizacao', loc).eq('lote', lote);
   } else {
-    bobinasContagemMap[codigo] = valor;
+    bobinasContagemMap[chave] = valor;
     await sb.from('contagem_bobinas').upsert({
-      codigo, saldo_fisico: parseNum(valor), contado_por: nomeUsuarioAtual, contado_em: new Date().toISOString()
-    }, { onConflict: 'codigo' });
+      item, localizacao: loc, lote, saldo_fisico: parseNum(valor),
+      contado_por: nomeUsuarioAtual, contado_em: new Date().toISOString()
+    }, { onConflict: 'item,localizacao,lote' });
   }
   const d = calcularDivergenciaBobina(bobina ? bobina.qtd_liquida : 0, valor === '' ? null : valor);
   badge.className = 'diff-badge ' + d.classe;
   badge.textContent = d.texto;
-  ajustadoTd.textContent = d.temValor ? d.ajustado : '-';
+  if (ajustadoTd) ajustadoTd.textContent = d.temValor ? d.ajustado : '-';
   clearBtn.style.display = d.temValor ? 'inline-block' : 'none';
+  // Pinta a linha automaticamente: verde se bateu, amarelo se divergiu
+  linha.style.background = d.temValor ? (d.classe === 'diff-ok' ? '#f0fbf4' : '#fffbeb') : '';
   atualizarCardsBobinas();
 }
 
@@ -1994,7 +2094,7 @@ document.getElementById('bobinasTableBody').addEventListener('keydown', (e) => {
 document.getElementById('bobinasTableBody').addEventListener('click', (e) => {
   const btn = e.target.closest('.bobina-clear-btn');
   if (!btn) return;
-  const input = document.querySelector(`.bobina-input[data-codigo="${CSS.escape(btn.dataset.codigo)}"]`);
+  const input = btn.closest('td').querySelector('.bobina-input');
   if (input) { input.value = ''; salvarContagemBobina(input); }
 });
 
@@ -2010,22 +2110,24 @@ function iniciarTempoRealBobinas() {
   canalBobinas = sb.channel('bobinas-contagem')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'contagem_bobinas' }, (payload) => {
       const row = payload.eventType === 'DELETE' ? payload.old : payload.new;
-      if (!row || !row.codigo) return;
-      const input = document.querySelector(`.bobina-input[data-codigo="${CSS.escape(row.codigo)}"]`);
+      if (!row || !row.item) return;
+      const chave = chaveBobina(row.item, row.localizacao, row.lote);
+      const input = document.querySelector(`.bobina-input[data-item="${CSS.escape(row.item)}"][data-loc="${CSS.escape(row.localizacao || '')}"][data-lote="${CSS.escape(row.lote || '')}"]`);
       if (!input || document.activeElement === input) return;
       const valor = payload.eventType === 'DELETE' ? '' : row.saldo_fisico;
       input.value = valor === null || valor === undefined ? '' : valor;
-      if (valor === '' || valor === null) delete bobinasContagemMap[row.codigo]; else bobinasContagemMap[row.codigo] = valor;
-      const bobina = bobinasData.find(r => r.item === row.codigo);
+      if (valor === '' || valor === null) delete bobinasContagemMap[chave]; else bobinasContagemMap[chave] = valor;
+      const bobina = bobinasData.find(r => r.item === row.item && (r.localizacao || '') === (row.localizacao || '') && (r.lote || '') === (row.lote || ''));
       const linha = input.closest('tr');
       const badge = linha.querySelector('.diff-badge');
-      const ajustadoTd = linha.querySelector(`[data-ajustado="${CSS.escape(row.codigo)}"]`);
+      const ajustadoTd = linha.querySelectorAll('td')[10];
       const clearBtn = linha.querySelector('.bobina-clear-btn');
       const d = calcularDivergenciaBobina(bobina ? bobina.qtd_liquida : 0, valor === '' ? null : valor);
       badge.className = 'diff-badge ' + d.classe;
       badge.textContent = d.texto;
-      ajustadoTd.textContent = d.temValor ? d.ajustado : '-';
+      if (ajustadoTd) ajustadoTd.textContent = d.temValor ? d.ajustado : '-';
       clearBtn.style.display = d.temValor ? 'inline-block' : 'none';
+      linha.style.background = d.temValor ? (d.classe === 'diff-ok' ? '#f0fbf4' : '#fffbeb') : '';
       atualizarCardsBobinas();
     })
     .subscribe();
@@ -2077,6 +2179,317 @@ document.getElementById('saveBobinasBtn').addEventListener('click', async () => 
     msg.textContent = 'Erro ao salvar: ' + err.message;
     msg.className = 'status-msg status-err';
   }
+});
+
+// ========================================================================
+// CONTAGEM DE BOBINAS POR FOTO (validação manual por enquanto - OCR automático
+// pode ser plugado depois, assim que houver uma conta de API de OCR configurada)
+// ========================================================================
+let fotoEtiquetaAtual = null;
+
+document.getElementById('registrarFotoBtn').addEventListener('click', () => {
+  document.getElementById('fotoEtiquetaInput').click();
+});
+
+document.getElementById('fotoEtiquetaInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  fotoEtiquetaAtual = file;
+  abrirValidacaoBobina();
+  e.target.value = ''; // permite tirar a mesma foto de novo depois, se precisar
+});
+
+function abrirValidacaoBobina() {
+  document.getElementById('valBobinaId').value = '';
+  document.getElementById('valPesoEtiqueta').value = '';
+  document.getElementById('valLocalizacaoReal').value = '';
+  document.getElementById('valSistemaInfo').style.display = 'none';
+  document.getElementById('validacaoMsg').textContent = '';
+  esconderVeredito();
+
+  const preview = document.getElementById('validacaoFotoPreview');
+  if (fotoEtiquetaAtual) {
+    const url = URL.createObjectURL(fotoEtiquetaAtual);
+    preview.innerHTML = `<img src="${url}" style="width:100%; max-height:180px; object-fit:contain; border-radius:8px; background:var(--row-alt);">`;
+  } else {
+    preview.innerHTML = '';
+  }
+
+  document.getElementById('validacaoModal').classList.add('open');
+
+  if (fotoEtiquetaAtual) {
+    lerEtiquetaComOcr(fotoEtiquetaAtual);
+  } else {
+    document.getElementById('valBobinaId').focus();
+  }
+}
+
+// Lê o texto da etiqueta usando Tesseract.js (roda no próprio celular, sem custo).
+// Sempre deixa os campos editáveis: se errar, o operador corrige na hora.
+async function lerEtiquetaComOcr(file) {
+  const msg = document.getElementById('validacaoMsg');
+  msg.className = 'status-msg';
+  msg.textContent = 'Lendo etiqueta... 0%';
+
+  try {
+    const { data } = await Tesseract.recognize(file, 'eng', {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          msg.textContent = `Lendo etiqueta... ${Math.round(m.progress * 100)}%`;
+        }
+      }
+    });
+
+    const texto = (data.text || '').toUpperCase();
+    const codigoEncontrado = acharCodigoBobina(texto);
+    const pesoEncontrado = acharPesoEtiqueta(texto);
+
+    if (codigoEncontrado) {
+      document.getElementById('valBobinaId').value = codigoEncontrado;
+      // dispara a busca automática no sistema
+      document.getElementById('valBobinaId').dispatchEvent(new Event('change'));
+    }
+    if (pesoEncontrado !== null) {
+      document.getElementById('valPesoEtiqueta').value = pesoEncontrado;
+    }
+
+    if (codigoEncontrado || pesoEncontrado !== null) {
+      mostrarVeredito(codigoEncontrado, pesoEncontrado);
+    } else {
+      msg.textContent = 'Não consegui ler a etiqueta. Digite os dados manualmente.';
+      msg.className = 'status-msg status-err';
+      esconderVeredito();
+      document.getElementById('valBobinaId').focus();
+    }
+  } catch (err) {
+    msg.textContent = 'Erro na leitura. Digite os dados manualmente.';
+    msg.className = 'status-msg status-err';
+    esconderVeredito();
+    document.getElementById('valBobinaId').focus();
+  }
+}
+
+// Compara automaticamente o que foi lido da etiqueta com o que está no sistema
+// e mostra um veredito grande e claro (OK ou divergente), sem o operador precisar conferir na mão.
+function mostrarVeredito(codigo, pesoEtiqueta) {
+  const box = document.getElementById('veredictoBox');
+  const msg = document.getElementById('validacaoMsg');
+  const bobina = codigo ? bobinasData.find(r => r.item === codigo) : null;
+
+  if (!bobina) {
+    box.style.display = 'block';
+    box.style.background = '#fee2e2';
+    box.style.borderColor = '#b91c1c';
+    box.style.color = '#991b1b';
+    box.innerHTML = `<div style="font-size:20px; font-weight:800;">❌ Não encontrada no sistema</div>
+      <div style="font-size:13px; margin-top:4px;">Código lido: <b>${escapeHtml(codigo || '—')}</b>. Confira o código ou registre como divergência.</div>`;
+    msg.textContent = '';
+    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+    return;
+  }
+
+  const pesoSistema = parseNum(bobina.qtd_liquida);
+  const pesoDivergente = pesoEtiqueta !== null && Math.abs(pesoEtiqueta - pesoSistema) > 0.01;
+
+  box.style.display = 'block';
+  if (pesoEtiqueta === null) {
+    // Achou a bobina, mas não conseguiu ler o peso da etiqueta
+    box.style.background = '#fffbeb';
+    box.style.borderColor = '#d97706';
+    box.style.color = '#92400e';
+    box.innerHTML = `<div style="font-size:20px; font-weight:800;">⚠️ Confira o peso</div>
+      <div style="font-size:13px; margin-top:4px;">Bobina <b>${escapeHtml(bobina.item)}</b> encontrada. No sistema: <b>${escapeHtml(String(pesoSistema))}</b>. Não consegui ler o peso da etiqueta — digite abaixo.</div>`;
+    if (navigator.vibrate) navigator.vibrate(150);
+  } else if (!pesoDivergente) {
+    box.style.background = '#f0fbf4';
+    box.style.borderColor = '#2f9e5c';
+    box.style.color = '#166534';
+    box.innerHTML = `<div style="font-size:22px; font-weight:800;">✅ TUDO OK</div>
+      <div style="font-size:13px; margin-top:4px;">Peso da etiqueta bate com o sistema (<b>${escapeHtml(String(pesoSistema))}</b>). Confirme a localização e toque em OK.</div>`;
+    if (navigator.vibrate) navigator.vibrate(150);
+    msg.textContent = '';
+  } else {
+    const dif = (pesoEtiqueta - pesoSistema).toFixed(2);
+    box.style.background = '#fffbeb';
+    box.style.borderColor = '#d97706';
+    box.style.color = '#92400e';
+    box.innerHTML = `<div style="font-size:22px; font-weight:800;">⚠️ DIVERGENTE</div>
+      <div style="font-size:13px; margin-top:4px;">Etiqueta: <b>${escapeHtml(String(pesoEtiqueta))}</b> · Sistema: <b>${escapeHtml(String(pesoSistema))}</b> · Diferença: <b>${dif > 0 ? '+' : ''}${escapeHtml(dif)}</b></div>`;
+    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+    msg.textContent = '';
+  }
+}
+
+function esconderVeredito() {
+  document.getElementById('veredictoBox').style.display = 'none';
+}
+
+// Procura o código da bobina no texto lido.
+// Na etiqueta real, o código vem logo depois da palavra "PRODUTO" (normalmente na 1ª linha),
+// então essa é a pista mais confiável — com alguns planos B caso o OCR erre a palavra.
+function acharCodigoBobina(texto) {
+  // 1) Procura "PRODUTO" e pega o código que vem logo depois
+  //    (aceita ":" ou espaços no meio, e tolera o OCR ler "PRODUT0"/"PROOUTO")
+  const aposProduto = texto.match(/PR[O0][D0][U|]?[T7][O0]\s*:?\s*([A-Z0-9\-\.\/]{3,})/);
+  if (aposProduto) {
+    const candidato = aposProduto[1].trim();
+    // Confere se esse código existe mesmo na planilha carregada
+    const naPlanilha = bobinasData.find(b => String(b.item).toUpperCase() === candidato);
+    if (naPlanilha) return naPlanilha.item;
+    return candidato; // devolve mesmo assim - o operador confere na tela
+  }
+
+  // 2) Plano B: procura qualquer código da planilha dentro do texto lido
+  const limpo = texto.replace(/[^A-Z0-9]/g, ' ');
+  for (const b of bobinasData) {
+    const cod = String(b.item).toUpperCase();
+    if (cod && limpo.includes(cod)) return b.item;
+  }
+
+  // 3) Plano C: pega a maior sequência de dígitos (5+) como palpite
+  const numeros = limpo.match(/\b\d{5,}\b/g);
+  if (numeros && numeros.length) return numeros.sort((a, b) => b.length - a.length)[0];
+  return null;
+}
+
+// Procura um peso no texto (ex: "1.234,56 KG" ou "1234.56")
+function acharPesoEtiqueta(texto) {
+  const m = texto.match(/(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d+)?)\s*KG/);
+  if (m) return parseNum(m[1]);
+  return null;
+}
+
+// Assim que o operador digita/confirma o código, busca automaticamente no sistema
+document.getElementById('valBobinaId').addEventListener('change', () => {
+  const codigo = document.getElementById('valBobinaId').value.trim();
+  const info = document.getElementById('valSistemaInfo');
+  if (!codigo) { info.style.display = 'none'; return; }
+
+  const bobina = bobinasData.find(r => r.item === codigo);
+  if (bobina) {
+    document.getElementById('valPesoSistemaTexto').textContent = bobina.qtd_liquida;
+    document.getElementById('valLocalizacaoSistemaTexto').textContent = bobina.localizacao || '-';
+    document.getElementById('valLocalizacaoReal').value = bobina.localizacao || '';
+    info.style.display = 'block';
+    info.dataset.pesoSistema = bobina.qtd_liquida;
+    info.dataset.localizacaoSistema = bobina.localizacao || '';
+  } else {
+    document.getElementById('valPesoSistemaTexto').textContent = 'não encontrado';
+    document.getElementById('valLocalizacaoSistemaTexto').textContent = 'não encontrado';
+    info.style.display = 'block';
+    info.dataset.pesoSistema = '';
+    info.dataset.localizacaoSistema = '';
+  }
+});
+
+document.getElementById('confirmarOkBtn').addEventListener('click', () => salvarValidacaoBobina(true));
+document.getElementById('salvarDivergenteBtn').addEventListener('click', () => salvarValidacaoBobina(false));
+document.getElementById('validacaoCloseBtn').addEventListener('click', () => {
+  document.getElementById('validacaoModal').classList.remove('open');
+});
+document.getElementById('validacaoModal').addEventListener('click', (e) => {
+  if (e.target.id === 'validacaoModal') e.currentTarget.classList.remove('open');
+});
+
+async function salvarValidacaoBobina(marcadoComoOk) {
+  const bobina_id = document.getElementById('valBobinaId').value.trim();
+  const peso_etiqueta = parseNum(document.getElementById('valPesoEtiqueta').value);
+  const localizacao_real = document.getElementById('valLocalizacaoReal').value.trim();
+  const info = document.getElementById('valSistemaInfo');
+  const peso_sistema = info.dataset.pesoSistema ? parseNum(info.dataset.pesoSistema) : null;
+  const localizacao_sistema = info.dataset.localizacaoSistema || null;
+  const msg = document.getElementById('validacaoMsg');
+
+  if (!bobina_id) {
+    msg.textContent = 'Digite o código da bobina.';
+    msg.className = 'status-msg status-err';
+    return;
+  }
+
+  msg.textContent = 'Salvando...';
+  msg.className = 'status-msg';
+
+  // ---- Regra de negócio: decide OK ou Divergente ----
+  const pesoDivergente = peso_sistema !== null && Math.abs(peso_etiqueta - peso_sistema) > 0.01;
+  const localDivergente = localizacao_sistema && localizacao_real !== localizacao_sistema;
+
+  let status = 'OK';
+  let alerta_sistema = false;
+  let motivo_alerta = null;
+
+  if (!marcadoComoOk && (pesoDivergente || localDivergente)) {
+    status = 'Divergente';
+    alerta_sistema = true;
+    motivo_alerta = [pesoDivergente ? 'Peso divergente' : null, localDivergente ? 'Localização divergente' : null].filter(Boolean).join(' + ');
+  } else if (!marcadoComoOk) {
+    // Operador clicou em "Salvar divergência" mas os valores batem - registra mesmo assim como correção manual
+    status = 'OK';
+  }
+
+  // Sobe a foto pro Storage (se o bucket "fotos-bobinas" existir)
+  let foto_url = null;
+  if (fotoEtiquetaAtual) {
+    try {
+      const nomeArquivo = `${bobina_id}_${Date.now()}.jpg`;
+      const { error: upErr } = await sb.storage.from('fotos-bobinas').upload(nomeArquivo, fotoEtiquetaAtual);
+      if (!upErr) foto_url = sb.storage.from('fotos-bobinas').getPublicUrl(nomeArquivo).data.publicUrl;
+    } catch (e) { /* segue sem foto se o bucket ainda não existir */ }
+  }
+
+  try {
+    await sb.from('contagem_bobinas_ocr').insert({
+      bobina_id, peso_etiqueta, peso_sistema, localizacao_sistema, localizacao_real,
+      status, alerta_sistema, motivo_alerta, foto_url, operador: nomeUsuarioAtual
+    });
+
+    if (alerta_sistema) dispararAlertaBobina(bobina_id, motivo_alerta);
+
+    msg.textContent = `Registrado como ${status}!`;
+    msg.className = 'status-msg status-ok';
+    fotoEtiquetaAtual = null;
+    setTimeout(() => document.getElementById('validacaoModal').classList.remove('open'), 1000);
+  } catch (err) {
+    msg.textContent = 'Erro ao salvar: ' + err.message;
+    msg.className = 'status-msg status-err';
+  }
+}
+
+// ---- Alertas em tempo real pro supervisor ----
+function dispararAlertaBobina(bobinaId, motivo) {
+  sb.channel('alertas-bobinas').send({
+    type: 'broadcast', event: 'divergencia',
+    payload: { bobina_id: bobinaId, motivo, quando: new Date().toISOString(), quem: nomeUsuarioAtual }
+  });
+}
+
+sb.channel('alertas-bobinas')
+  .on('broadcast', { event: 'divergencia' }, (msg) => {
+    const banner = document.getElementById('alertaBobinaBanner');
+    banner.textContent = `⚠️ Divergência na bobina ${msg.payload.bobina_id}: ${msg.payload.motivo} (registrado por ${msg.payload.quem})`;
+    banner.style.display = 'block';
+    setTimeout(() => { banner.style.display = 'none'; }, 15000);
+  })
+  .subscribe();
+
+// ---- Exportação CSV ----
+document.getElementById('exportarOcrBtn').addEventListener('click', async () => {
+  const { data, error } = await sb.from('contagem_bobinas_ocr').select('*').order('criado_em', { ascending: false });
+  if (error || !data || data.length === 0) {
+    alert('Nenhum registro de contagem por foto encontrado ainda.');
+    return;
+  }
+  const cabecalho = 'ID da Bobina,Peso Etiqueta,Peso Sistema,Localizacao Sistema,Localizacao Real,Status,Alerta Sistema,Operador,Data\n';
+  const linhas = data.map(r => [
+    r.bobina_id, r.peso_etiqueta, r.peso_sistema, r.localizacao_sistema, r.localizacao_real,
+    r.status, r.alerta_sistema ? `Sim - ${r.motivo_alerta}` : 'Não', r.operador,
+    new Date(r.criado_em).toLocaleString('pt-BR')
+  ].map(v => `"${(v ?? '').toString().replace(/"/g, '""')}"`).join(',')).join('\n');
+
+  const blob = new Blob(['\uFEFF' + cabecalho + linhas], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `contagem_bobinas_${new Date().toISOString().slice(0,10)}.csv`;
+  link.click();
 });
 
 </script>
