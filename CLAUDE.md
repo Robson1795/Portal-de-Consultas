@@ -100,7 +100,7 @@ no banco com o domínio `.local`, e não com o e-mail corporativo.
 
 ## 6. Banco de dados (Supabase)
 
-Dez tabelas. Os scripts que as criam estão em `sql/` — mas confira a seção 10 antes de rodar.
+Onze tabelas. Os scripts que as criam estão em `sql/` — mas confira a seção 10 antes de rodar.
 
 | Tabela | Para quê | Observação |
 |---|---|---|
@@ -114,6 +114,7 @@ Dez tabelas. Os scripts que as criam estão em `sql/` — mas confira a seção 
 | `editores_bobinas` | Quem atualiza a planilha de bobinas | PK: `email` |
 | `bobinas_aco` | Saldo do sistema das bobinas | Colunas em uso: `id, item, descricao, est, dep, localizacao, lote, um, qtd_liquida` |
 | `contagem_bobinas` | Contagem física das bobinas | PK: `codigo`. Tempo real |
+| `contagem_bobinas_ocr` | Não documentada — apareceu no diagnóstico de 02/09/2026 | Provavelmente ligada a leitura de etiqueta por OCR. **Confirmar para que serve** |
 
 ---
 
@@ -186,28 +187,40 @@ confundir a caixa de SQL do Supabase com a caixa de editar arquivo do GitHub.
    não faz nada (`create table if not exists`), mas num banco novo criaria a estrutura errada e
    o módulo de bobinas quebraria. Corrigir o script a partir da estrutura real do Supabase.
 
-2. **RLS libera conta não aprovada.** A checagem de aprovação (`verificarAprovacao`) é
-   JavaScript no navegador: decide qual tela mostrar, não protege o banco. Como as políticas são
-   `to authenticated using (true)`, uma conta ainda não aprovada consegue ler o estoque das três
-   unidades pela API. Em `contagem_bobinas` a escrita também está aberta
-   (`using (true) with check (true)`) — dá para apagar contagem alheia.
-   **Correção proposta em `sql/corrige-permissoes.sql`** (rodar no Supabase, ler os comentários).
+2. **🔴 `estoque` tem escrita aberta para qualquer conta autenticada.** Confirmado no
+   diagnóstico de 02/09/2026: existem duas políticas `ALL` na tabela — a correta
+   ("Escrita admin ou gerente da unidade") e uma aberta ("Escrita para logados",
+   `using (true)`). No Postgres as políticas se somam (OU, não E), então a aberta anula a
+   restrita. **A regra "gerente edita só a própria unidade" não está valendo**, e qualquer
+   conta logada pode alterar ou apagar o estoque das três unidades.
+   Mesmo padrão de escrita aberta em `contagem_fisica`, `contagem_bobinas` e
+   `atribuicoes_corredor`.
 
-3. **Verificar de onde o Vercel publica** (`Vercel → projeto → Settings → Git`). O deploy não
+3. **RLS libera conta não aprovada.** A checagem de aprovação (`verificarAprovacao`) é
+   JavaScript no navegador: decide qual tela mostrar, não protege o banco. Dez tabelas têm
+   leitura `using (true)`, então uma conta ainda não aprovada lê o estoque das três unidades
+   pela API. A tabela `acessos` (log de login) também é legível por qualquer conta.
+
+   **Correção dos itens 2 e 3 em `sql/corrige-permissoes.sql`**, escrita a partir do
+   diagnóstico real. Rodar no Supabase e depois a Parte 5 para verificar.
+   Pendência: o diagnóstico trouxe só a cláusula `USING`; falta revisar `WITH CHECK`, que é o
+   que vale para `INSERT`.
+
+4. **Verificar de onde o Vercel publica** (`Vercel → projeto → Settings → Git`). O deploy não
    estava saindo deste repositório. Reconectar **somente com o `main` correto** — publicar um
    `main` quebrado derruba o portal.
 
-4. **Hospedagem com ponto único de falha.** O repositório está numa conta pessoal do GitHub e o
+5. **Hospedagem com ponto único de falha.** O repositório está numa conta pessoal do GitHub e o
    banco num projeto Supabase de conta pessoal, ambos com um único dono. Se aquela conta se
    perder, o acesso ao banco vai com ela e ninguém mais consegue recuperar. Duas melhorias
    baratas: adicionar um segundo membro ao projeto no Supabase (`Settings → Members`) e manter o
    export das tabelas em dia. Vale reavaliar a hospedagem antes de o sistema entrar em uso real.
 
-5. **`index.html` é um arquivo único de 2.080 linhas.** Com duas pessoas trabalhando, dá conflito
+6. **`index.html` é um arquivo único de 2.080 linhas.** Com duas pessoas trabalhando, dá conflito
    em quase toda edição. Dividir em `estoque.js`, `bobinas.js`, `styles.css` etc.
 
-6. **Dados de produto:** cadastrar mais itens com foto e embalagem em `fichas_tecnicas`; fotos das
+7. **Dados de produto:** cadastrar mais itens com foto e embalagem em `fichas_tecnicas`; fotos das
    massas vedantes (Chemiseal); aguardando a Multi-Fix sobre catálogo de parafusos com códigos
    internos.
 
-7. **Unidades 101 e 105 sem dados reais** — só a estrutura está pronta.
+8. **Unidades 101 e 105 sem dados reais** — só a estrutura está pronta.
