@@ -57,8 +57,12 @@ fi
 # Em qualquer outro arquivo, um token e vazamento -- e o historico do
 # Git e permanente, entao apagar depois nao resolve.
 # ---------------------------------------------------------------------
+# A chave anon vive em js/config.js desde a divisao da Fase 2a (antes ficava
+# no index.html). Os dois estao isentos: e chave publica por desenho, e a
+# protecao real e o RLS.
 for arquivo in $arquivos; do
   [ "$arquivo" = "index.html" ] && continue
+  [ "$arquivo" = "js/config.js" ] && continue
   [ "$arquivo" = ".githooks/pre-commit" ] && continue
 
   if git show ":$arquivo" 2>/dev/null | grep -qE 'eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}'; then

@@ -1,0 +1,301 @@
+/* Portal de Estoque Kingspan Isoeste
+   Extraido do index.html na Fase 2a (03/09/2026), sem alteracao de conteudo. */
+  :root {
+    --bg: #eef2f6;
+    --panel: #ffffff;
+    --ink: #111111;
+    --muted: #5a6472;
+    --blue: #004894;
+    --blue-dark: #003368;
+    --gold: #c7a679;
+    --border: #e2e6ec;
+    --row-alt: #f7f9fb;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    padding: 24px;
+  }
+  .wrap { max-width: 1200px; margin: 0 auto; }
+  img { max-width: 100%; }
+
+  .hero {
+    position: relative;
+    border-radius: 16px;
+    padding: 22px 26px;
+    margin-bottom: 20px;
+    background: linear-gradient(120deg, var(--blue) 0%, var(--blue-dark) 55%, #001c3d 100%);
+    overflow: hidden;
+    box-shadow: 0 8px 24px rgba(0,50,100,0.18);
+  }
+  .hero::after {
+    content: "";
+    position: absolute; right: -60px; top: -60px;
+    width: 220px; height: 220px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(199,166,121,0.35) 0%, rgba(199,166,121,0) 70%);
+  }
+  .hero-top { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; position: relative; z-index: 1; flex-wrap: wrap; }
+  .logo-card {
+    background: white; border-radius: 10px; padding: 8px 14px;
+    display: flex; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  }
+  .logo-card img { height: 32px; width: auto; display: block; }
+  .hero h1 {
+    color: #111111; background: white; display: inline-block; margin: 0;
+    font-size: 22px; padding: 6px 14px; border-radius: 8px; position: relative; z-index: 1;
+  }
+  .hero .subtitle { color: rgba(255,255,255,0.85); font-size: 13.5px; margin-top: 10px; position: relative; z-index: 1; }
+
+  .unit-btn {
+    padding: 8px 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.35);
+    background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.85);
+    font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s ease;
+  }
+  .unit-btn:hover { background: rgba(255,255,255,0.18); }
+  .unit-btn.active { background: white; color: var(--blue-dark); border-color: white; }
+
+  .stats { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+  .stat-pill {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 16px; font-size: 13px; color: var(--muted);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+  }
+  .stat-pill strong { display: block; font-size: 18px; color: var(--ink); }
+
+  .edit-toggle-row { display: flex; justify-content: flex-end; margin-bottom: 10px; }
+  .btn {
+    padding: 9px 14px; border: 1px solid var(--border); background: white;
+    border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--ink); font-weight: 600;
+  }
+  .btn:hover { background: var(--row-alt); }
+  .btn-primary { background: var(--blue); color: white; border-color: var(--blue-dark); }
+  .btn-primary:hover { background: var(--blue-dark); }
+
+  .edit-panel {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px; margin-bottom: 16px; display: none;
+  }
+  .edit-panel.open { display: block; }
+  .edit-panel h3 { margin: 0 0 8px 0; font-size: 15px; color: var(--blue-dark); }
+  .edit-panel p { font-size: 12.5px; color: var(--muted); margin: 4px 0 10px 0; }
+  .edit-panel textarea {
+    width: 100%; min-height: 180px; font-family: ui-monospace, Consolas, monospace;
+    font-size: 12.5px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; resize: vertical;
+  }
+  .edit-actions { display: flex; gap: 10px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
+  .pin-gate {
+    background: #fff8e6; border: 1px solid #f0ce7d; border-radius: 8px;
+    padding: 14px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  }
+  .pin-gate input { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; width: 120px; }
+  .status-msg { font-size: 12.5px; margin-left: 6px; }
+  .status-ok { color: var(--blue-dark); }
+  .status-err { color: #b3441c; }
+
+  .panel {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+  .controls {
+    display: flex; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border);
+    flex-wrap: wrap; align-items: center; background: var(--row-alt);
+  }
+  .controls input[type="text"] {
+    flex: 1; min-width: 220px; padding: 10px 14px; border: 1px solid var(--border);
+    border-radius: 10px; font-size: 14px; outline: none; background: white; color: var(--ink);
+  }
+  #filterCount {
+    background: var(--gold); color: white; border-radius: 50%; font-size: 10px; font-weight: 700;
+    width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center;
+    position: absolute; top: -6px; right: -6px;
+  }
+  table { width: 100%; min-width: 620px; border-collapse: collapse; font-size: 13.5px; }
+  thead th {
+    background: var(--blue); color: white; text-align: left; padding: 12px;
+    position: sticky; top: 0; cursor: pointer; user-select: none; white-space: nowrap; font-weight: 600;
+  }
+  thead th:hover { background: var(--blue-dark); }
+  thead th .arrow { font-size: 10px; opacity: 0.9; margin-left: 4px; color: var(--gold); }
+  tbody td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; color: var(--ink); }
+  tbody tr:nth-child(even) { background: var(--row-alt); }
+  tbody tr:hover { background: #fbf3e7; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; }
+  td.item { font-weight: 700; color: var(--ink); white-space: nowrap; }
+  td.loc { white-space: nowrap; color: var(--muted); }
+  .scroll-area { max-height: 68vh; overflow: auto; -webkit-overflow-scrolling: touch; }
+  .empty-msg { padding: 30px; text-align: center; color: var(--muted); }
+  .footer-note { margin-top: 14px; font-size: 12px; color: var(--muted); text-align: center; }
+  .loading-msg { padding: 30px; text-align: center; color: var(--muted); }
+  @media (max-width: 640px) {
+    body { padding: 12px; }
+    .hero { padding: 16px; border-radius: 12px; }
+    .hero-top { gap: 10px; margin-bottom: 10px; }
+    .logo-card { padding: 6px 10px; }
+    .logo-card img { height: 24px; }
+    #userNameDisplay { font-size: 13px; }
+    .hero h1 { font-size: 17px; padding: 5px 10px; display: block; width: fit-content; }
+    .hero .subtitle { font-size: 12px; }
+
+    .stats { gap: 8px; margin-bottom: 12px; }
+    .stat-pill { flex: 1 1 calc(50% - 8px); padding: 8px 12px; }
+    .stat-pill strong { font-size: 16px; }
+
+    .edit-toggle-row { justify-content: stretch; }
+    .edit-toggle-row .btn { width: 100%; text-align: center; }
+
+    .edit-panel { padding: 12px; }
+    .pin-gate { padding: 12px; }
+    .pin-gate span { width: 100%; }
+    .pin-gate input { flex: 1; min-width: 0; }
+    .edit-actions { flex-direction: column; align-items: stretch; }
+    .edit-actions .btn { width: 100%; text-align: center; }
+    .status-msg { margin-left: 0; text-align: center; }
+
+    .controls { flex-direction: column; align-items: stretch; padding: 12px; }
+    .controls input[type="text"] { min-width: 0; width: 100%; }
+    .controls .btn { width: 100%; text-align: center; }
+
+    .scroll-area { max-height: 60vh; }
+    table { font-size: 12.5px; }
+    thead th, tbody td { padding: 8px 10px; }
+    .col-contagem { width: 90px; }
+    .contagem-input { font-size: 16px; padding: 8px 6px; }
+  }
+
+  @media (max-width: 380px) {
+    .stat-pill { flex: 1 1 100%; }
+  }
+
+  .scroll-hint {
+    display: none; font-size: 11.5px; color: var(--muted);
+    text-align: center; padding: 6px 0 2px 0;
+  }
+  @media (max-width: 640px) {
+    .scroll-hint { display: block; }
+  }
+
+  .ficha-btn {
+    border: none; background: var(--row-alt); border-radius: 6px;
+    padding: 4px 8px; cursor: pointer; font-size: 15px; line-height: 1;
+  }
+  .ficha-btn:hover { background: #dde6ee; }
+  .compare-btn {
+    border: none; background: transparent; border-radius: 6px;
+    padding: 4px 8px; cursor: pointer; font-size: 13px; line-height: 1;
+    color: var(--muted); opacity: 0.6;
+  }
+  .compare-btn:hover { background: var(--row-alt); opacity: 1; color: var(--blue); }
+
+  .padrao-btn {
+    border: none; background: transparent; border-radius: 6px;
+    padding: 3px 6px; cursor: pointer; font-size: 14px; line-height: 1; opacity: 0.7;
+  }
+  .padrao-btn:hover { background: var(--row-alt); opacity: 1; }
+
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+    align-items: center; justify-content: center; z-index: 1000; padding: 16px;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-box {
+    background: white; border-radius: 14px; max-width: 480px; width: 100%;
+    max-height: 85vh; overflow-y: auto; padding: 20px; position: relative;
+  }
+  #compareModalBox { max-width: 560px; }
+  .modal-close {
+    position: absolute; top: 12px; right: 12px; border: none; background: var(--row-alt);
+    border-radius: 50%; width: 30px; height: 30px; cursor: pointer; font-size: 16px;
+  }
+  .modal-box img { width: 100%; border-radius: 10px; margin-bottom: 12px; background: var(--row-alt); }
+  .modal-box h3 { margin: 0 0 4px 0; font-size: 16px; color: var(--blue-dark); }
+  .modal-box .modal-item-code { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+  .modal-box .modal-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-top: 12px; margin-bottom: 4px; font-weight: 700; }
+  .bobina-val-input {
+    width: 100%; padding: 14px 12px; border: 2px solid var(--border); border-radius: 10px;
+    font-size: 18px; font-weight: 600;
+  }
+  .bobina-val-input:focus { border-color: var(--blue); outline: none; }
+  /* Faixa de manutencao. Fica no topo de tudo, visivel ANTES do login --
+     e ali que quem perdeu a conta no reset vai chegar e precisa entender
+     por que nao consegue entrar. */
+  #manutencaoBanner {
+    background: #fef3c7; border-bottom: 2px solid #d97706; color: #92400e;
+    padding: 11px 16px; font-size: 13.5px; font-weight: 600; text-align: center;
+    line-height: 1.45;
+  }
+  #manutencaoBanner .mnt-sub {
+    display: block; font-weight: 500; font-size: 12.5px; margin-top: 3px; opacity: 0.9;
+  }
+  @media print { #manutencaoBanner { display: none; } }
+
+  #alertaBobinaBanner {
+    background: #fef3c7; border: 1px solid #d97706; color: #92400e; padding: 10px 14px;
+    border-radius: 8px; font-size: 13px; font-weight: 600; margin-bottom: 12px;
+  }
+  .modal-box .modal-text { font-size: 13.5px; color: var(--ink); line-height: 1.5; }
+  .modal-box .modal-link {
+    display: inline-block; margin-top: 14px; padding: 8px 14px; background: var(--blue);
+    color: white; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: 600;
+  }
+  .modal-box .modal-link:hover { background: var(--blue-dark); }
+  .modal-empty { text-align: center; color: var(--muted); padding: 20px 0; }
+
+  .print-only-thumb { display: none; }
+
+  @media print {
+    body { background: white; padding: 0; }
+    .controls, .edit-toggle-row, .edit-panel { display: none; }
+    .scroll-area { max-height: none; overflow: visible; }
+    thead th { position: static; }
+    .ficha-btn, .compare-btn, .contagem-clear-btn { display: none; }
+    .col-ficha, .col-unidades, .col-padrao { display: none; }
+    .quebra-pagina { page-break-before: always; break-before: page; }
+    thead { display: table-header-group; } /* repete o cabeçalho em cada página nova */
+    .contagem-input {
+      border: none; border-bottom: 1px solid var(--muted); background: transparent !important;
+      box-shadow: none !important; color: var(--ink) !important;
+    }
+    .print-only-thumb {
+      display: block !important;
+      width: 44px; height: 44px; object-fit: contain;
+      margin: 0 auto;
+    }
+  }
+  .col-contagem { width: 120px; }
+  #limparContagemBtn {
+    border: 1px solid rgba(255,255,255,0.5); background: rgba(255,255,255,0.15); color: white;
+    border-radius: 5px; padding: 3px 8px; font-size: 11px; font-weight: 700; cursor: pointer;
+    margin-top: 4px; text-transform: none;
+  }
+  #limparContagemBtn:hover { background: rgba(255,255,255,0.35); }
+  .contagem-input {
+    width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px;
+    font-size: 14px; text-align: right; font-weight: 700; color: var(--blue-dark);
+    -moz-appearance: textfield;
+  }
+  .contagem-input:focus { border-color: var(--blue); outline: none; box-shadow: 0 0 0 2px rgba(0,72,148,0.15); }
+  .contagem-input.contagem-salvo { border-color: #2f9e5c; background: #f0fbf4; }
+  .contagem-input.contagem-divergente { border-color: #d97706; background: #fffbeb; }
+  .contagem-rodape {
+    display: flex; align-items: center; justify-content: space-between; gap: 6px;
+    margin-top: 4px; min-height: 16px;
+  }
+  .caixas-slot {
+    font-size: 10.5px; color: var(--blue); font-weight: 600; margin-top: 2px;
+  }
+  .diff-badge {
+    font-size: 11px; font-weight: 700; padding: 1px 4px; border-radius: 4px;
+  }
+  .diff-ok { color: #2f9e5c; }
+  .diff-mais { color: #0369a1; background: #e0f2fe; }
+  .diff-menos { color: #b45309; background: #fef3c7; }
+  .contagem-clear-btn {
+    border: none; background: transparent; color: var(--blue); font-size: 11px;
+    font-weight: 600; text-decoration: underline; cursor: pointer; padding: 0; white-space: nowrap;
+  }
+  .contagem-clear-btn:hover { color: #b91c1c; }
+  #contagemBtn.active-toggle { background: var(--blue); color: white; border-color: var(--blue-dark); }
