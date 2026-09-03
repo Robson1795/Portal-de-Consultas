@@ -1,0 +1,16 @@
+# Arquivos que NÃO devem ir para o deploy do Vercel.
+#
+# O Vercel serve a raiz do repositório como site estático: tudo que sobe fica
+# acessível por URL pública. Conferido em 03/09/2026 — /sql/bobinas-aco.sql
+# respondia HTTP 200 no endereço do portal.
+#
+# Documentação interna e scripts de banco não têm por que ser públicos:
+# a AUDITORIA.md descreve as falhas conhecidas com localização no código, e os
+# scripts SQL expõem o modelo de permissões inteiro.
+#
+# O portal é um arquivo único, então só o index.html precisa ser publicado.
+
+*.md
+sql/
+.githooks/
+.claude/

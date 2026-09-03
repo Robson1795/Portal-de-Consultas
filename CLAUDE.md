@@ -196,6 +196,11 @@ autenticada, e grava `foto_url`.
   refazer o banco.
 - **Vercel Hobby:** nominalmente só para uso não-comercial.
 - **Cache do navegador:** depois de publicar, sempre Ctrl+F5 antes de concluir que não funcionou.
+- **O Vercel serve a raiz do repositório.** Tudo que entra no `main` fica acessível por URL
+  pública — conferido em 03/09/2026, quando `/sql/bobinas-aco.sql` respondia HTTP 200 no
+  endereço do portal. O `.vercelignore` exclui `*.md`, `sql/`, `.githooks/` e `.claude/` do
+  deploy. **Ao criar arquivo novo que não deva ser público, confira se ele está coberto por
+  esse arquivo.**
 
 ---
 
