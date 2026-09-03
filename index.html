@@ -621,6 +621,12 @@ const PINS_CONTAGEM = { '106': 'INV106', '101': 'INV101', '105': 'INV105' };
 const ADMIN_EMAIL = "robson_alves1995@live.com";
 const DOMINIO_USUARIO = "portal.kingspanisoeste.local";
 
+// Nome que aparece destacado em verde na saudacao do cabecalho.
+// Verde claro porque o cabecalho tem fundo azul-escuro; o verde do resto
+// do portal (#2f9e5c) nao teria contraste suficiente ali.
+const NOME_DESTAQUE = "victor hugo";
+const COR_NOME_DESTAQUE = "#6ee7a0";
+
 // Se a pessoa digitar um e-mail de verdade (com @), usa como está.
 // Se digitar só um nome de usuário, converte pra um formato que o Supabase aceita,
 // sem nunca precisar de um e-mail real (evita qualquer limite de envio de e-mail).
@@ -780,7 +786,13 @@ async function mostrarTelaCorreta(session) {
 
   const { aprovado, nome } = await verificarAprovacao(user);
   nomeUsuarioAtual = nomeParaExibir(user, nome);
-  document.getElementById('userNameDisplay').textContent = 'Bem-vindo(a), ' + nomeUsuarioAtual;
+  // innerHTML para poder colorir so o nome. O nome vem de usuarios_permitidos,
+  // digitado pela propria pessoa no cadastro, entao passa por escapeHtml.
+  const nomeSeguro = escapeHtml(nomeUsuarioAtual);
+  const ehDestaque = nomeUsuarioAtual.trim().toLowerCase() === NOME_DESTAQUE;
+  document.getElementById('userNameDisplay').innerHTML = 'Bem-vindo(a), ' + (ehDestaque
+    ? `<span style="color:${COR_NOME_DESTAQUE};">${nomeSeguro}</span>`
+    : nomeSeguro);
 
   if (aprovado) {
     authScreen.style.display = 'none';
