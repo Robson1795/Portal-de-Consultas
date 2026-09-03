@@ -112,6 +112,20 @@ update usuarios_permitidos
    'r.alves1@portal.kingspanisoeste.local'
  );
 
+-- 2.6 — zera as contagens de teste.
+--
+-- Conferido em 03/09/2026 antes de apagar: existia exatamente um
+-- registro em cada tabela, os dois de teste --
+--   contagem_fisica : unidade 106, 'Maiko Castro', 1 item
+--   contagem_bobinas: 'Admin', 1 bobina
+--
+-- Nao havia contagem real. Zerar evita a duvida daqui a duas semanas
+-- sobre se aquele numero era teste ou inventario de verdade.
+delete from contagem_bobinas_ocr;
+delete from contagem_bobinas;
+delete from contagem_fisica;
+delete from atribuicoes_corredor;
+
 select set_config('app.definir_acesso', 'nao', false);
 
 
