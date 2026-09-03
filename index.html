@@ -438,6 +438,7 @@
       <div class="stat-pill">Total auditado<strong id="bob-total">-</strong></div>
       <div class="stat-pill">Com divergência<strong id="bob-divergentes">-</strong></div>
       <div class="stat-pill">OK<strong id="bob-ok">-</strong></div>
+      <div class="stat-pill">Última atualização da planilha<strong id="bob-atualizado-por">-</strong><span id="bob-atualizado-em" style="font-size:12px;">-</span></div>
     </div>
 
     <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
@@ -2029,6 +2030,27 @@ function atualizarCardsBobinas() {
   document.getElementById('bob-total').textContent = `${comValor}/${total}`;
   document.getElementById('bob-divergentes').textContent = divergentes;
   document.getElementById('bob-ok').textContent = ok;
+
+  // Quem atualizou a planilha do sistema por ultimo, e quando. Mesma logica
+  // de updateStats() no estoque: vale a linha com atualizado_em mais recente.
+  // Usa bobinasData (tudo), nao as linhas filtradas pela busca.
+  let ultimaEm = null, ultimaPor = null;
+  bobinasData.forEach(r => {
+    if (r.atualizado_em && (!ultimaEm || r.atualizado_em > ultimaEm)) {
+      ultimaEm = r.atualizado_em;
+      ultimaPor = r.atualizado_por;
+    }
+  });
+  if (!ultimaPor && bobinasData.length) {
+    // Se a coluna atualizado_em vier vazia (sem default no banco), ainda
+    // mostra quem atualizou, pegando de qualquer linha que tenha o nome.
+    const comNome = bobinasData.find(r => r.atualizado_por);
+    if (comNome) ultimaPor = comNome.atualizado_por;
+  }
+  document.getElementById('bob-atualizado-por').textContent = ultimaPor || '-';
+  document.getElementById('bob-atualizado-em').textContent = ultimaEm
+    ? new Date(ultimaEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+    : '-';
 }
 
 async function salvarContagemBobina(input) {
