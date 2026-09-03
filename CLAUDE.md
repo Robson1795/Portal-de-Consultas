@@ -54,6 +54,18 @@ Fluxo:
 **Não editar arquivo pela interface web do GitHub, e não colar arquivo inteiro por lá.**
 Foi assim que o código do portal foi perdido três vezes (ver seção 10).
 
+### Ativar a trava de pré-commit (uma vez por cópia do repositório)
+
+```
+git config core.hooksPath .githooks
+```
+
+Isso liga o `.githooks/pre-commit`, que recusa o commit se o `index.html` deixar de ser HTML
+(o acidente que apagou o portal três vezes), se aparecer um token JWT ou menção a
+`service_role` fora do `index.html`, ou se um `.md` parecer conter senha escrita.
+
+Em falso positivo, `git commit --no-verify` passa por cima — mas leia o aviso antes.
+
 ### Regra que não pode ser esquecida
 
 **Script SQL roda no painel do Supabase** (`SQL Editor → New query → Run`), **nunca** no GitHub.

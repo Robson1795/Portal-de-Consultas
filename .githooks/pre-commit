@@ -1,0 +1,115 @@
+#!/bin/sh
+# =====================================================================
+# Trava de pré-commit do Portal de Estoque
+#
+# Roda automaticamente antes de cada commit e RECUSA o commit se
+# encontrar um dos problemas que já aconteceram neste projeto.
+#
+# Para ativar (uma vez por cópia do repositório):
+#     git config core.hooksPath .githooks
+#
+# Para pular em um commit específico (use com consciência):
+#     git commit --no-verify
+# =====================================================================
+
+erros=0
+
+vermelho() { printf '\033[31m%s\033[0m\n' "$1"; }
+amarelo()  { printf '\033[33m%s\033[0m\n' "$1"; }
+
+# Arquivos que estão entrando neste commit (adicionados ou modificados)
+arquivos=$(git diff --cached --name-only --diff-filter=ACM)
+
+# ---------------------------------------------------------------------
+# 1. O index.html precisa continuar sendo HTML
+#
+# Entre 28/08 e 02/09/2026 o index.html foi sobrescrito três vezes por
+# scripts SQL colados na interface web do GitHub, e o portal inteiro foi
+# perdido. Esta checagem existe por causa disso.
+# ---------------------------------------------------------------------
+if echo "$arquivos" | grep -q '^index\.html$'; then
+  conteudo=$(git show :index.html)
+
+  case "$conteudo" in
+    '<!DOCTYPE html>'*|'<!doctype html>'*) ;;
+    *)
+      vermelho "ERRO: index.html nao comeca com <!DOCTYPE html>."
+      echo "  O arquivo comeca com:"
+      echo "$conteudo" | head -3 | sed 's/^/    /' | cut -c1-100
+      echo ""
+      echo "  Se isso e um script SQL: ele roda no painel do Supabase"
+      echo "  (SQL Editor > New query > Run), nao aqui. Veja sql/README.md."
+      erros=1
+      ;;
+  esac
+
+  if ! echo "$conteudo" | grep -q '</html>'; then
+    vermelho "ERRO: index.html nao tem a tag de fechamento </html>."
+    echo "  O arquivo parece truncado ou incompleto."
+    erros=1
+  fi
+fi
+
+# ---------------------------------------------------------------------
+# 2. Nenhum token JWT fora do index.html
+#
+# A chave anon do Supabase e publica por desenho e vive no index.html.
+# Em qualquer outro arquivo, um token e vazamento -- e o historico do
+# Git e permanente, entao apagar depois nao resolve.
+# ---------------------------------------------------------------------
+for arquivo in $arquivos; do
+  [ "$arquivo" = "index.html" ] && continue
+  [ "$arquivo" = ".githooks/pre-commit" ] && continue
+
+  if git show ":$arquivo" 2>/dev/null | grep -qE 'eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}'; then
+    vermelho "ERRO: $arquivo contem um token JWT (chave do Supabase?)."
+    echo "  Chave nao entra em arquivo versionado fora do index.html."
+    erros=1
+  fi
+
+  # A chave service_role ignora todo o RLS e nunca deve entrar no repositorio.
+  # Em .md a expressao aparece legitimamente ao explicar a regra, entao esta
+  # checagem vale so para codigo e configuracao. Uma chave service_role de
+  # verdade e um JWT, e a checagem acima ja a pegaria em qualquer arquivo.
+  case "$arquivo" in
+    *.md) ;;
+    *)
+      if git show ":$arquivo" 2>/dev/null | grep -qiE 'service_role[a-z_]*[[:space:]]*[:=]'; then
+        vermelho "ERRO: $arquivo atribui algo a service_role."
+        echo "  A chave service_role ignora todo o RLS. Ela nunca entra no repositorio."
+        erros=1
+      fi
+      ;;
+  esac
+done
+
+# ---------------------------------------------------------------------
+# 3. Senha ou PIN escrito em documento
+#
+# Procura atribuicao de senha em arquivos .md. Nao lista nenhuma senha
+# real aqui de proposito -- este arquivo tambem e versionado.
+# ---------------------------------------------------------------------
+for arquivo in $arquivos; do
+  case "$arquivo" in
+    *.md) ;;
+    *) continue ;;
+  esac
+
+  if git show ":$arquivo" 2>/dev/null | grep -qiE '^[^|]*\b(senha|password|pin)\b[[:space:]]*[:=][[:space:]]*[`"'"'"']?[A-Za-z0-9@._-]{4,}'; then
+    amarelo "ATENCAO: $arquivo parece conter uma senha escrita."
+    echo "  Confira antes de seguir. Documento versionado nao guarda credencial —"
+    echo "  o historico do Git e permanente."
+    echo "  Se for falso positivo (ex: texto explicando que a senha existe),"
+    echo "  siga com: git commit --no-verify"
+    erros=1
+  fi
+done
+
+# ---------------------------------------------------------------------
+if [ "$erros" -ne 0 ]; then
+  echo ""
+  vermelho "Commit cancelado pela trava de pre-commit (.githooks/pre-commit)."
+  exit 1
+fi
+
+exit 0
