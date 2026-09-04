@@ -425,7 +425,6 @@ td.col-acoes { white-space: nowrap; text-align: center; }
 .topbar-local { display: flex; align-items: center; gap: 7px; font-size: 15px; font-weight: 600; min-width: 0; }
 .topbar-local .pin { font-size: 14px; }
 .topbar-unidade-fixa { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.topbar-localizacao { font-weight: 500; opacity: 0.85; font-size: 13px; }
 .unit-select {
   background: rgba(255,255,255,0.14); color: #fff;
   border: 1px solid rgba(255,255,255,0.3); border-radius: 7px;
@@ -471,8 +470,16 @@ td.col-acoes { white-space: nowrap; text-align: center; }
 /* ========================== FIM DA CASCA ============================== */
 
   /* Faixa de manutencao. Fica no topo de tudo, visivel ANTES do login --
-     e ali que quem perdeu a conta no reset vai chegar e precisa entender
-     por que nao consegue entrar. */
+     e ali que chega quem nao consegue entrar, e precisa entender por que.
+
+     O estilo fica aqui de proposito, mesmo sem uso: para reativar o aviso,
+     basta repor no inicio do <body> do index.html:
+
+       <div id="manutencaoBanner">
+         Portal em manutencao - nao utilize por enquanto.
+         <span class="mnt-sub">explique aqui o motivo e o prazo.</span>
+       </div>
+  */
   #manutencaoBanner {
     background: #fef3c7; border-bottom: 2px solid #d97706; color: #92400e;
     padding: 11px 16px; font-size: 13.5px; font-weight: 600; text-align: center;
