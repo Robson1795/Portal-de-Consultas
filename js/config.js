@@ -7,21 +7,17 @@
 // ---- Configuração do Supabase ----
 const SUPABASE_URL = "https://muhfzfdynbpzdjconpio.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im11aGZ6ZmR5bmJwemRqY29ucGlvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc4NDcyNDYsImV4cCI6MjEwMzQyMzI0Nn0.IZ803oFvTdZvPGhmpcNAHFkV8oQ2XOy720D-YtPWYow";
-const EDIT_PIN = "2026";
-// Senha de contagem por unidade. Faltavam 103, 104, 107, 109 e 110 -- e como
-// a comparacao e `valor === PINS_CONTAGEM[unidade]`, unidade ausente dava
-// `undefined`, que nenhum texto digitado iguala: o modo contagem era
-// INACESSIVEL nessas cinco, com qualquer senha. Foi o que travou a
-// apresentacao na 104.
+// As senhas de contagem e o PIN de edicao NAO ficam mais aqui.
 //
-// Seguem o padrao INV + codigo. Nao sao segredo: estao neste arquivo, que
-// qualquer pessoa baixa. Servem de trava contra clique acidental -- quem
-// protege dado e o RLS. Passam para a aba admin na proxima entrega, e la a
-// comparacao vai acontecer no banco, para a senha deixar de ser publica.
-const PINS_CONTAGEM = {
-  '101': 'INV101', '103': 'INV103', '104': 'INV104', '105': 'INV105',
-  '106': 'INV106', '107': 'INV107', '109': 'INV109', '110': 'INV110'
-};
+// Moraram neste arquivo ate 04/09/2026, o que as tornava publicas: basta
+// abrir o portal e apertar Ctrl+U. Agora vivem em `config_unidade`, legivel
+// so para admin, e a comparacao acontece DENTRO do banco:
+//
+//     sb.rpc('senha_contagem_confere', { uni, tentativa })  -->  true | false
+//
+// O navegador nunca recebe a senha. Quem as edita e o admin, na aba
+// Configuracoes. Ver sql/fase7-senhas-na-aba-admin.sql.
+
 const ADMIN_EMAIL = "robson_alves1995@live.com";
 
 // Espelha o eh_super_admin() do banco. Quem manda e o Postgres; esta lista

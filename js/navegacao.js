@@ -79,7 +79,7 @@ function mostrarPagina(id) {
   if (id === 'estoque') { pararTempoRealBobinas(); loadData(); }
   if (id === 'bobinas') { abrirTelaBobinas(); }
   if (id === 'requisicao') { carregarRequisicao(); }
-  if (id === 'config')  { carregarUsuarios(); }
+  if (id === 'config')  { carregarUsuarios(); carregarConfigUnidades(); }
 }
 
 document.getElementById('sidebarNav').addEventListener('click', (e) => {

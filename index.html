@@ -412,6 +412,44 @@
       </div>
     </div>
 
+    <div class="req-secao">Configuração por unidade</div>
+    <div class="panel">
+      <div class="cfg-barra">
+        <button class="btn" id="cfgUniRecarregar">Recarregar</button>
+        <span class="status-msg" id="cfgUniMsg"></span>
+      </div>
+      <div class="scroll-hint">Arraste para o lado para ver todas as colunas &rarr;</div>
+      <div class="scroll-area">
+        <table class="cfg-tabela">
+          <thead>
+            <tr>
+              <th>Unidade</th>
+              <th>E-mails do ALM</th>
+              <th>Senha de contagem</th>
+              <th>PIN de edição</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="cfgUniCorpo"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="cfg-nota">
+      <b>E-mails do ALM.</b> Destinatários da Requisição ALM daquela unidade. Vários endereços,
+      separados por ponto e vírgula. Unidade sem e-mail cadastrado tem o envio desabilitado —
+      a requisição ainda pode ser salva, e o ALM a vê pela lista no portal.
+      <br><br>
+      <b>Senha de contagem e PIN de edição.</b> Desde 04/09/2026 estas senhas **não estão mais no
+      código do portal**. Elas vivem aqui, e a conferência acontece dentro do banco: o navegador
+      pergunta "esta senha confere?" e recebe apenas sim ou não. Antes ficavam em
+      <code>js/config.js</code>, visíveis para qualquer pessoa com Ctrl+U.
+      <br><br>
+      Unidade sem senha cadastrada <b>não abre o modo contagem</b> — falha fechado. Se alguém não
+      conseguir entrar na contagem, confira aqui primeiro: foi o que travou a apresentação na
+      unidade 104.
+    </div>
+
     <div class="cfg-nota">
       <b>Como as permissões são aplicadas.</b> Esta tela não decide nada: toda alteração passa
       pela função <code>definir_acesso()</code> no banco, que confere quem está chamando antes
@@ -457,6 +495,27 @@
         <button class="btn btn-primary" id="cadAdicionarBtn">Adicionar</button>
       </div>
       <div class="status-msg" id="cadastroMsg" style="margin-bottom:10px;"></div>
+
+      <details id="cadImportar" style="margin-bottom:12px;">
+        <summary style="cursor:pointer; font-size:13px; font-weight:600; color:var(--blue);">
+          Importar do Excel ou de um CSV
+        </summary>
+        <div style="margin-top:10px;">
+          <div class="cfg-email" id="cadImportFormato" style="margin-bottom:7px;"></div>
+          <textarea id="cadImportTexto" placeholder="Cole aqui as células copiadas do Excel..."
+                    style="width:100%; min-height:90px; padding:9px 11px; border:1px solid var(--border);
+                           border-radius:8px; font-size:12.5px; font-family:monospace; resize:vertical;"></textarea>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px;">
+            <button class="btn btn-primary" id="cadImportBtn">Importar</button>
+            <label class="btn" style="margin:0;">
+              Escolher arquivo CSV
+              <input type="file" id="cadImportArquivo" accept=".csv,text/csv,text/plain" style="display:none;">
+            </label>
+            <span class="cfg-email" id="cadImportArquivoNome"></span>
+          </div>
+        </div>
+      </details>
+
       <div id="cadastroLista"></div>
     </div>
   </div>

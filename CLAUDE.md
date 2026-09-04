@@ -100,12 +100,23 @@ O que é útil saber sem expor valor nenhum:
 
 - A **chave anon do Supabase** está no `index.html` e é pública por desenho. Isso é aceitável:
   a proteção real são as políticas de RLS de cada tabela.
-- Existem quatro senhas embutidas no JavaScript: um PIN de edição, uma senha de contagem por
-  unidade e uma senha do módulo de bobinas (`EDIT_PIN` e `PINS_CONTAGEM` nas linhas 620-621,
-  `SENHA_AUDITORIA` na linha 1861).
-  ⚠️ **Elas não são segurança.** Estão em texto claro num arquivo que qualquer pessoa baixa —
-  basta abrir o portal e apertar Ctrl+U. Funcionam como trava contra clique acidental.
-  Quem protege dado é o RLS.
+- **Nenhuma senha está no código.** Até 04/09/2026 havia quatro em texto claro no JavaScript
+  (`EDIT_PIN`, `PINS_CONTAGEM`, `SENHA_AUDITORIA`) — públicas, bastava Ctrl+U. Hoje:
+
+  | Senha | Onde está |
+  |---|---|
+  | Contagem, por unidade | `config_unidade.senha_contagem`, editável na aba Configurações |
+  | PIN de edição, por unidade | `config_unidade.pin_edicao`, idem |
+  | Bobinas (`aço2026`) | **removida na Fase 2b** — o perfil controla o acesso |
+
+  A conferência acontece **dentro do banco**, por função `security definer`: o navegador chama
+  `senha_contagem_confere(unidade, tentativa)` e recebe apenas `true` ou `false`. A tabela é
+  legível só para admin, então a senha nunca chega ao navegador — de trava contra clique
+  acidental ela passou a ser proteção de verdade.
+
+  Unidade sem senha cadastrada **não abre o modo contagem**: falha fechado. Se alguém não
+  conseguir entrar na contagem, confira a aba Configurações primeiro — foi o que travou a
+  apresentação na unidade 104.
 
 ---
 
@@ -252,6 +263,14 @@ direto. E como a requisição também fica gravada, o ALM a vê no portal mesmo 
 
 ⚠️ **Limite do `mailto`:** alguns clientes cortam URL muito longa. Acima de ~1900 caracteres a
 tela avisa que o e-mail pode sair truncado. Pedido com muitos itens: melhor o ALM abrir no portal.
+
+**Importar do Excel ou CSV.** No modal **Cadastros** há a opção de colar as células copiadas do
+Excel (Ctrl+C já sai separado por tabulação) ou escolher um arquivo `.csv`, lido no próprio
+navegador. O separador é detectado sozinho — tabulação, ponto e vírgula ou vírgula —, o cabeçalho
+é pulado, código repetido resolve pelo último e linha sem código é ignorada, com aviso de quantas.
+Formato: centro de custo é `Código, Descrição`; item é `Código, Descrição, UM`.
+Não há biblioteca de `.xlsx` de propósito: colar resolve o caso do Excel, e uma dependência a mais
+por CDN seria peso sem ganho.
 
 **Centro de custo e item vêm de lista cadastrada, não de texto livre** — texto livre gera "1406",
 "CC1406", "1.406" e "cd1406" para a mesma coisa. Só admin cadastra, pelo botão **Cadastros** na
