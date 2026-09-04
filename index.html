@@ -289,14 +289,67 @@
   </div>
   <!-- ================= FIM BOBINAS DE AÇO ================= -->
 
-  <!-- Placeholder. A tela de verdade e a Fase 4. -->
   <div id="configContent" style="display:none;">
-    <div class="stats">
-      <div class="stat-pill">Configurações<strong>em construção</strong></div>
+    <div class="stat-cards">
+      <div class="stat-card">
+        <div class="stat-icone azul">👥</div>
+        <div class="stat-texto">
+          <div class="stat-rotulo">Usuários cadastrados</div>
+          <div class="stat-valor" id="cfg-total">-</div>
+          <div class="stat-nota">no total</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icone verde">⏳</div>
+        <div class="stat-texto">
+          <div class="stat-rotulo">Aguardando aprovação</div>
+          <div class="stat-valor" id="cfg-pendentes">-</div>
+          <div class="stat-nota">sem acesso até aprovar</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icone roxo">🔑</div>
+        <div class="stat-texto">
+          <div class="stat-rotulo">Administradores</div>
+          <div class="stat-valor" id="cfg-admins">-</div>
+          <div class="stat-nota">acesso total</div>
+        </div>
+      </div>
     </div>
-    <div class="empty-msg" style="display:block;">
-      A administração de usuários (aprovar, definir perfil, unidade e localização)
-      entra na Fase 4. As permissões já valem no banco desde a Fase 1.
+
+    <div class="panel">
+      <div class="cfg-barra">
+        <button class="btn" id="cfgRecarregar">Recarregar lista</button>
+        <span class="status-msg" id="cfgMsg"></span>
+      </div>
+      <div class="scroll-hint">Arraste para o lado para ver todas as colunas →</div>
+      <div class="scroll-area">
+        <table class="cfg-tabela">
+          <thead>
+            <tr>
+              <th>Usuário</th>
+              <th>Status</th>
+              <th>Perfil de acesso</th>
+              <th>Unidade</th>
+              <th>Localização</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="cfgCorpo"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="cfg-nota">
+      <b>Como as permissões são aplicadas.</b> Esta tela não decide nada: toda alteração passa
+      pela função <code>definir_acesso()</code> no banco, que confere quem está chamando antes
+      de agir. Três regras valem mesmo que alguém mexa no navegador ou chame a API direto —
+      só administrador altera acesso; <b>ninguém altera o próprio acesso</b>; e conceder ou
+      remover o perfil <b>Admin</b> é exclusivo de Victor e Robson.
+      O cadeado 🔒 indica linha que o banco recusaria.
+      <br><br>
+      Cadastro novo nasce como <b>Consultor</b>, pendente e sem unidade — e sem unidade
+      definida a pessoa não consegue lançar contagem.
     </div>
   </div>
 
@@ -392,5 +445,6 @@
 <script src="js/estoque.js"></script>
 <script src="js/bobinas.js"></script>
 <script src="js/ocr.js"></script>
+<script src="js/configuracoes.js"></script>
 </body>
 </html>

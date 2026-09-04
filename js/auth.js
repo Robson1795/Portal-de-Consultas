@@ -136,6 +136,7 @@ function nomeParaExibir(user, nomeSalvo) {
 let isAdminAtual = false;
 let emailUsuarioAtual = '';
 let unidadeDoUsuario = null;
+let userIdAtual = null;   // usado pela aba Configuracoes para travar a propria linha
 
 async function ehGerenteDaUnidade(email, unidade) {
   if (!email) return false;
@@ -151,6 +152,7 @@ async function atualizarBotaoEditar() {
 async function mostrarTelaCorreta(session) {
   const user = session.user;
   emailUsuarioAtual = (user.email || '').toLowerCase();
+  userIdAtual = user.id;
 
   const { aprovado, nome, perfil, unidade, localizacao } = await verificarAprovacao(user);
 

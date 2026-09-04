@@ -34,6 +34,7 @@ servidos são o próprio código-fonte. Divididos na Fase 2a (03/09/2026):
 | `js/estoque.js` | Consulta e contagem do estoque geral |
 | `js/bobinas.js` | Módulo Bobinas de Aço |
 | `js/ocr.js` | Validação de bobina por foto |
+| `js/configuracoes.js` | Aba Configurações: administração de usuários (Fase 4) |
 
 São **scripts clássicos, não módulos**, carregados nessa ordem no fim do `body`. O `let`/`const` de
 nível superior vai para o escopo lexical global, compartilhado entre os arquivos — é por isso que o
@@ -135,7 +136,9 @@ sobre ela (`sql/fase1-perfis-e-permissoes.sql`).
 definem quem carrega planilha dentro dele.
 
 **Super admin** (Victor e Robson) é raiz de confiança fixa no SQL e em `js/config.js`. Só eles
-concedem ou removem o perfil `admin`. Não é configurável pelo portal de propósito — é o que
+concedem ou removem o perfil `admin`. A aba **Configurações** (Fase 4) administra tudo isso pela
+tela, mas não decide nada: toda alteração passa pela função `definir_acesso()` no banco, e o
+cadeado 🔒 na linha apenas antecipa o que o banco recusaria. Não é configurável pelo portal de propósito — é o que
 impede um admin de criar outro admin.
 
 ⚠️ O menu decide o que **aparece**; o RLS decide o que a pessoa **lê e escreve**. Forçar a

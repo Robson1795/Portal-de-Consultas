@@ -221,6 +221,51 @@
   .bobina-val-input:focus { border-color: var(--blue); outline: none; }
 
 
+
+/* ===================== FASE 4 — CONFIGURAÇÕES ====================== */
+.cfg-tabela { width: 100%; border-collapse: collapse; }
+.cfg-tabela th {
+  background: var(--blue); color: white; text-align: left; padding: 11px 12px;
+  font-size: 12px; font-weight: 600; white-space: nowrap;
+}
+.cfg-tabela td {
+  padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle;
+}
+.cfg-tabela tr:nth-child(even) { background: var(--row-alt); }
+.cfg-nome { font-weight: 700; font-size: 13.5px; color: var(--ink); }
+.cfg-email { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+.cfg-voce {
+  background: var(--blue); color: white; border-radius: 5px;
+  padding: 1px 6px; font-size: 10px; font-weight: 700; vertical-align: middle;
+}
+.cfg-status {
+  display: inline-block; border-radius: 20px; padding: 3px 11px;
+  font-size: 11.5px; font-weight: 700; white-space: nowrap;
+}
+.st-ativo    { background: #e2f6ea; color: #1d7a45; }
+.st-pendente { background: #fef3c7; color: #92400e; }
+.cfg-tabela select, .cfg-tabela input[type="text"] {
+  padding: 7px 9px; border: 1px solid var(--border); border-radius: 7px;
+  font-size: 13px; background: white; color: var(--ink); max-width: 190px;
+}
+.cfg-tabela select:disabled, .cfg-tabela input:disabled {
+  background: var(--row-alt); color: var(--muted); cursor: not-allowed;
+}
+.cfg-acoes { white-space: nowrap; text-align: right; }
+.cfg-acoes .btn { padding: 6px 11px; font-size: 12.5px; }
+.cfg-travada { font-size: 15px; opacity: 0.55; cursor: help; }
+.cfg-barra {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 14px 16px; border-bottom: 1px solid var(--border); background: var(--row-alt);
+}
+.cfg-barra .status-msg { margin: 0; }
+.cfg-nota {
+  margin-top: 14px; padding: 13px 15px; background: #eaf1f9;
+  border: 1px solid #c9dcf0; border-radius: 10px; font-size: 12.5px;
+  color: var(--blue-dark); line-height: 1.55;
+}
+/* =================== FIM DA FASE 4 ================================= */
+
 /* ===================== FASE 3 — TELAS ==============================
    Cards de resumo com icone, busca com lupa, painel de filtros inline,
    coluna de acoes e paginacao. Segue o mockup aprovado em 03/09/2026. */

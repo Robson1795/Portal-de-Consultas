@@ -76,6 +76,7 @@ function mostrarPagina(id) {
   // Cada pagina carrega os proprios dados ao ser aberta.
   if (id === 'estoque') { pararTempoRealBobinas(); loadData(); }
   if (id === 'bobinas') { abrirTelaBobinas(); }
+  if (id === 'config')  { carregarUsuarios(); }
 }
 
 document.getElementById('sidebarNav').addEventListener('click', (e) => {
