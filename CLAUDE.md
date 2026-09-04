@@ -264,6 +264,14 @@ direto. E como a requisição também fica gravada, o ALM a vê no portal mesmo 
 ⚠️ **Limite do `mailto`:** alguns clientes cortam URL muito longa. Acima de ~1900 caracteres a
 tela avisa que o e-mail pode sair truncado. Pedido com muitos itens: melhor o ALM abrir no portal.
 
+**Importar do Excel ou CSV.** No modal **Cadastros** há a opção de colar as células copiadas do
+Excel (Ctrl+C já sai separado por tabulação) ou escolher um arquivo `.csv`, lido no próprio
+navegador. O separador é detectado sozinho — tabulação, ponto e vírgula ou vírgula —, o cabeçalho
+é pulado, código repetido resolve pelo último e linha sem código é ignorada, com aviso de quantas.
+Formato: centro de custo é `Código, Descrição`; item é `Código, Descrição, UM`.
+Não há biblioteca de `.xlsx` de propósito: colar resolve o caso do Excel, e uma dependência a mais
+por CDN seria peso sem ganho.
+
 **Centro de custo e item vêm de lista cadastrada, não de texto livre** — texto livre gera "1406",
 "CC1406", "1.406" e "cd1406" para a mesma coisa. Só admin cadastra, pelo botão **Cadastros** na
 própria tela de Requisição.

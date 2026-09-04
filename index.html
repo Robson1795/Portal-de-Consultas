@@ -495,6 +495,27 @@
         <button class="btn btn-primary" id="cadAdicionarBtn">Adicionar</button>
       </div>
       <div class="status-msg" id="cadastroMsg" style="margin-bottom:10px;"></div>
+
+      <details id="cadImportar" style="margin-bottom:12px;">
+        <summary style="cursor:pointer; font-size:13px; font-weight:600; color:var(--blue);">
+          Importar do Excel ou de um CSV
+        </summary>
+        <div style="margin-top:10px;">
+          <div class="cfg-email" id="cadImportFormato" style="margin-bottom:7px;"></div>
+          <textarea id="cadImportTexto" placeholder="Cole aqui as células copiadas do Excel..."
+                    style="width:100%; min-height:90px; padding:9px 11px; border:1px solid var(--border);
+                           border-radius:8px; font-size:12.5px; font-family:monospace; resize:vertical;"></textarea>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px;">
+            <button class="btn btn-primary" id="cadImportBtn">Importar</button>
+            <label class="btn" style="margin:0;">
+              Escolher arquivo CSV
+              <input type="file" id="cadImportArquivo" accept=".csv,text/csv,text/plain" style="display:none;">
+            </label>
+            <span class="cfg-email" id="cadImportArquivoNome"></span>
+          </div>
+        </div>
+      </details>
+
       <div id="cadastroLista"></div>
     </div>
   </div>

@@ -424,6 +424,11 @@ function trocarAbaCadastro(aba) {
   // A coluna UM só existe para item.
   document.getElementById('cadUm').style.display = aba === 'item' ? 'block' : 'none';
   document.getElementById('cadCodigo').placeholder = aba === 'cc' ? 'Código do centro de custo' : 'Código do item';
+  document.getElementById('cadImportFormato').textContent = aba === 'cc'
+    ? 'Duas colunas, nesta ordem: Código, Descrição.'
+    : 'Três colunas, nesta ordem: Código, Descrição, UM.';
+  document.getElementById('cadImportTexto').value = '';
+  document.getElementById('cadImportArquivoNome').textContent = '';
   renderCadastros();
 }
 
@@ -507,3 +512,130 @@ async function recarregarCadastros() {
   await Promise.all([carregarCentrosCusto(), carregarCatalogoItens()]);
   renderCadastros();
 }
+
+
+// ---------------------------------------------------------------------------
+// IMPORTAR PLANILHA
+//
+// Duas entradas, o mesmo tratamento:
+//   colar  -- Ctrl+C no Excel já produz colunas separadas por tabulação
+//   .csv   -- lido no próprio navegador, sem enviar arquivo a lugar nenhum
+//
+// Sem biblioteca de xlsx de propósito: colar resolve o caso do Excel, e uma
+// dependência a mais por CDN seria peso e risco sem ganho.
+// ---------------------------------------------------------------------------
+
+// Aceita tabulação (colado do Excel), ponto e vírgula (CSV brasileiro) e
+// vírgula. Escolhe o separador que aparece mais na primeira linha com dados.
+function separadorDe(texto) {
+  const primeira = texto.split(/\r?\n/).find(l => l.trim()) || '';
+  const contagem = { '\t': (primeira.match(/\t/g) || []).length,
+                     ';':  (primeira.match(/;/g)  || []).length,
+                     ',':  (primeira.match(/,/g)  || []).length };
+  return Object.keys(contagem).reduce((a, b) => contagem[b] > contagem[a] ? b : a, '\t');
+}
+
+function lerPlanilha(texto, colunas) {
+  const sep = separadorDe(texto);
+  // Nao se apara a linha inteira antes de separar: uma linha que comeca com o
+  // separador (codigo vazio, descricao preenchida) perderia o separador
+  // inicial, e a descricao viraria o codigo. Separa primeiro, apara depois.
+  const linhas = texto.split(/\r?\n/).filter(l => l.trim());
+  const registros = [];
+  const ignoradas = [];
+
+  linhas.forEach((linha, i) => {
+    const col = linha.split(sep).map(c => c.trim().replace(/^"|"$/g, ''));
+    const codigo = col[0] || '';
+    // Pula cabeçalho: primeira linha cujo primeiro campo é rótulo, não código.
+    if (i === 0 && /^(c[oó]digo|item|cc|centro)/i.test(codigo)) return;
+    if (!codigo) { ignoradas.push(linha); return; }
+
+    const reg = { codigo, descricao: col[1] || null, ativo: true };
+    if (colunas === 3) reg.um = col[2] || null;
+    registros.push(reg);
+  });
+
+  // Código repetido na planilha: o último vence, e avisamos.
+  const vistos = new Map();
+  registros.forEach(r => vistos.set(r.codigo, r));
+  return { registros: [...vistos.values()], ignoradas, repetidos: registros.length - vistos.size, sep };
+}
+
+function nomeDoSeparador(sep) {
+  return sep === '\t' ? 'tabulação' : (sep === ';' ? 'ponto e vírgula' : 'vírgula');
+}
+
+async function importarPlanilha(texto) {
+  const msg = document.getElementById('cadastroMsg');
+  if (!texto || !texto.trim()) {
+    msg.textContent = 'Cole a planilha ou escolha um arquivo CSV primeiro.';
+    msg.className = 'status-msg status-err';
+    return;
+  }
+
+  const ehCC = cadastroAba === 'cc';
+  const { registros, ignoradas, repetidos, sep } = lerPlanilha(texto, ehCC ? 2 : 3);
+
+  if (!registros.length) {
+    msg.textContent = 'Nenhuma linha válida encontrada. A primeira coluna precisa ser o código.';
+    msg.className = 'status-msg status-err';
+    return;
+  }
+
+  if (!confirm(`Importar ${registros.length} ${ehCC ? 'centro(s) de custo' : 'item(ns)'}?\n\n`
+      + `Separador detectado: ${nomeDoSeparador(sep)}.\n`
+      + `Código que já existe é atualizado; os demais cadastros ficam como estão.`)) return;
+
+  msg.textContent = `Importando ${registros.length}...`;
+  msg.className = 'status-msg';
+
+  const tabela = ehCC ? 'centros_custo' : 'itens_requisicao';
+  const { error } = await sb.from(tabela).upsert(registros, { onConflict: 'codigo' });
+
+  if (error) {
+    msg.textContent = 'Não foi possível importar: ' + error.message;
+    msg.className = 'status-msg status-err';
+    console.error('Falha ao importar planilha:', error.message);
+    return;
+  }
+
+  const avisos = [];
+  if (repetidos) avisos.push(`${repetidos} código(s) repetido(s) na planilha — valeu o último`);
+  if (ignoradas.length) avisos.push(`${ignoradas.length} linha(s) sem código foram ignoradas`);
+
+  msg.textContent = `${registros.length} ${ehCC ? 'centro(s) de custo' : 'item(ns)'} importado(s).`
+    + (avisos.length ? ' ' + avisos.join('; ') + '.' : '');
+  msg.className = 'status-msg status-ok';
+
+  document.getElementById('cadImportTexto').value = '';
+  document.getElementById('cadImportArquivoNome').textContent = '';
+  await recarregarCadastros();
+}
+
+document.getElementById('cadImportBtn').addEventListener('click', () => {
+  importarPlanilha(document.getElementById('cadImportTexto').value);
+});
+
+// O arquivo é lido no navegador e cai na mesma caixa de texto, para a pessoa
+// conferir antes de importar. Nada é enviado para servidor nenhum.
+document.getElementById('cadImportArquivo').addEventListener('change', (e) => {
+  const arquivo = e.target.files[0];
+  if (!arquivo) return;
+  const msg = document.getElementById('cadastroMsg');
+  const leitor = new FileReader();
+  leitor.onload = () => {
+    document.getElementById('cadImportTexto').value = String(leitor.result || '');
+    document.getElementById('cadImportArquivoNome').textContent = arquivo.name;
+    msg.textContent = 'Arquivo carregado. Confira o conteúdo e clique em Importar.';
+    msg.className = 'status-msg';
+  };
+  leitor.onerror = () => {
+    msg.textContent = 'Não foi possível ler o arquivo.';
+    msg.className = 'status-msg status-err';
+  };
+  // UTF-8 cobre acento em descrição; CSV salvo em ANSI pode sair torto, e a
+  // pessoa vê isso na caixa antes de importar.
+  leitor.readAsText(arquivo, 'UTF-8');
+  e.target.value = '';
+});
