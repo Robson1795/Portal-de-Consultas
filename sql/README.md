@@ -45,7 +45,18 @@ continua válida.
 
 Pendente: corrigir o script a partir da estrutura real do Supabase.
 
-## Correção de permissões
+## Reformulação de perfis (Fase 1) — rode este
+
+`fase1-perfis-e-permissoes.sql` **substitui** o `corrige-permissoes.sql`. Ele cria o modelo de
+perfis (`consultor`, `estoque_alm`, `estoque_aco`, `admin`), as funções de autorização, a trava
+que impede alguém de elevar o próprio acesso, e **inclui a correção da escrita aberta no
+`estoque`**. Rode só ele.
+
+O `corrige-permissoes.sql` fica no repositório como registro do diagnóstico de 02/09, mas está
+superado. Se por algum motivo você precisar apenas fechar o furo do `estoque` sem mexer em
+perfis, ele serve — é a versão mínima.
+
+## Correção de permissões (superado pela Fase 1)
 
 O arquivo `corrige-permissoes.sql` fecha o acesso de contas ainda não aprovadas.
 Leia os comentários dele antes de rodar: a Parte 0 é um diagnóstico para rodar
