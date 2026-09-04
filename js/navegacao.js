@@ -111,16 +111,25 @@ function montarCabecalho() {
   document.getElementById('userRoleDisplay').textContent = rotuloDoPerfil();
   document.getElementById('userAvatar').textContent = iniciais(nomeUsuarioAtual);
 
-  // Unidades que a pessoa pode ver: admin ve todas; quem tem unidade
-  // definida ve so a dela; quem nao tem, ve todas (nao trava ninguem).
-  const permitidas = (perfilAtual === 'admin' || !unidadeDoUsuario)
+  // Cada pessoa fica na própria unidade. Somente admin troca.
+  // Quem não tem unidade definida não vê unidade nenhuma -- de propósito: é
+  // cadastro incompleto, e o certo é o admin definir a unidade em vez de a
+  // pessoa enxergar as oito. O RLS aplica a mesma regra no banco.
+  const permitidas = (perfilAtual === 'admin')
     ? Object.keys(UNIDADES)
-    : [unidadeDoUsuario];
+    : (unidadeDoUsuario ? [unidadeDoUsuario] : []);
+
+  const caixa = document.getElementById('topbarLocal');
+
+  if (permitidas.length === 0) {
+    unidadeAtual = null;
+    caixa.innerHTML = '<span class="pin">\u{1F4CD}</span>' +
+      '<span class="topbar-unidade-fixa topbar-sem-unidade">Unidade não definida \u2014 peça ao administrador</span>';
+    return;
+  }
 
   if (permitidas.includes(unidadeDoUsuario)) unidadeAtual = unidadeDoUsuario;
   else if (!permitidas.includes(unidadeAtual)) unidadeAtual = permitidas[0];
-
-  const caixa = document.getElementById('topbarLocal');
   if (permitidas.length === 1) {
     caixa.innerHTML = `<span class="pin">📍</span><span class="topbar-unidade-fixa">${escapeHtml(rotuloUnidade(permitidas[0]))}</span>`;
   } else {

@@ -53,8 +53,15 @@ function chaveBobina(item, localizacao, lote) {
 }
 
 async function carregarBobinasContagem() {
-  const { data } = await sb.from('contagem_bobinas').select('*');
+  const { data, error } = await sb.from('contagem_bobinas').select('*');
   bobinasContagemMap = {};
+  if (error) {
+    // Sem isto, falha de leitura fica indistinguível de "ninguém contou ainda".
+    console.error('Falha ao carregar a contagem de bobinas:', error.message);
+    alert('Não foi possível carregar a contagem de bobinas: ' + error.message
+      + ' \u2014 os saldos físicos podem aparecer em branco. Recarregue a página antes de contar.');
+    return;
+  }
   (data || []).forEach(r => { bobinasContagemMap[chaveBobina(r.item, r.localizacao, r.lote)] = r.saldo_fisico; });
 }
 
@@ -173,16 +180,37 @@ async function salvarContagemBobina(input) {
   const clearBtn = linha.querySelector('.bobina-clear-btn');
   const bobina = bobinasData.find(r => r.item === item && (r.localizacao || '') === loc && (r.lote || '') === lote);
 
+  // O cliente do Supabase devolve { error } em vez de lançar exceção, então a
+  // tela só pode ser atualizada depois de conferir. Sem isto o saldo aparecia
+  // gravado mesmo quando a gravação falhava. AUDITORIA.md, item A1.
+  let erro = null;
   if (valor === '') {
-    delete bobinasContagemMap[chave];
-    await sb.from('contagem_bobinas').delete().eq('item', item).eq('localizacao', loc).eq('lote', lote);
+    const res = await sb.from('contagem_bobinas')
+      .delete().eq('item', item).eq('localizacao', loc).eq('lote', lote);
+    erro = res.error;
+    if (!erro) delete bobinasContagemMap[chave];
   } else {
-    bobinasContagemMap[chave] = valor;
-    await sb.from('contagem_bobinas').upsert({
+    const res = await sb.from('contagem_bobinas').upsert({
       item, localizacao: loc, lote, saldo_fisico: parseNum(valor),
       contado_por: nomeUsuarioAtual, contado_em: new Date().toISOString()
     }, { onConflict: 'item,localizacao,lote' });
+    erro = res.error;
+    if (!erro) bobinasContagemMap[chave] = valor;
   }
+
+  if (erro) {
+    input.style.borderColor = '#c62828';
+    input.style.background = '#ffebee';
+    input.title = 'NÃO SALVOU: ' + erro.message;
+    badge.className = 'diff-badge diff-menos';
+    badge.textContent = '\u26a0 não salvou';
+    linha.style.background = '#ffebee';
+    console.error('Falha ao gravar contagem de bobina:', erro.message);
+    return;
+  }
+  input.style.borderColor = '';
+  input.style.background = '';
+  input.title = '';
   const d = calcularDivergenciaBobina(bobina ? bobina.qtd_liquida : 0, valor === '' ? null : valor);
   badge.className = 'diff-badge ' + d.classe;
   badge.textContent = d.texto;

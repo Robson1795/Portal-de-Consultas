@@ -169,6 +169,17 @@ impede um admin de criar outro admin.
 ⚠️ O menu decide o que **aparece**; o RLS decide o que a pessoa **lê e escreve**. Forçar a
 exibição de uma página pelo inspetor não dá acesso a dado nenhum.
 
+### Unidade: escrita fechada, leitura aberta — decisão de 03/09/2026
+
+**Contar e editar:** só na própria unidade. `admin` em todas. Vale na tela (o seletor do cabeçalho
+só aparece para admin) e no banco (`sql/fase2-unidade-por-usuario.sql`). Cadastro sem `unidade`
+**não conta nada** — falha fechado, e o cabeçalho diz para procurar o administrador.
+
+**Consultar:** livre entre as unidades, para qualquer conta aprovada. **Isto é intencional, não é
+esquecimento.** Foi decidido para o botão ⇄ "Comparar entre unidades" continuar funcionando —
+restringir a leitura o tornaria inútil, e o valor dele é justamente cruzar. É estoque interno da
+mesma empresa. Se um dia mudar, saiba o que se perde: o ⇄ passa a mostrar só a unidade da pessoa.
+
 **Login sem e-mail real:** quem se cadastra só com um nome de usuário (sem @) tem o login
 convertido para `usuario@portal.kingspanisoeste.local`, para não gastar o limite de e-mails do
 Supabase gratuito. Quem tem e-mail real digita o e-mail completo. Por isso os editores aparecem
@@ -203,6 +214,12 @@ Onze tabelas. Os scripts que as criam estão em `sql/` — mas confira a seção
 - **Busca** livre (item, descrição, localização, UM) e dois formatos especiais:
   - `corredor A-B` → endereços tipo `A-01-01-01` cujo corredor está entre A e B.
   - `CANT A-G` → endereços tipo `CANT A`, `CANT B`… até G.
+- **Carga inicial:** não existe mais no código. Havia um `SEED_DATA` com 539 itens de estoque
+  dentro do JavaScript público — removido em 04/09/2026 (AUDITORIA.md, C1). Carga inicial é
+  tarefa de script SQL, rodado uma vez no Supabase.
+- **Aviso de gravação falhada:** o cliente do Supabase devolve `{ error }` em vez de lançar
+  exceção. Quando uma contagem não grava, o campo fica **vermelho** com o badge `⚠ não salvou` e
+  a mensagem do banco no tooltip — nunca verde. Ver `marcarFalhaContagem()` em `js/estoque.js`.
 - **Filtros (painel embutido, Fase 3):** localização parcial, UM, padrão de caixa, e o grupo
   "Status do Item" com estoque zerado / com foto / com divergência — combináveis entre si.
 - **Paginação (Fase 3):** 10 itens por página por padrão, ajustável para 25, 50 ou 100.

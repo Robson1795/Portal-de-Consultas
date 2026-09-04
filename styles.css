@@ -425,6 +425,7 @@ td.col-acoes { white-space: nowrap; text-align: center; }
 .topbar-local { display: flex; align-items: center; gap: 7px; font-size: 15px; font-weight: 600; min-width: 0; }
 .topbar-local .pin { font-size: 14px; }
 .topbar-unidade-fixa { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topbar-sem-unidade { font-weight: 500; opacity: 0.9; font-style: italic; }
 .unit-select {
   background: rgba(255,255,255,0.14); color: #fff;
   border: 1px solid rgba(255,255,255,0.3); border-radius: 7px;
