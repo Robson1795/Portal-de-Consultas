@@ -175,7 +175,12 @@ Onze tabelas. Os scripts que as criam estão em `sql/` — mas confira a seção
 - **Busca** livre (item, descrição, localização, UM) e dois formatos especiais:
   - `corredor A-B` → endereços tipo `A-01-01-01` cujo corredor está entre A e B.
   - `CANT A-G` → endereços tipo `CANT A`, `CANT B`… até G.
-- **Filtros:** localização parcial, UM, estoque zerado, com foto, com divergência.
+- **Filtros (painel embutido, Fase 3):** localização parcial, UM, padrão de caixa, e o grupo
+  "Status do Item" com estoque zerado / com foto / com divergência — combináveis entre si.
+- **Paginação (Fase 3):** 10 itens por página por padrão, ajustável para 25, 50 ou 100.
+  ⚠️ A impressão renderiza **todas** as linhas filtradas, não só a página visível
+  (`imprimindoTudo` em `js/estoque.js`) — sem isso a quebra de página por corredor perderia
+  sentido.
 - **Ficha do item (🖼️):** foto, uso recomendado, embalagem.
 - **Comparar entre unidades (⇄):** o mesmo item nas três unidades, somado por unidade,
   do maior para o menor, com total geral.

@@ -44,12 +44,24 @@ function render(rows, intervalo) {
   const tbody = document.getElementById('tableBody');
   const emptyMsg = document.getElementById('emptyMsg');
   document.getElementById('loadingMsg').style.display = 'none';
-  if (rows.length === 0) {
+
+  // O card e a paginacao mostram o total FILTRADO, nao o da unidade toda.
+  const total = rows.length;
+  document.getElementById('stat-count').textContent = total.toLocaleString('pt-BR');
+
+  if (total === 0) {
     tbody.innerHTML = '';
     emptyMsg.style.display = 'block';
+    renderPaginacao(0);
     return;
   }
   emptyMsg.style.display = 'none';
+
+  // Ao imprimir, sai tudo; na tela, so a pagina atual.
+  const paginas = Math.max(1, Math.ceil(total / porPagina));
+  if (pagina > paginas) pagina = paginas;
+  rows = imprimindoTudo ? rows : rows.slice((pagina - 1) * porPagina, pagina * porPagina);
+  renderPaginacao(total);
 
   let letraAnterior = null;
   tbody.innerHTML = rows.map((r, i) => {
@@ -64,11 +76,15 @@ function render(rows, intervalo) {
       <td class="item">${escapeHtml(r.item)}</td>
       <td>${escapeHtml(r.descricao)}</td>
       <td>${escapeHtml(r.um)}</td>
-      <td class="loc">${escapeHtml(r.localizacao)}</td>
+      <td class="loc"><span class="loc-chip">${escapeHtml(r.localizacao)}</span></td>
       <td class="col-padrao" style="text-align:center;">${fichaBoxMap.has(r.item) ? `<button class="padrao-btn" data-item="${escapeHtml(r.item)}" data-qtd="${escapeHtml(r.quantidade)}" title="Ver padrão de caixas esperado">📦</button>` : ''}</td>
       <td class="num">${escapeHtml(r.quantidade)}</td>
-      <td class="col-ficha" style="text-align:center;">${fichaImageMap.has(r.item) ? `<button class="ficha-btn" data-item="${escapeHtml(r.item)}" title="Ver imagem e ficha técnica">🖼️</button>${fichaImageMap.get(r.item) ? `<img class="print-only-thumb" src="${escapeHtml(fichaImageMap.get(r.item))}" alt="">` : ''}` : ''}</td>
-      <td class="col-unidades" style="text-align:center;"><button class="compare-btn" data-item="${escapeHtml(r.item)}" title="Comparar entre unidades">⇄</button></td>
+      <td class="col-acoes" style="display:${modoContagemAtivo ? 'none' : 'table-cell'};">
+        ${fichaImageMap.has(r.item)
+          ? `<button class="acao-btn ficha-btn" data-item="${escapeHtml(r.item)}" title="Ver foto e ficha técnica">👁</button>${fichaImageMap.get(r.item) ? `<img class="print-only-thumb" src="${escapeHtml(fichaImageMap.get(r.item))}" alt="">` : ''}`
+          : ''}
+        <button class="acao-btn compare-btn" data-item="${escapeHtml(r.item)}" title="Comparar entre unidades">⇄</button>
+      </td>
       <td class="col-contagem" style="display:${modoContagemAtivo ? 'table-cell' : 'none'};">
         <input type="text" inputmode="decimal" class="contagem-input" data-item="${escapeHtml(r.item)}" data-loc="${escapeHtml(r.localizacao)}"
                value="${contagemMap[chaveContagem(r.item, r.localizacao)] ? escapeHtml(contagemMap[chaveContagem(r.item, r.localizacao)]) : ''}"
@@ -84,7 +100,62 @@ function render(rows, intervalo) {
   }).join('');
 }
 
-let filtros = { localizacao: '', um: '', zerado: false, comFoto: false, divergente: false };
+// Monta a barra de paginacao. Mostra no maximo sete botoes, com reticencias
+// no meio -- com 53 paginas, listar todas seria pior que nao ter barra.
+function renderPaginacao(total) {
+  const barra = document.getElementById('paginacao');
+  if (total === 0 || imprimindoTudo) { barra.style.display = 'none'; return; }
+  barra.style.display = 'flex';
+
+  const paginas = Math.max(1, Math.ceil(total / porPagina));
+  const de = (pagina - 1) * porPagina + 1;
+  const ate = Math.min(pagina * porPagina, total);
+  document.getElementById('pgInfo').textContent =
+    `Mostrando ${de} a ${ate} de ${total.toLocaleString('pt-BR')} itens`;
+
+  const numeros = [];
+  if (paginas <= 7) {
+    for (let p = 1; p <= paginas; p++) numeros.push(p);
+  } else if (pagina <= 4) {
+    numeros.push(1, 2, 3, 4, 5, '…', paginas);
+  } else if (pagina >= paginas - 3) {
+    numeros.push(1, '…', paginas - 4, paginas - 3, paginas - 2, paginas - 1, paginas);
+  } else {
+    numeros.push(1, '…', pagina - 1, pagina, pagina + 1, '…', paginas);
+  }
+
+  document.getElementById('pgBotoes').innerHTML =
+    `<button class="pg-btn" data-pg="ant" ${pagina === 1 ? 'disabled' : ''}>‹ Anterior</button>` +
+    numeros.map(p => p === '…'
+      ? `<span class="pg-elipse">…</span>`
+      : `<button class="pg-btn ${p === pagina ? 'ativo' : ''}" data-pg="${p}">${p}</button>`).join('') +
+    `<button class="pg-btn" data-pg="prox" ${pagina === paginas ? 'disabled' : ''}>Próxima ›</button>`;
+}
+
+document.getElementById('pgBotoes').addEventListener('click', (e) => {
+  const btn = e.target.closest('.pg-btn');
+  if (!btn || btn.disabled) return;
+  const v = btn.dataset.pg;
+  if (v === 'ant') pagina--;
+  else if (v === 'prox') pagina++;
+  else pagina = parseInt(v, 10);
+  applyFilterAndSort();
+  document.querySelector('.scroll-area').scrollTop = 0;
+});
+
+document.getElementById('pgPorPagina').addEventListener('change', (e) => {
+  porPagina = parseInt(e.target.value, 10);
+  pagina = 1;
+  applyFilterAndSort();
+});
+
+let filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false };
+
+// Paginacao (Fase 3). `imprimindoTudo` existe porque a impressao precisa sair
+// com TODAS as linhas filtradas, nao so a pagina na tela.
+let pagina = 1;
+let porPagina = 10;
+let imprimindoTudo = false;
 
 function tentarIntervaloCorredor(q) {
   // Formato 1: "corredor a", "corredor a-b", "corredor a até b" -> locais tipo A-01-01-01
@@ -142,6 +213,8 @@ function applyFilterAndSort() {
     rows = rows.filter(r => String(r.localizacao).toLowerCase().includes(alvo));
   }
   if (filtros.um) rows = rows.filter(r => r.um === filtros.um);
+  if (filtros.padrao === 'com') rows = rows.filter(r => fichaBoxMap.has(r.item));
+  if (filtros.padrao === 'sem') rows = rows.filter(r => !fichaBoxMap.has(r.item));
   if (filtros.zerado) rows = rows.filter(r => parseQtd(r.quantidade) === 0);
   if (filtros.comFoto) rows = rows.filter(r => fichaImageMap.has(r.item));
   if (filtros.divergente) {
@@ -184,7 +257,7 @@ function popularFiltrosDropdown() {
 }
 
 function atualizarBadgeFiltros() {
-  const ativos = [filtros.localizacao, filtros.um, filtros.zerado, filtros.comFoto, filtros.divergente].filter(Boolean).length;
+  const ativos = [filtros.localizacao, filtros.um, filtros.padrao, filtros.zerado, filtros.comFoto, filtros.divergente].filter(Boolean).length;
   const badge = document.getElementById('filterCount');
   if (ativos > 0) {
     badge.textContent = ativos;
@@ -194,8 +267,21 @@ function atualizarBadgeFiltros() {
   }
 }
 
+// "há 2 minutos", "há 3 horas", "há 5 dias" — o subtitulo do card de data.
+function tempoRelativo(iso) {
+  const seg = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (!isFinite(seg) || seg < 0) return '';
+  if (seg < 60) return 'agora mesmo';
+  const min = Math.floor(seg / 60);
+  if (min < 60) return `há ${min} minuto${min > 1 ? 's' : ''}`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `há ${h} hora${h > 1 ? 's' : ''}`;
+  const d = Math.floor(h / 24);
+  return `há ${d} dia${d > 1 ? 's' : ''}`;
+}
+
 function updateStats() {
-  document.getElementById('stat-count').textContent = currentData.length;
+  // stat-count e preenchido em render(), com o total FILTRADO.
   let latest = null;
   let latestPor = null;
   for (const r of currentData) {
@@ -207,6 +293,7 @@ function updateStats() {
   document.getElementById('stat-updated').textContent = latest
     ? new Date(latest).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
     : '-';
+  document.getElementById('stat-updated-nota').textContent = latest ? tempoRelativo(latest) : '\u00a0';
   document.getElementById('stat-updated-by').textContent = latestPor || '-';
 }
 
@@ -858,7 +945,7 @@ async function ativarModoContagem() {
   marcarUnidadeDesbloqueada(unidadeAtual);
   await carregarContagens();
   document.querySelectorAll('.col-contagem').forEach(el => el.style.display = 'table-cell');
-  document.querySelectorAll('.col-ficha, .col-unidades').forEach(el => el.style.display = 'none');
+  document.querySelectorAll('.col-acoes').forEach(el => el.style.display = 'none');
   contagemModal.classList.remove('open');
   contagemBtn.classList.add('active-toggle');
   document.getElementById('quemContouBtn').style.display = 'inline-block';
@@ -869,7 +956,7 @@ async function ativarModoContagem() {
 function desativarModoContagem() {
   modoContagemAtivo = false;
   document.querySelectorAll('.col-contagem').forEach(el => el.style.display = 'none');
-  document.querySelectorAll('.col-ficha, .col-unidades').forEach(el => el.style.display = '');
+  document.querySelectorAll('.col-acoes').forEach(el => el.style.display = '');
   contagemBtn.classList.remove('active-toggle');
   document.getElementById('quemContouBtn').style.display = 'none';
   applyFilterAndSort();
@@ -913,45 +1000,62 @@ contagemModal.addEventListener('click', (e) => {
   if (e.target === contagemModal) contagemModal.classList.remove('open');
 });
 
-document.getElementById('searchBox').addEventListener('input', applyFilterAndSort);
+document.getElementById('searchBox').addEventListener('input', () => { pagina = 1; applyFilterAndSort(); });
 document.getElementById('clearBtn').addEventListener('click', () => {
   document.getElementById('searchBox').value = '';
-  filtros = { localizacao: '', um: '', zerado: false, comFoto: false, divergente: false };
+  filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false };
+  pagina = 1;
+  const sel = document.getElementById('filterPadrao'); if (sel) sel.value = '';
   document.getElementById('filterZerado').checked = false;
   document.getElementById('filterComFoto').checked = false;
   document.getElementById('filterDivergente').checked = false;
   atualizarBadgeFiltros();
   applyFilterAndSort();
 });
-document.getElementById('printBtn').addEventListener('click', () => window.print());
+// A impressao precisa sair com TODAS as linhas filtradas. Sem isto sairia
+// apenas a pagina visivel -- e a quebra de pagina por corredor perderia sentido.
+document.getElementById('printBtn').addEventListener('click', () => {
+  imprimindoTudo = true;
+  applyFilterAndSort();
+  window.print();
+  imprimindoTudo = false;
+  applyFilterAndSort();
+});
 
 // ---- Painel de Filtros ----
-const filterModal = document.getElementById('filterModal');
+// Na Fase 3 o modal de filtros virou painel embutido, aberto pelo botao Filtros.
+const painelFiltros = document.getElementById('filtrosAvancados');
 document.getElementById('filterBtn').addEventListener('click', () => {
-  popularFiltrosDropdown();
-  document.getElementById('filterZerado').checked = filtros.zerado;
-  document.getElementById('filterComFoto').checked = filtros.comFoto;
-  document.getElementById('filterDivergente').checked = filtros.divergente;
-  filterModal.classList.add('open');
+  const abrindo = !painelFiltros.classList.contains('aberto');
+  if (abrindo) {
+    popularFiltrosDropdown();
+    document.getElementById('filterPadrao').value = filtros.padrao;
+    document.getElementById('filterZerado').checked = filtros.zerado;
+    document.getElementById('filterComFoto').checked = filtros.comFoto;
+    document.getElementById('filterDivergente').checked = filtros.divergente;
+  }
+  painelFiltros.classList.toggle('aberto', abrindo);
 });
-document.getElementById('filterCloseBtn').addEventListener('click', () => filterModal.classList.remove('open'));
-filterModal.addEventListener('click', (e) => { if (e.target === filterModal) filterModal.classList.remove('open'); });
 
 document.getElementById('filterApplyBtn').addEventListener('click', () => {
   filtros.localizacao = document.getElementById('filterLocalizacao').value;
   filtros.um = document.getElementById('filterUm').value;
+  filtros.padrao = document.getElementById('filterPadrao').value;
   filtros.zerado = document.getElementById('filterZerado').checked;
   filtros.comFoto = document.getElementById('filterComFoto').checked;
   filtros.divergente = document.getElementById('filterDivergente').checked;
+  pagina = 1;
   atualizarBadgeFiltros();
   applyFilterAndSort();
-  filterModal.classList.remove('open');
+  painelFiltros.classList.remove('aberto');
 });
 
 document.getElementById('filterClearAllBtn').addEventListener('click', () => {
-  filtros = { localizacao: '', um: '', zerado: false, comFoto: false, divergente: false };
+  filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false };
+  pagina = 1;
   document.getElementById('filterLocalizacao').value = '';
   document.getElementById('filterUm').value = '';
+  document.getElementById('filterPadrao').value = '';
   document.getElementById('filterZerado').checked = false;
   document.getElementById('filterComFoto').checked = false;
   document.getElementById('filterDivergente').checked = false;

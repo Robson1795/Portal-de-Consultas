@@ -84,10 +84,31 @@
         <div class="app-content">
   <div id="estoqueContent">
 
-  <div class="stats">
-    <div class="stat-pill">Itens listados<strong id="stat-count">-</strong></div>
-    <div class="stat-pill">Atualizado em<strong id="stat-updated">-</strong></div>
-    <div class="stat-pill">Atualizado por<strong id="stat-updated-by">-</strong></div>
+  <div class="stat-cards">
+    <div class="stat-card">
+      <div class="stat-icone azul">📦</div>
+      <div class="stat-texto">
+        <div class="stat-rotulo">Itens cadastrados</div>
+        <div class="stat-valor" id="stat-count">-</div>
+        <div class="stat-nota" id="stat-count-nota">itens encontrados</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icone verde">📅</div>
+      <div class="stat-texto">
+        <div class="stat-rotulo">Última atualização</div>
+        <div class="stat-valor" id="stat-updated">-</div>
+        <div class="stat-nota" id="stat-updated-nota">&nbsp;</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icone roxo">👤</div>
+      <div class="stat-texto">
+        <div class="stat-rotulo">Atualizado por</div>
+        <div class="stat-valor" id="stat-updated-by">-</div>
+        <div class="stat-nota">última alteração</div>
+      </div>
+    </div>
   </div>
 
   <div class="edit-toggle-row" id="editToggleRow" style="display:none;">
@@ -115,12 +136,52 @@
 
   <div class="panel">
     <div class="controls">
-      <input type="text" id="searchBox" placeholder="Buscar por código, descrição ou localização...">
+      <div class="busca-wrap">
+        <span class="busca-icone">🔍</span>
+        <input type="text" id="searchBox" placeholder="Buscar por código, descrição ou localização...">
+      </div>
       <button class="btn" id="filterBtn" style="position:relative;">Filtros <span id="filterCount" style="display:none;"></span></button>
-      <button class="btn" id="clearBtn">Limpar filtro</button>
-      <button class="btn" id="printBtn">Imprimir / Salvar PDF</button>
+      <button class="btn" id="clearBtn">Limpar filtros</button>
+      <button class="btn btn-primary" id="printBtn">Exportar PDF</button>
       <button class="btn" id="contagemBtn" title="Planilha para contagem física de estoque" style="font-size:16px; padding:9px 12px;">📋</button>
       <button class="btn" id="quemContouBtn" style="display:none;">Quem já contou</button>
+    </div>
+
+    <!-- Painel de filtros. Era um modal; virou painel embutido na Fase 3.
+         Os ids dos campos foram mantidos, para o resto do JS seguir valendo. -->
+    <div class="filtros-avancados" id="filtrosAvancados">
+      <h4>Filtros avançados</h4>
+      <div class="filtro-grid">
+        <div class="filtro-campo">
+          <label for="filterLocalizacao">Localização</label>
+          <input type="text" id="filterLocalizacao" list="localizacoesDatalist" placeholder="Selecione ou digite parte...">
+          <datalist id="localizacoesDatalist"></datalist>
+        </div>
+        <div class="filtro-campo">
+          <label for="filterUm">Unidade de Medida</label>
+          <select id="filterUm"><option value="">Todas</option></select>
+        </div>
+        <div class="filtro-campo">
+          <label for="filterPadrao">Padrão</label>
+          <select id="filterPadrao">
+            <option value="">Todos</option>
+            <option value="com">Com padrão de caixa</option>
+            <option value="sem">Sem padrão de caixa</option>
+          </select>
+        </div>
+        <div class="filtro-campo">
+          <label>Status do Item</label>
+          <div class="filtro-status">
+            <label><input type="checkbox" id="filterZerado"> Estoque zerado</label>
+            <label><input type="checkbox" id="filterComFoto"> Com foto cadastrada</label>
+            <label><input type="checkbox" id="filterDivergente"> Com divergência</label>
+          </div>
+        </div>
+      </div>
+      <div class="filtro-acoes">
+        <button class="btn" id="filterClearAllBtn">Limpar</button>
+        <button class="btn btn-primary" id="filterApplyBtn">Aplicar filtros</button>
+      </div>
     </div>
     <div class="scroll-hint">Arraste para o lado para ver todas as colunas →</div>
     <div class="scroll-area">
@@ -133,8 +194,7 @@
             <th data-key="loc">Localização <span class="arrow"></span></th>
             <th class="col-padrao">Padrão</th>
             <th data-key="qtd">Quantidade <span class="arrow"></span></th>
-            <th class="col-ficha">Foto</th>
-            <th class="col-unidades">Unidades</th>
+            <th class="col-acoes">Ações</th>
             <th class="col-contagem" style="display:none;">
               <div>Estoque Físico</div>
               <button id="limparContagemBtn" type="button">Limpar tudo</button>
@@ -145,6 +205,19 @@
       </table>
       <div class="loading-msg" id="loadingMsg">Carregando dados do banco...</div>
       <div class="empty-msg" id="emptyMsg" style="display:none;">Nenhum item encontrado.</div>
+    </div>
+    <div class="paginacao" id="paginacao" style="display:none;">
+      <span class="pg-info" id="pgInfo"></span>
+      <span id="pgBotoes"></span>
+      <span class="pg-porpagina">
+        Itens por página:
+        <select id="pgPorPagina">
+          <option value="10" selected>10</option>
+          <option value="25">25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
+      </span>
     </div>
   </div>
   <div class="footer-note">Dados armazenados no Supabase. Última atualização mostrada acima.</div>
@@ -292,37 +365,7 @@
     </div>
   </div>
 
-  <div class="modal-overlay" id="filterModal">
-    <div class="modal-box" style="max-width:380px;">
-      <button class="modal-close" id="filterCloseBtn">✕</button>
-      <h3 style="margin-top:0;">Filtros</h3>
-
-      <div class="modal-label">Localização</div>
-      <input type="text" id="filterLocalizacao" list="localizacoesDatalist" placeholder="Ex: A-01 (pega o corredor inteiro)"
-             style="width:100%; padding:9px 10px; border:1px solid var(--border); border-radius:8px; font-size:14px; margin-bottom:14px;">
-      <datalist id="localizacoesDatalist"></datalist>
-
-      <div class="modal-label">UM</div>
-      <select id="filterUm" style="width:100%; padding:9px 10px; border:1px solid var(--border); border-radius:8px; font-size:14px; margin-bottom:14px;">
-        <option value="">Todas</option>
-      </select>
-
-      <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; margin-bottom:10px; cursor:pointer;">
-        <input type="checkbox" id="filterZerado" style="width:16px; height:16px;"> Só itens com estoque zerado
-      </label>
-      <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; margin-bottom:10px; cursor:pointer;">
-        <input type="checkbox" id="filterComFoto" style="width:16px; height:16px;"> Só itens com foto cadastrada
-      </label>
-      <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; margin-bottom:16px; cursor:pointer;">
-        <input type="checkbox" id="filterDivergente" style="width:16px; height:16px;"> Só itens com divergência na contagem
-      </label>
-
-      <div style="display:flex; gap:8px;">
-        <button class="btn" id="filterClearAllBtn" style="flex:1;">Limpar filtros</button>
-        <button class="btn btn-primary" id="filterApplyBtn" style="flex:1;">Aplicar</button>
-      </div>
-    </div>
-  </div>
+  <!-- O modal de filtros virou o painel embutido #filtrosAvancados na Fase 3. -->
 
   <div class="modal-overlay" id="quemContouModal">
     <div class="modal-box" id="quemContouBox">
