@@ -3,7 +3,7 @@
 Contexto do projeto para qualquer agente de IA ou pessoa que for mexer neste repositório.
 Sempre em **português do Brasil**.
 
-**Atualizado:** 03/09/2026
+**Atualizado:** 04/09/2026
 **Mantenedores:** Robson (dono do projeto e admin geral) · Victor Dobner (colaborador)
 
 > Este arquivo é lido automaticamente pelo Claude Code ao abrir a pasta do projeto.
@@ -214,8 +214,8 @@ Onze tabelas. Os scripts que as criam estão em `sql/` — mas confira a seção
 | `atribuicoes_corredor` | Responsável por contar cada corredor | PK: `unidade` + `corredor`. Tempo real |
 | `editores_bobinas` | Quem atualiza a planilha de bobinas | PK: `email` |
 | `bobinas_aco` | Saldo do sistema das bobinas | Colunas em uso: `id, item, descricao, est, dep, localizacao, lote, um, qtd_liquida` |
-| `contagem_bobinas` | Contagem física das bobinas | PK: `codigo`. Tempo real |
-| `contagem_bobinas_ocr` | Validação de bobina por foto da etiqueta (módulo de OCR) | Colunas gravadas: `bobina_id, status, alerta_sistema, motivo_alerta, foto_url, operador` |
+| `contagem_bobinas` | Contagem física das bobinas | PK: `item` + `localizacao` + `lote` — **não** `codigo`. Tempo real |
+| `contagem_bobinas_ocr` | Validação de bobina por foto da etiqueta (módulo de OCR) | Colunas: `bobina_id, peso_etiqueta, peso_sistema, localizacao_sistema, localizacao_real, status, alerta_sistema, motivo_alerta, foto_url, operador, criado_em`. `status` é `OK`, `Divergente` ou `OK com ressalva` |
 
 ---
 
@@ -319,20 +319,45 @@ roda no próprio celular, sem custo de API) extrai o texto → `acharCodigoBobin
 mostra um veredito e grava em `contagem_bobinas_ocr`. Divergência dispara
 `dispararAlertaBobina()`.
 
-Funções: `abrirValidacaoBobina` (2202) · `lerEtiquetaComOcr` (2229) · `acharCodigoBobina` (2330)
-· `acharPesoEtiqueta` (2356) · `salvarValidacaoBobina` (2394) · `dispararAlertaBobina` (2458).
-A chave de bobina é `chaveBobina(item, localizacao, lote)` (1943) — não só o item.
+Tudo vive em `js/ocr.js` (317 linhas). Funções: `abrirValidacaoBobina` · `lerEtiquetaComOcr` ·
+`acharCodigoBobina` · `numeroDaEtiqueta` · `acharPesoEtiqueta` · `bobinasDoItem` ·
+`mostrarVeredito` · `salvarValidacaoBobina` · `dispararAlertaBobina`.
+A chave de bobina é `chaveBobina(item, localizacao, lote)`, em `js/bobinas.js` — não só o item.
 
-⚠️ **Este módulo nunca foi auditado.** A `AUDITORIA.md` cobre o portal até a versão anterior
-a ele. Ponto de atenção conhecido: `contagem_bobinas_ocr` tem leitura aberta a qualquer conta
-autenticada, e grava `foto_url`.
+### Auditado em 04/09/2026
+
+O módulo foi lido de ponta a ponta e rendeu **nove achados (O1–O9), na `AUDITORIA.md`**. Os dois
+graves foram corrigidos no mesmo dia:
+
+- **O peso era lido errado em quase toda bobina real.** O regex casava no máximo três dígitos,
+  então `4820 KG` virava 820 e `12480 KG` virava 480 — e o veredito automático acusava
+  divergência com um número plausível na tela. Hoje `numeroDaEtiqueta()` decide milhar ou
+  decimal pela posição do separador, e `acharPesoEtiqueta()` prefere o número que vem depois de
+  PESO/LÍQUIDO. **Não use `parseNum()` para peso de etiqueta:** ele apaga todo ponto e
+  multiplicava `1234.56` por cem.
+- **O `insert` podia falhar em silêncio** e a tela dizia "Registrado!" em verde — o mesmo item
+  A1 da auditoria, já corrigido nos outros módulos e esquecido neste.
+
+Duas coisas seguem pela metade, de propósito:
+
+- **Veredito com vários lotes.** A mesma bobina existe em vários lotes; antes o código usava
+  `find()` e comparava contra o primeiro. Agora, com mais de um lote, o veredito automático é
+  **suprimido** e os lotes são listados. Corrigir de verdade exige campo de lote no modal e na
+  tabela `contagem_bobinas_ocr`.
+- ⚠️ **O balde `fotos-bobinas` não existe no Storage.** Conferido em 04/09/2026: a API responde
+  `Bucket not found`, e toda foto de etiqueta tirada até hoje foi descartada. A tela agora avisa
+  que a foto não foi guardada, mas **falta criar o balde** (Storage → New bucket →
+  `fotos-bobinas`).
+
+O RLS de `contagem_bobinas_ocr` deixou de ser aberto na Fase 1: leitura exige conta aprovada e
+escrita exige perfil `estoque_aco` ou admin.
 
 ---
 
 ## 11. Avisos técnicos
 
 - **Supabase Free:** o projeto pausa sozinho após 7 dias sem uso; reativar no painel.
-- **Sem backup automático.** Export manual das 10 tabelas (`Table Editor → Export`, CSV) de vez
+- **Sem backup automático.** Export manual de todas as tabelas (`Table Editor → Export`, CSV) de vez
   em quando. O CSV salva os **dados**; a **estrutura** está em `sql/`. Os dois juntos permitem
   refazer o banco.
 - **Vercel Hobby:** nominalmente só para uso não-comercial.
@@ -367,47 +392,61 @@ estava ligado ao repositório, então publicar e versionar eram dois atos separa
 por fora — o arquivo servido pelo portal e o `index.html` do `main` têm o mesmo md5. Publicar e
 versionar passaram a ser o mesmo ato: `push` no `main` vai ao ar em cerca de 10 segundos.
 
+**Fechados em 04/09/2026** (o banco foi sondado pela API, não é conferência de memória): a
+escrita aberta no `estoque`, a leitura liberada para conta não aprovada, o log `acessos` visível
+para todos, as senhas em texto claro no código, o `SEED_DATA`, o `sql/bobinas-aco.sql`
+desatualizado, a divisão do `index.html` em módulos e a auditoria do módulo de OCR. Detalhe item
+por item na `AUDITORIA.md`.
+
+O `sql/bobinas-aco.sql` merece nota: ele não estava só desatualizado nas colunas — **recriava as
+políticas abertas**, então rodá-lo depois da Fase 1 reabria a escrita que a Fase 1 havia fechado.
+Hoje ele cria só estrutura, e o RLS é assunto dos scripts da Fase 1.
+
 ### Aberto
 
-1. **`sql/bobinas-aco.sql` está desatualizado.** Ele cria `bobinas_aco` com
-   `codigo, largura, espessura, peso, saldo_sistema`, mas o código em produção usa
-   `item, descricao, est, dep, localizacao, lote, um, qtd_liquida`. Em banco existente o script
-   não faz nada (`create table if not exists`), mas num banco novo criaria a estrutura errada e
-   o módulo de bobinas quebraria. Corrigir o script a partir da estrutura real do Supabase.
+**De painel — destrava o resto, e não é código:**
 
-2. **🔴 `estoque` tem escrita aberta para qualquer conta autenticada.** Confirmado no
-   diagnóstico de 02/09/2026: existem duas políticas `ALL` na tabela — a correta
-   ("Escrita admin ou gerente da unidade") e uma aberta ("Escrita para logados",
-   `using (true)`). No Postgres as políticas se somam (OU, não E), então a aberta anula a
-   restrita. **A regra "gerente edita só a própria unidade" não está valendo**, e qualquer
-   conta logada pode alterar ou apagar o estoque das três unidades.
-   Mesmo padrão de escrita aberta em `contagem_fisica`, `contagem_bobinas` e
-   `atribuicoes_corredor`.
+1. **Rodar `sql/fase8-limpar-contagem-restrito.sql`** no Supabase. Sem ele, "Limpar tudo" está
+   travado só na tela, e um inspetor de navegador contorna. O script **substitui** a política
+   `for all` de `contagem_fisica` por três (insert, update, delete) — tem de ser substituição,
+   porque política permissiva se soma e a aberta anularia a restrita.
 
-3. **RLS libera conta não aprovada.** A checagem de aprovação (`verificarAprovacao`) é
-   JavaScript no navegador: decide qual tela mostrar, não protege o banco. Dez tabelas têm
-   leitura `using (true)`, então uma conta ainda não aprovada lê o estoque das três unidades
-   pela API. A tabela `acessos` (log de login) também é legível por qualquer conta.
+2. **Criar o balde `fotos-bobinas`** (Storage → New bucket). Enquanto não existir, toda foto de
+   etiqueta do módulo de OCR é descartada — hoje com aviso na tela, mas descartada.
 
-   **Correção dos itens 2 e 3 em `sql/corrige-permissoes.sql`**, escrita a partir do
-   diagnóstico real. Rodar no Supabase e depois a Parte 5 para verificar.
-   Pendência: o diagnóstico trouxe só a cláusula `USING`; falta revisar `WITH CHECK`, que é o
-   que vale para `INSERT`.
+3. **Cadastrar os e-mails do ALM e as senhas de contagem das oito unidades** na aba
+   Configurações. Unidade sem e-mail tem o envio da Requisição ALM desabilitado; unidade sem
+   senha não abre o modo contagem. Foi o que travou a apresentação na 104.
 
-4. **Auditar o módulo de OCR** (seção 9). Entrou em 03/09/2026, cerca de 380 linhas, e nunca
-   foi lido de ponta a ponta.
+**De código:**
 
-5. **Hospedagem com ponto único de falha.** O repositório está numa conta pessoal do GitHub e o
+4. **🔴 `delete` + `insert` sem transação** (A2 da auditoria), na atualização de planilha do
+   estoque e das bobinas. Se o `insert` falhar depois de o `delete` passar, a tabela fica vazia e
+   não há rollback. É o item mais grave que resta. Correção: os dois numa função `rpc` no
+   Postgres.
+
+5. **Veredito do OCR com vários lotes** (O3) — hoje é suprimido em vez de errado; corrigir de
+   verdade pede campo de lote no modal e em `contagem_bobinas_ocr`. E **o alerta de bobina não
+   tem recorte por unidade** (O7): um consultor de Anápolis recebe o banner de Araquari.
+
+6. **Pessoas com nome fixo no código** (M2): `ADMIN_EMAIL` em `js/config.js` e
+   `j.lisboa@kingspanisoeste.com.br` em `js/estoque.js`. Já existe o padrão certo no projeto —
+   tabelas como `gerentes_unidade` e `editores_bobinas`. E **os três logos idênticos em base64**
+   no `index.html` (M3): 24 KB baixados sem necessidade a cada acesso.
+
+**De operação:**
+
+7. **Hospedagem com ponto único de falha.** O repositório está numa conta pessoal do GitHub e o
    banco num projeto Supabase de conta pessoal, ambos com um único dono. Se aquela conta se
    perder, o acesso ao banco vai com ela e ninguém mais consegue recuperar. Duas melhorias
    baratas: adicionar um segundo membro ao projeto no Supabase (`Settings → Members`) e manter o
    export das tabelas em dia. Vale reavaliar a hospedagem antes de o sistema entrar em uso real.
 
-6. **`index.html` é um arquivo único de 2.080 linhas.** Com duas pessoas trabalhando, dá conflito
-   em quase toda edição. Dividir em `estoque.js`, `bobinas.js`, `styles.css` etc.
-
-7. **Dados de produto:** cadastrar mais itens com foto e embalagem em `fichas_tecnicas`; fotos das
+8. **Dados de produto:** cadastrar mais itens com foto e embalagem em `fichas_tecnicas`; fotos das
    massas vedantes (Chemiseal); aguardando a Multi-Fix sobre catálogo de parafusos com códigos
    internos.
 
-8. **Unidades 101 e 105 sem dados reais** — só a estrutura está pronta.
+9. **Unidades 101 e 105 sem dados reais** — só a estrutura está pronta.
+
+10. **Confirmar as UF de 103, 104, 107 e 110 e a cidade da 109.** Até então `rotuloUnidade()`
+    imprime só o que sabe, em vez de `Unidade 107 — Loja ()`.

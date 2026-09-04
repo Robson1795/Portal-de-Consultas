@@ -9,12 +9,49 @@ até agora, e todos são bem mais baratos de corrigir hoje do que depois.
 
 Numeração por severidade. `L###` = linha do `index.html`.
 
-> ⚠️ **Escopo e validade.** Esta auditoria foi feita sobre o `index.html` de 2.084 linhas
-> (commit `bb31bad`). Em 03/09/2026 entrou o **módulo de validação por OCR** (~380 linhas,
-> ver `CLAUDE.md` seção 9), que **não está coberto aqui** — e os números de linha abaixo
-> saíram de lugar. Para localizar um trecho, busque pelo nome da função em vez da linha.
-> **Situação em 04/09/2026:** **C1 e A1 estão corrigidos** (ver abaixo). Os demais continuam
-> valendo.
+> ⚠️ **Escopo e validade.** O corpo desta auditoria foi escrito sobre o `index.html` de 2.084
+> linhas (commit `bb31bad`), antes da divisão em módulos. **Os números de linha `L###` não
+> valem mais** — para localizar um trecho, busque pelo nome da função.
+>
+> **O módulo de validação por foto (OCR) foi auditado em 04/09/2026** e tem seção própria mais
+> abaixo, com nove achados (O1–O9). Ele não estava coberto na primeira leitura.
+
+## Situação em 04/09/2026
+
+Revisão item por item, com o banco sondado pela API em 04/09/2026 — não é conferência de
+memória. O que foi verificado de fora: as funções da Fase 1 respondem, `pode_atualizar_estoque`
+existe, e `estoque`, `acessos`, `usuarios_permitidos`, `config_unidade` e `bobinas_aco` devolvem
+**vazio sem login**.
+
+| Item | Situação |
+|---|---|
+| C1 · dados de estoque no código público | ✅ corrigido em 04/09 |
+| C2 · escrita aberta no `estoque` | ✅ corrigido pela Fase 1 |
+| C3 · aprovação de conta burlável | ✅ fechado pelo gatilho `forca_cadastro_neutro` |
+| A1 · contagem parecia salva sem estar | ✅ corrigido em 04/09 |
+| A2 · `delete` + `insert` sem transação | 🔴 **aberto** — é o item mais grave que resta |
+| A3 · `seedInitialData` | ✅ removido junto com C1 |
+| A4 · "Limpar tudo" sem checar quem clica | ✅ corrigido em 04/09 (falta rodar o SQL) |
+| M1 · senhas em texto claro no código | ✅ corrigido na Fase 7 |
+| M2 · pessoas com nome fixo no código | 🟡 aberto |
+| M3 · metade do arquivo em cinco linhas | 🟡 parcial — `SEED_DATA` saiu, os três logos ficaram |
+| M4 · log de acessos visível para todos | ✅ corrigido pela Fase 1 |
+| B1 · `corredorDoItem()` código morto | 🟢 aberto |
+| B2 · `forEach` vazio | ✅ sumiu na divisão em módulos |
+| B3 · `salvarEmbalagem()` com `update` | 🟢 aberto |
+| B4 · `sql/bobinas-aco.sql` desatualizado | ✅ reescrito em 04/09 |
+| B5 · `contagem_bobinas_ocr` sem documentação | ✅ respondido (ver O8) |
+
+**Como confirmar as políticas no painel** (consulta de leitura, roda no SQL Editor):
+
+```sql
+select tablename, policyname, cmd, permissive
+from pg_policies where schemaname = 'public'
+order by tablename, cmd, policyname;
+```
+
+Nenhuma tabela deve ter política com `cmd = ALL` convivendo com uma restrita: no Postgres as
+permissivas se somam, e a aberta anula a restrita.
 
 ---
 
@@ -52,7 +89,17 @@ fora do banco.
 provável é que esse array seja só resíduo da primeira versão — nesse caso é remoção pura, e o
 arquivo emagrece 31%.
 
-### C2. Qualquer conta logada pode substituir o estoque das três unidades
+### C2. ✅ CORRIGIDO pela Fase 1 — qualquer conta logada podia substituir o estoque
+
+A política aberta `"Escrita para logados"` foi removida e a escrita passou a depender de
+`pode_atualizar_estoque(unidade)` — admin, ou quem está em `gerentes_unidade` daquela unidade
+(`sql/fase1c-rls.sql`). Sondado em 04/09/2026: a função existe e responde `false` para quem não
+tem sessão, e a leitura anônima do `estoque` devolve vazio. A regra "gerente edita só a própria
+unidade" voltou a valer.
+
+O texto original do achado fica abaixo, como registro.
+
+### C2 (original). Qualquer conta logada pode substituir o estoque das três unidades
 
 Três camadas que deveriam proteger a edição, e nenhuma protege:
 
@@ -75,7 +122,16 @@ na tela, **não está valendo hoje**.
 **Correção:** `sql/corrige-permissoes.sql`, Parte 2 — remove a política aberta. A correta passa
 a valer sozinha, incluindo a restrição por unidade.
 
-### C3. A aprovação de conta pode ser burlável — pendente de confirmação
+### C3. ✅ FECHADO pela Fase 1 — a aprovação de conta não é burlável
+
+O gatilho `forca_cadastro_neutro` (`sql/fase1b-travas.sql`) recusa `perfil = 'admin'` e força
+`aprovado = false` em todo cadastro, independente do que o navegador mande. O `WITH CHECK` que
+faltava conferir deixou de ser a única defesa: mesmo que ele aceitasse `aprovado = true`, o
+gatilho reescreve o valor antes de gravar.
+
+O texto original do achado fica abaixo, como registro.
+
+### C3 (original). A aprovação de conta pode ser burlável — pendente de confirmação
 
 `L677` — no primeiro login o próprio usuário insere a linha dele em `usuarios_permitidos`.
 O `UPDATE` é restrito ao admin (`"Admin aprova"`), então ninguém se aprova depois.
@@ -159,7 +215,15 @@ mensagem de erro aparece, mas o estoque já foi.
 **Correção:** fazer os dois numa função `rpc` no Postgres (transação de verdade), ou no mínimo
 avisar de forma inequívoca e manter o texto colado na tela para nova tentativa.
 
-### A3. `seedInitialData` grava sem `unidade` — e pode entrar em laço
+### A3. ✅ REMOVIDO em 04/09/2026 junto com o C1
+
+`seedInitialData()` e `SEED_DATA` saíram do código. Restou no lugar um comentário em
+`js/estoque.js` explicando por que a carga inicial é tarefa de script SQL, para ninguém
+reintroduzir o mecanismo.
+
+O texto original do achado fica abaixo, como registro.
+
+### A3 (original). `seedInitialData` grava sem `unidade` — e pode entrar em laço
 
 `L1040`:
 
@@ -195,22 +259,44 @@ está em nenhum script de `sql/` e precisa ser conferido:
 **Correção:** remover o mecanismo junto com `SEED_DATA` (C1). Carga inicial é tarefa de script
 SQL rodado uma vez, não de código que roda a cada abertura de página.
 
-### A4. "Limpar tudo" não checa quem está clicando
+### A4. ✅ CORRIGIDO em 04/09/2026 — "Limpar tudo" não checava quem está clicando
 
-`L1421` `limparTodasAsContagens()` apaga a contagem inteira da unidade, para todos. A única
-proteção é o `confirm()` do navegador. Não há verificação de admin nem de gerente.
+`limparTodasAsContagens()` apaga a contagem inteira da unidade, para todos, e não dá para
+desfazer. A única proteção era o `confirm()` do navegador.
 
-Hoje, com a escrita aberta, qualquer conta consegue. Depois da correção de RLS, qualquer conta
-**aprovada** consegue — o que ainda é amplo demais para uma ação irreversível no meio de um
-inventário.
+Depois da Fase 1 a política de escrita em `contagem_fisica` ficou `for all`, e `for all` inclui
+DELETE: qualquer conta aprovada com perfil `estoque_alm` da unidade podia zerar a contagem no
+meio de um inventário.
 
-**Correção:** restringir a admin ou gerente da unidade, no código e no RLS.
+**Corrigido em duas camadas:**
+
+- **Tela** (`js/estoque.js`): `podeLimparContagem()` pergunta ao banco por
+  `pode_atualizar_estoque(unidade)` antes de qualquer coisa, e falha fechado se a consulta der
+  erro. O botão fica escondido para quem não pode — cortesia, não trava.
+- **Banco** (`sql/fase8-limpar-contagem-restrito.sql`): a política `for all` é **removida** e
+  reconstruída em três (insert, update, delete). Só o DELETE muda de dono, para admin ou gerente
+  da unidade. Tinha de ser substituição: acrescentar uma política restritiva ao lado da
+  permissiva não tiraria nada, porque as permissivas se somam — foi esse o furo do C2.
+
+⚠️ **O SQL ainda precisa ser rodado no painel do Supabase.** Até então vale só a trava da tela,
+que um inspetor de navegador contorna.
 
 ---
 
 ## 🟡 Médio
 
-### M1. Quatro senhas em texto claro no código público
+### M1. ✅ CORRIGIDO na Fase 7 — quatro senhas em texto claro no código público
+
+`EDIT_PIN`, `PINS_CONTAGEM` e `SENHA_AUDITORIA` saíram do JavaScript. A senha de contagem e o
+PIN de edição vivem em `config_unidade`, legível só para admin, e a conferência acontece dentro
+do banco: o navegador chama `senha_contagem_confere(unidade, tentativa)` e recebe apenas `true`
+ou `false`. A senha das bobinas deixou de existir — quem controla o acesso é o perfil.
+
+Sondado em 04/09/2026: as duas funções respondem, e `config_unidade` devolve vazio sem login.
+
+O texto original do achado fica abaixo, como registro.
+
+### M1 (original). Quatro senhas em texto claro no código público
 
 `L570` `EDIT_PIN = "2026"` · `L571` `PINS_CONTAGEM = {106: 'INV106', 101: 'INV101', 105: 'INV105'}`
 · `L1799` `SENHA_AUDITORIA = "aço2026"`.
@@ -229,7 +315,16 @@ Quando alguém sair da empresa ou trocar de função, é preciso editar código,
 políticas de banco. Já existe o padrão certo no projeto: tabelas como `gerentes_unidade` e
 `editores_bobinas`.
 
-### M3. Metade do arquivo são cinco linhas
+### M3. 🟡 PARCIAL — metade do arquivo eram cinco linhas
+
+`SEED_DATA` (63 KB) saiu com o C1, e o arquivo único virou nove (Fase 2a). **Os três logos
+idênticos continuam lá:** conferido em 04/09/2026, o `index.html` tem quatro imagens em base64,
+sendo três com o mesmo md5 — 24 KB baixados sem necessidade a cada acesso, o que pesa no celular
+dentro do galpão.
+
+O texto original do achado fica abaixo, como registro.
+
+### M3 (original). Metade do arquivo são cinco linhas
 
 De 200.120 bytes, **106 KB estão em 5 linhas** (53% do arquivo):
 
@@ -246,10 +341,11 @@ acesso, o que pesa em celular no galpão.
 
 **Correção:** o logo vira um arquivo `logo.png` referenciado três vezes, ou uma constante única.
 
-### M4. O log de acessos é visível para todos
+### M4. ✅ CORRIGIDO pela Fase 1 — o log de acessos era visível para todos
 
-`acessos` tem leitura `using (true)`: qualquer conta consulta quem entrou no portal e quando.
-Sem motivo. Corrigido na Parte 3 do script de permissões.
+`acessos` tinha leitura `using (true)`. A Fase 1 trocou por
+`for select using (eh_admin())` (`sql/fase1c-rls.sql`) — o portal só insere nessa tabela, nunca
+lê. Sondado em 04/09/2026: devolve vazio sem login.
 
 ---
 
@@ -258,16 +354,129 @@ Sem motivo. Corrigido na Parte 3 do script de permissões.
 - **B1.** `L1449` `corredorDoItem()` é código morto — definida e nunca chamada. Se algum dia
   for usada, tem defeito: faz `find` só por `item`, e o mesmo item existe em vários endereços,
   então devolveria o corredor errado.
-- **B2.** `L1848` `.forEach(el => {})` — laço vazio, resíduo de edição.
+- **B2.** ✅ O laço vazio `.forEach(el => {})` não existe mais — sumiu na divisão em módulos.
 - **B3.** `L1104` `salvarEmbalagem()` usa `.update()`. Se a linha não existir, afeta zero
   registros, não dá erro e a tela mostra "Salvo!". O caminho de `L1142` já contorna com
   `upsert`; o outro não.
-- **B4.** `sql/bobinas-aco.sql` cria `bobinas_aco` com colunas que o código não usa mais
-  (`codigo, largura, espessura, peso, saldo_sistema` em vez de
-  `item, descricao, est, dep, localizacao, lote, um, qtd_liquida`). Inofensivo em banco
-  existente, quebraria um banco novo.
-- **B5.** Existe a tabela `contagem_bobinas_ocr`, sem documentação e sem uso aparente no
-  `index.html`. Confirmar para que serve.
+- **B4.** ✅ **CORRIGIDO em 04/09/2026, e era pior do que "desatualizado".** O script criava
+  `bobinas_aco` com colunas que a produção não usa — mas o problema grave eram as **políticas**:
+  ele recriava `using (true)` em `contagem_bobinas` e a política de e-mail fixo em `bobinas_aco`.
+  Rodá-lo depois da Fase 1 **reabria** a escrita que a Fase 1 tinha fechado, e o
+  `create table if not exists` fazia o script parecer inofensivo (as políticas não são
+  condicionais: rodavam sempre). Reescrito para criar só estrutura, com as colunas conferidas
+  contra a produção e um aviso remetendo o RLS à Fase 1.
+- **B5.** ✅ **Respondido:** `contagem_bobinas_ocr` é a tabela do módulo de validação por foto
+  (ver seção do OCR, item O8). Nenhum script a criava — ela nasceu à mão no painel. A estrutura
+  agora está em `sql/bobinas-aco.sql`, Parte 3.
+
+---
+
+## 📸 Módulo de validação por foto (OCR) — auditado em 04/09/2026
+
+Leitura completa de `js/ocr.js` (317 linhas), que nunca havia sido lido de ponta a ponta. É o
+módulo mais novo e o menos exercitado: entrou em 03/09/2026, existindo primeiro só no deploy do
+Vercel (ver `CLAUDE.md` seção 12).
+
+Nove achados. Os dois primeiros são graves e, juntos, explicam por que o veredito automático não
+podia ser confiável.
+
+### O1. 🔴 O registro podia falhar em silêncio, dizendo "Registrado!" em verde
+
+`salvarValidacaoBobina()` envolvia o `insert` em `contagem_bobinas_ocr` num `try/catch`. O
+cliente do Supabase devolve `{ error }` e **não lança** — o `catch` nunca disparava. Recusa do
+RLS, queda de rede ou coluna faltando apareciam como sucesso, e o modal fechava em um segundo.
+
+É exatamente o item A1 desta auditoria, que já havia sido corrigido em `estoque.js` e
+`bobinas.js` e passou batido neste arquivo.
+
+**Corrigido:** confere `error`, mostra `NÃO SALVOU: <motivo>` e manda registrar no papel.
+
+### O2. 🔴 A leitura do peso errava quase toda bobina real
+
+`acharPesoEtiqueta()` usava `/(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d+)?)\s*KG/`. O `\d{1,3}` casa no
+máximo três dígitos, então o regex escorregava para os **três últimos**:
+
+| Etiqueta | Lido antes | Certo |
+|---|---|---|
+| `4820 KG` | **820** | 4820 |
+| `12480 KG` | **480** | 12480 |
+| `4820,50 KG` | **820,5** | 4820,5 |
+| `1234.56 KG` | **23456** | 1234,56 |
+| `4.820 KG` | 4820 ✅ | 4820 |
+
+Só a etiqueta que imprimisse o ponto de milhar era lida certo. Bobina de aço pesa quatro ou cinco
+dígitos: o veredito automático acusava **divergência em quase toda leitura bem-sucedida do
+código** — e com um número plausível na tela, que é o pior jeito de errar.
+
+Somava-se `parseNum()`, que apaga *todo* ponto antes de trocar a vírgula: `"1234.56"` virava
+`123456`, cem vezes o peso.
+
+**Corrigido:** `numeroDaEtiqueta()` decide milhar ou decimal pela posição do separador e pelo
+tamanho do último grupo; `acharPesoEtiqueta()` passa a preferir o número que vem depois de
+PESO/LÍQUIDO (antes, `LARGURA 1200 MM` podia roubar o lugar do peso) e tolera o OCR ler `O` como
+`0` e `G` como `6`. Dez casos de etiqueta conferidos, incluindo `PES0 3150 K6`.
+
+### O3. 🟠 O veredito comparava contra um lote escolhido a esmo
+
+`bobinasData.find(r => r.item === codigo)`, em três lugares. A chave da bobina é
+**item + localização + lote** — a mesma bobina existe em vários lotes no pátio, e é o que
+`chaveBobina()` resolve no resto do módulo. O `find` devolvia a primeira linha, e o
+"✅ TUDO OK" ou "⚠️ DIVERGENTE" saía sobre outra bobina.
+
+**Corrigido pela metade:** com mais de um lote o veredito automático é suprimido, os lotes
+aparecem listados (lote · localização · peso) e o registro grava `peso_sistema` **nulo** em vez
+do número errado. Ficou pior de usar e certo, em vez de confortável e errado.
+
+⚠️ **A correção completa exige campo de lote no modal e na tabela `contagem_bobinas_ocr`** — é
+mudança de desenho, e não foi feita aqui.
+
+### O4. 🟠 Peso em branco virava zero e era gravado como fato
+
+`parseNum('')` devolve `0`. Confirmar sem digitar o peso gravava `peso_etiqueta = 0` como se
+fosse leitura; "Salvar divergência" acusava diferença de 0 contra 4820.
+
+**Corrigido:** campo vazio é `null`, confirmar OK sem peso é recusado com aviso, e "peso da
+etiqueta não informado" passou a ser um motivo de alerta explícito.
+
+### O5. 🟠 A foto — a prova da conferência — é descartada em silêncio
+
+O upload vai para o bucket `fotos-bobinas`, que **não existe**: sondado em 04/09/2026, a API do
+Storage responde `Bucket not found`. O código engolia a falha e gravava `foto_url` nulo. Todas as
+fotos de etiqueta tiradas até hoje foram perdidas.
+
+**Corrigido pela metade:** a tela avisa `A foto NÃO foi guardada: <motivo>` e o modal fica aberto
+para a pessoa ler. **Falta criar o bucket** — Storage → New bucket → `fotos-bobinas`. Sem isso o
+módulo funciona, mas sem prova.
+
+### O6. 🟡 Confirmar OK sobre uma divergência era indistinguível de um acerto
+
+Clicar "Confirmar OK" com peso divergente gravava `status = 'OK'`, sem alerta — igual a uma
+conferência em que os números bateram. A decisão de quem estava lá desaparecia do registro.
+
+**Corrigido:** grava `OK com ressalva`, com `alerta_sistema` e o motivo
+`Confirmado pelo operador`. É um valor novo de `status`, além de `OK` e `Divergente`.
+
+### O7. 🟡 Todo mundo é inscrito no canal de alertas, sempre
+
+`sb.channel('alertas-bobinas').subscribe()` roda no carregamento da página, para qualquer perfil
+e qualquer unidade: um consultor de Anápolis recebe o banner de divergência de uma bobina de
+Araquari. O `payload` não carrega unidade, então não há como filtrar no recebimento.
+
+**Não mexido:** alterar tempo real pede teste com duas sessões abertas, e o módulo nunca foi
+exercitado com etiqueta real. Fica registrado.
+
+### O8. 🟢 Nenhum script criava `contagem_bobinas_ocr`
+
+A tabela nasceu à mão no painel. Num banco novo o módulo não teria onde gravar — e, por causa do
+O1, a falha apareceria como "Registrado!". Estrutura agora em `sql/bobinas-aco.sql`, Parte 3,
+com as colunas conferidas contra a produção. Isto também responde o B5.
+
+### O9. 🟢 O Tesseract vem de CDN, e a mensagem não distingue os casos
+
+`cdn.jsdelivr.net` no `index.html`. Se a rede da empresa bloquear o CDN, `Tesseract` fica
+indefinido, o `ReferenceError` cai no `catch` e a tela diz "Erro na leitura. Digite os dados
+manualmente." — comportamento certo, mas a informação de que o problema é a rede, e não a
+etiqueta, se perde. Vale distinguir as duas mensagens.
 
 ---
 
@@ -293,18 +502,17 @@ de cima a baixo — então sobraram políticas antigas em cima das novas, e res�
 
 ---
 
-## Ordem sugerida de correção
+## O que falta, em ordem
 
-| # | Item | Por quê primeiro |
+| # | Item | Por quê nesta ordem |
 |---|---|---|
-| 1 | **C1** — remover `SEED_DATA` | Expõe dado sem login. É deleção, não tem risco |
-| 2 | **C2** — rodar `sql/corrige-permissoes.sql` | Fecha a escrita aberta no estoque |
-| 3 | **C3** — conferir `WITH CHECK` | Uma consulta. Pode ser nada, pode ser grave |
-| 4 | **A1** — checar `error` em todas as chamadas | Maior impacto prático no dia da contagem |
-| 5 | **A3** — remover a carga inicial | Sai junto com C1 |
-| 6 | **A2** — transação no delete+insert | Precisa de função no Postgres |
-| 7 | **A4, M1–M4** | Junto com a divisão em módulos |
-| 8 | **B1–B5** | Faxina, sem pressa |
+| 1 | **Rodar `sql/fase8-limpar-contagem-restrito.sql`** | O A4 só está corrigido na tela até isso acontecer |
+| 2 | **Criar o bucket `fotos-bobinas`** (O5) | Uma tela no painel do Supabase, e a prova da conferência para de ser perdida |
+| 3 | **A2** — transação no `delete` + `insert` | O item mais grave que resta: a unidade pode ficar sem estoque, sem rollback. Pede função no Postgres |
+| 4 | **O3 completo** — lote no modal e na tabela do OCR | Mudança de desenho: hoje o veredito é suprimido em vez de errado |
+| 5 | **O7** — recortar o alerta de bobina por unidade | Pede teste com duas sessões |
+| 6 | **M2** — tirar os e-mails fixos do código | `ADMIN_EMAIL` em `js/config.js` e `j.lisboa@...` em `js/estoque.js`. Já existe o padrão certo: tabelas como `gerentes_unidade` |
+| 7 | **M3** — os três logos idênticos | 24 KB por acesso, sentido no celular do galpão |
+| 8 | **B1, B3, O9** | Faxina, sem pressa |
 
-Os itens 1, 4 e 5 são mudanças no `index.html` e caberiam num único Pull Request pequeno, antes
-da divisão em módulos.
+Os itens 1 e 2 são de painel, não de código, e destravam o resto.

@@ -97,7 +97,31 @@ async function lerEtiquetaComOcr(file) {
 function mostrarVeredito(codigo, pesoEtiqueta) {
   const box = document.getElementById('veredictoBox');
   const msg = document.getElementById('validacaoMsg');
-  const bobina = codigo ? bobinasData.find(r => r.item === codigo) : null;
+  const candidatas = bobinasDoItem(codigo);
+
+  // Vários lotes com o mesmo item: não há veredito automático possível.
+  //
+  // Antes daqui saía um `find()`, que devolvia a PRIMEIRA linha e comparava
+  // o peso da etiqueta contra um lote escolhido a esmo — dizendo "TUDO OK"
+  // ou "DIVERGENTE" sobre a bobina errada. Mostrar as opções e calar o
+  // veredito é pior de usar e certo; o veredito estava confortável e errado.
+  if (candidatas.length > 1) {
+    const linhas = candidatas.map(b =>
+      `<div>lote <b>${escapeHtml(b.lote || '—')}</b> · ${escapeHtml(b.localizacao || '—')} · <b>${escapeHtml(String(b.qtd_liquida))}</b> ${escapeHtml(b.um || '')}</div>`
+    ).join('');
+    box.style.display = 'block';
+    box.style.background = '#fffbeb';
+    box.style.borderColor = '#d97706';
+    box.style.color = '#92400e';
+    box.innerHTML = `<div style="font-size:20px; font-weight:800;">⚠️ ${candidatas.length} lotes deste item</div>
+      <div style="font-size:13px; margin-top:4px;">Confira o lote na etiqueta e registre a divergência se o peso não bater:</div>
+      <div style="font-size:12.5px; margin-top:6px; line-height:1.5;">${linhas}</div>`;
+    msg.textContent = '';
+    if (navigator.vibrate) navigator.vibrate(150);
+    return;
+  }
+
+  const bobina = candidatas[0] || null;
 
   if (!bobina) {
     box.style.display = 'block';
@@ -175,11 +199,73 @@ function acharCodigoBobina(texto) {
   return null;
 }
 
-// Procura um peso no texto (ex: "1.234,56 KG" ou "1234.56")
+// Converte o número lido da etiqueta em kg.
+//
+// Não usa `parseNum()`: aquele apaga TODO ponto antes de trocar a vírgula
+// por ponto, então "1234.56" virava 123456 — cem vezes o peso real.
+//
+// Regras, na ordem:
+//   tem ponto E vírgula  -> o último dos dois é o decimal ("4.820,50")
+//   um separador só      -> se vier seguido de exatamente 3 dígitos, é
+//                           milhar ("4.820"); senão é decimal ("4820,50")
+//
+// A ambiguidade que sobra é "820,500": em etiqueta brasileira quase sempre
+// significa 820500 (milhar), e é assim que se lê aqui. Se aparecer etiqueta
+// com três casas decimais, este é o ponto a rever.
+function numeroDaEtiqueta(bruto) {
+  let s = String(bruto).replace(/\s/g, '');
+  const temPonto = s.includes('.');
+  const temVirgula = s.includes(',');
+
+  if (temPonto && temVirgula) {
+    const decimal = s.lastIndexOf('.') > s.lastIndexOf(',') ? '.' : ',';
+    const milhar = decimal === '.' ? ',' : '.';
+    s = s.split(milhar).join('');
+    s = s.replace(decimal, '.');
+  } else if (temPonto || temVirgula) {
+    const sep = temPonto ? '.' : ',';
+    const partes = s.split(sep);
+    const ultima = partes[partes.length - 1];
+    if (partes.length > 2 || ultima.length === 3) {
+      s = partes.join('');            // milhar
+    } else {
+      s = partes.join('.');           // decimal
+    }
+  }
+
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+// Procura o peso no texto lido.
+//
+// ⚠️ A versão anterior usava /(\d{1,3}(?:[.,]\d{3})*...)\s*KG/ e errava a
+// maioria das bobinas reais: o `\d{1,3}` casava só três dígitos, então
+// "4820 KG" era lido como 820, "12480 KG" como 480 e "4820,50 KG" como
+// 820,50. Bobina pesa quatro ou cinco dígitos, e só a etiqueta que
+// imprimisse "4.820" era lida certo — o veredito automático acusava
+// divergência em quase toda leitura bem-sucedida do código.
 function acharPesoEtiqueta(texto) {
-  const m = texto.match(/(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d+)?)\s*KG/);
-  if (m) return parseNum(m[1]);
+  // 1) Prefere o número que vem depois de PESO/LÍQUIDO: é o peso da bobina,
+  //    e não a largura, a espessura ou o número do lote.
+  const aposPeso = texto.match(
+    /P[E3][S5][O0][^0-9]{0,20}?(\d[\d.,\s]{0,14}\d|\d)\s*K[G6]\b/);
+  if (aposPeso) return numeroDaEtiqueta(aposPeso[1]);
+
+  // 2) Qualquer número seguido de KG.
+  const comKg = texto.match(/(\d[\d.,\s]{0,14}\d|\d)\s*K[G6]\b/);
+  if (comKg) return numeroDaEtiqueta(comKg[1]);
+
   return null;
+}
+
+// Todas as linhas da planilha com este item. A mesma bobina existe em
+// vários lotes e localizações, então isto costuma devolver mais de uma —
+// e é por isso que o veredito automático não pode usar a primeira.
+function bobinasDoItem(codigo) {
+  if (!codigo) return [];
+  const alvo = String(codigo).toUpperCase();
+  return bobinasData.filter(r => String(r.item).toUpperCase() === alvo);
 }
 
 // Assim que o operador digita/confirma o código, busca automaticamente no sistema
@@ -188,7 +274,22 @@ document.getElementById('valBobinaId').addEventListener('change', () => {
   const info = document.getElementById('valSistemaInfo');
   if (!codigo) { info.style.display = 'none'; return; }
 
-  const bobina = bobinasData.find(r => r.item === codigo);
+  const candidatas = bobinasDoItem(codigo);
+
+  // Mais de um lote: não se elege um. Sem peso de sistema definido, o
+  // registro sai com `peso_sistema` nulo em vez de com o número do lote errado.
+  if (candidatas.length > 1) {
+    document.getElementById('valPesoSistemaTexto').textContent =
+      candidatas.length + ' lotes — confira a etiqueta';
+    document.getElementById('valLocalizacaoSistemaTexto').textContent =
+      candidatas.map(b => b.localizacao || '—').join(' / ');
+    info.style.display = 'block';
+    info.dataset.pesoSistema = '';
+    info.dataset.localizacaoSistema = '';
+    return;
+  }
+
+  const bobina = candidatas[0];
   if (bobina) {
     document.getElementById('valPesoSistemaTexto').textContent = bobina.qtd_liquida;
     document.getElementById('valLocalizacaoSistemaTexto').textContent = bobina.localizacao || '-';
@@ -216,7 +317,11 @@ document.getElementById('validacaoModal').addEventListener('click', (e) => {
 
 async function salvarValidacaoBobina(marcadoComoOk) {
   const bobina_id = document.getElementById('valBobinaId').value.trim();
-  const peso_etiqueta = parseNum(document.getElementById('valPesoEtiqueta').value);
+  // Campo vazio é "não informado", não zero. Antes passava por `parseNum()`,
+  // que devolve 0 para string vazia: o registro saía com peso 0 kg gravado
+  // como fato, e a comparação acusava divergência de 0 contra 4820.
+  const pesoBruto = document.getElementById('valPesoEtiqueta').value.trim();
+  const peso_etiqueta = pesoBruto ? numeroDaEtiqueta(pesoBruto) : null;
   const localizacao_real = document.getElementById('valLocalizacaoReal').value.trim();
   const info = document.getElementById('valSistemaInfo');
   const peso_sistema = info.dataset.pesoSistema ? parseNum(info.dataset.pesoSistema) : null;
@@ -229,51 +334,89 @@ async function salvarValidacaoBobina(marcadoComoOk) {
     return;
   }
 
+  // Confirmar OK sem peso lido não registra nada de útil: seria um "confere"
+  // sobre uma comparação que não aconteceu.
+  if (marcadoComoOk && peso_etiqueta === null) {
+    msg.textContent = 'Informe o peso da etiqueta antes de confirmar OK.';
+    msg.className = 'status-msg status-err';
+    document.getElementById('valPesoEtiqueta').focus();
+    return;
+  }
+
   msg.textContent = 'Salvando...';
   msg.className = 'status-msg';
 
   // ---- Regra de negócio: decide OK ou Divergente ----
-  const pesoDivergente = peso_sistema !== null && Math.abs(peso_etiqueta - peso_sistema) > 0.01;
-  const localDivergente = localizacao_sistema && localizacao_real !== localizacao_sistema;
+  // A comparação só existe quando os dois números existem.
+  const pesoDivergente = peso_etiqueta !== null && peso_sistema !== null
+    && Math.abs(peso_etiqueta - peso_sistema) > 0.01;
+  const localDivergente = !!localizacao_sistema && localizacao_real !== localizacao_sistema;
 
   let status = 'OK';
   let alerta_sistema = false;
-  let motivo_alerta = null;
+  const motivos = [];
 
-  if (!marcadoComoOk && (pesoDivergente || localDivergente)) {
-    status = 'Divergente';
+  if (pesoDivergente) motivos.push('Peso divergente');
+  if (localDivergente) motivos.push('Localização divergente');
+  if (peso_etiqueta === null) motivos.push('Peso da etiqueta não informado');
+  if (peso_sistema === null) motivos.push('Sem peso de sistema: item com vários lotes ou fora da planilha');
+
+  if (!marcadoComoOk) {
+    // "Salvar divergência" sem motivo nenhum é correção manual: vale como OK.
+    if (motivos.length) { status = 'Divergente'; alerta_sistema = true; }
+  } else if (pesoDivergente || localDivergente) {
+    // Confirmou OK apesar de divergir. Fica registrado como decisão de quem
+    // estava lá, não como se os números batessem — antes os dois casos saíam
+    // gravados igual, e o registro não sabia distinguir um do outro.
+    status = 'OK com ressalva';
     alerta_sistema = true;
-    motivo_alerta = [pesoDivergente ? 'Peso divergente' : null, localDivergente ? 'Localização divergente' : null].filter(Boolean).join(' + ');
-  } else if (!marcadoComoOk) {
-    // Operador clicou em "Salvar divergência" mas os valores batem - registra mesmo assim como correção manual
-    status = 'OK';
+    motivos.push('Confirmado pelo operador');
   }
+  const motivo_alerta = motivos.length ? motivos.join(' + ') : null;
 
-  // Sobe a foto pro Storage (se o bucket "fotos-bobinas" existir)
+  // ---- Foto da etiqueta ----
+  // Em 04/09/2026 o bucket `fotos-bobinas` não existe, e toda foto é
+  // descartada. Isso agora aparece na tela: a foto é a prova da conferência,
+  // e perdê-la em silêncio é o pior dos mundos.
   let foto_url = null;
+  let avisoFoto = '';
   if (fotoEtiquetaAtual) {
-    try {
-      const nomeArquivo = `${bobina_id}_${Date.now()}.jpg`;
-      const { error: upErr } = await sb.storage.from('fotos-bobinas').upload(nomeArquivo, fotoEtiquetaAtual);
-      if (!upErr) foto_url = sb.storage.from('fotos-bobinas').getPublicUrl(nomeArquivo).data.publicUrl;
-    } catch (e) { /* segue sem foto se o bucket ainda não existir */ }
+    const ext = (fotoEtiquetaAtual.type || '').includes('png') ? 'png' : 'jpg';
+    const nomeArquivo = `${bobina_id}_${Date.now()}.${ext}`;
+    const up = await sb.storage.from('fotos-bobinas').upload(nomeArquivo, fotoEtiquetaAtual);
+    if (up.error) {
+      avisoFoto = ' A foto NÃO foi guardada: ' + up.error.message;
+      console.error('Falha ao subir a foto da etiqueta:', up.error.message);
+    } else {
+      foto_url = sb.storage.from('fotos-bobinas').getPublicUrl(nomeArquivo).data.publicUrl;
+    }
   }
 
-  try {
-    await sb.from('contagem_bobinas_ocr').insert({
-      bobina_id, peso_etiqueta, peso_sistema, localizacao_sistema, localizacao_real,
-      status, alerta_sistema, motivo_alerta, foto_url, operador: nomeUsuarioAtual
-    });
+  // O cliente do Supabase devolve { error }, não lança: o try/catch que
+  // existia aqui nunca disparava, e uma recusa do banco aparecia como
+  // "Registrado!" em verde, com o modal fechando em seguida. Mesmo defeito
+  // do item A1 da auditoria, que já havia sido corrigido nos outros módulos
+  // e passou batido neste.
+  const { error } = await sb.from('contagem_bobinas_ocr').insert({
+    bobina_id, peso_etiqueta, peso_sistema, localizacao_sistema, localizacao_real,
+    status, alerta_sistema, motivo_alerta, foto_url, operador: nomeUsuarioAtual
+  });
 
-    if (alerta_sistema) dispararAlertaBobina(bobina_id, motivo_alerta);
-
-    msg.textContent = `Registrado como ${status}!`;
-    msg.className = 'status-msg status-ok';
-    fotoEtiquetaAtual = null;
-    setTimeout(() => document.getElementById('validacaoModal').classList.remove('open'), 1000);
-  } catch (err) {
-    msg.textContent = 'Erro ao salvar: ' + err.message;
+  if (error) {
+    msg.textContent = 'NÃO SALVOU: ' + error.message + ' — registre no papel e avise o responsável.';
     msg.className = 'status-msg status-err';
+    console.error('Falha ao gravar a validação por foto:', error.message);
+    return;
+  }
+
+  if (alerta_sistema) dispararAlertaBobina(bobina_id, motivo_alerta);
+
+  msg.textContent = `Registrado como ${status}.` + avisoFoto;
+  msg.className = avisoFoto ? 'status-msg status-err' : 'status-msg status-ok';
+  fotoEtiquetaAtual = null;
+  // Com aviso de foto perdida, o modal fica aberto: a pessoa precisa ler.
+  if (!avisoFoto) {
+    setTimeout(() => document.getElementById('validacaoModal').classList.remove('open'), 1000);
   }
 }
 

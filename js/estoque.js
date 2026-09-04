@@ -788,7 +788,28 @@ function pararTempoReal() {
   }
 }
 
+// Apagar a contagem inteira de uma unidade no meio de um inventário é
+// irreversível e afeta todo mundo. A única proteção era o confirm() do
+// navegador (AUDITORIA.md, item A4): qualquer conta aprovada com perfil
+// estoque_alm da unidade conseguia. Agora é de admin ou gerente da unidade,
+// e a pergunta de "pode?" é respondida pelo banco, não pela tela.
+async function podeLimparContagem() {
+  if (isAdminAtual) return true;
+  if (!unidadeAtual) return false;
+  const { data, error } = await sb.rpc('pode_atualizar_estoque', { uni: unidadeAtual });
+  if (error) {
+    console.error('Falha ao conferir permissão para limpar a contagem:', error.message);
+    return false;   // falha fechado
+  }
+  return data === true;
+}
+
 async function limparTodasAsContagens() {
+  if (!(await podeLimparContagem())) {
+    alert('Apagar a contagem da unidade inteira é do administrador ou do gerente da unidade.'
+      + ' — nada foi apagado.');
+    return;
+  }
   const confirmado = confirm(`Isso vai apagar TODAS as quantidades de estoque físico digitadas na Unidade ${unidadeAtual}, pra todo mundo. Essa ação não pode ser desfeita. Confirma?`);
   if (!confirmado) return;
   const { error } = await sb.from('contagem_fisica').delete().eq('unidade', unidadeAtual);
@@ -989,6 +1010,13 @@ async function ativarModoContagem() {
   contagemModal.classList.remove('open');
   contagemBtn.classList.add('active-toggle');
   document.getElementById('quemContouBtn').style.display = 'inline-block';
+  // Quem não pode limpar não vê o botão. Esconder é cortesia; a trava é a
+  // checagem em limparTodasAsContagens() e o RLS de DELETE no banco.
+  const limpar = document.getElementById('limparContagemBtn');
+  limpar.style.display = 'none';
+  podeLimparContagem().then(pode => {
+    if (modoContagemAtivo) limpar.style.display = pode ? '' : 'none';
+  });
   applyFilterAndSort();
   iniciarTempoReal();
 }
