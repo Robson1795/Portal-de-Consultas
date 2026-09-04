@@ -13,13 +13,22 @@ Numeração por severidade. `L###` = linha do `index.html`.
 > (commit `bb31bad`). Em 03/09/2026 entrou o **módulo de validação por OCR** (~380 linhas,
 > ver `CLAUDE.md` seção 9), que **não está coberto aqui** — e os números de linha abaixo
 > saíram de lugar. Para localizar um trecho, busque pelo nome da função em vez da linha.
-> Os achados em si continuam valendo: nenhum deles foi corrigido ainda.
+> **Situação em 04/09/2026:** **C1 e A1 estão corrigidos** (ver abaixo). Os demais continuam
+> valendo.
 
 ---
 
 ## 🔴 Crítico
 
-### C1. Os dados de estoque estão no HTML público, sem precisar de login
+### C1. ✅ CORRIGIDO em 04/09/2026 — os dados de estoque estavam no código público
+
+`SEED_DATA` e `seedInitialData()` foram removidos de `js/estoque.js`, que caiu de 115 KB para
+53 KB. A carga inicial deixou de existir no código: é tarefa de script SQL, rodado uma vez.
+Conferido que o item `141590` não aparece mais em nada que o servidor entrega.
+
+O texto original do achado fica abaixo, como registro.
+
+### C1 (original). Os dados de estoque estão no HTML público, sem precisar de login
 
 `L764` — `const SEED_DATA = [...]` com **539 itens reais**: código, descrição, unidade de
 medida, endereço no almoxarifado e quantidade.
@@ -91,7 +100,17 @@ Se confirmado, a correção é acrescentar `and aprovado = false` ao `WITH CHECK
 
 ## 🟠 Alto
 
-### A1. A contagem pode parecer salva sem ter sido salva
+### A1. ✅ CORRIGIDO em 04/09/2026 — a contagem podia parecer salva sem estar
+
+Agora a tela só é atualizada depois de conferir o `error`. Quando a gravação falha, o campo fica
+vermelho com o badge `⚠ não salvou` e a mensagem do banco no tooltip. Corrigido em
+`salvarContagemItem`, `limparContagemItem`, `limparTodasAsContagens` e `carregarContagens`
+(`js/estoque.js`), e em `salvarContagemBobina` e `carregarBobinasContagem` (`js/bobinas.js`).
+`limparTodasAsContagens` não limpa mais a tela se o banco recusar.
+
+O texto original do achado fica abaixo, como registro.
+
+### A1 (original). A contagem pode parecer salva sem ter sido salva
 
 O cliente do Supabase **não lança exceção** em erro — ele devolve `{ data, error }`. O código
 tem 28 chamadas `await sb.from(...)` e várias estão dentro de `try/catch` sem checar `error`.
