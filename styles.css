@@ -222,6 +222,83 @@
 
 
 
+
+/* ================== FASE 6 — REQUISIÇÃO ALM ========================= */
+.req-fixo {
+  padding: 9px 11px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--row-alt); font-size: 13.5px; font-weight: 600; color: var(--ink);
+}
+#reqNarrativa {
+  width: 100%; min-height: 76px; padding: 9px 11px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 13.5px; font-family: inherit; color: var(--ink); resize: vertical;
+}
+.req-secao { margin: 18px 0 8px; font-size: 13px; font-weight: 700; color: var(--ink); }
+
+/* Grade dos itens: codigo, descricao, UM, quantidade e remover. */
+.req-cabecalho, .req-linha {
+  display: grid;
+  grid-template-columns: 130px 1fr 70px 90px 38px;
+  gap: 8px; align-items: center;
+}
+.req-cabecalho {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--muted); padding: 0 2px 6px;
+}
+.req-linha { margin-bottom: 7px; }
+.req-linha input {
+  width: 100%; padding: 8px 10px; border: 1px solid var(--border);
+  border-radius: 7px; font-size: 13px; color: var(--ink); background: white;
+}
+.req-linha input[readonly] { background: var(--row-alt); color: var(--muted); }
+.req-linha .req-remover { padding: 7px 9px; font-size: 12px; }
+
+.req-aviso {
+  margin-top: 10px; padding: 10px 13px; background: #fef3c7;
+  border: 1px solid #d97706; border-radius: 8px; font-size: 12.5px; color: #92400e;
+}
+#reqEmEdicao {
+  background: var(--blue); color: white; border-radius: 6px;
+  padding: 3px 9px; font-size: 11.5px; font-weight: 700;
+}
+
+.req-card {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 12px 15px; border-bottom: 1px solid var(--border);
+}
+.req-card:last-child { border-bottom: none; }
+.req-card-info { flex: 1; min-width: 180px; }
+.req-card-topo { display: flex; align-items: center; gap: 9px; font-size: 14px; }
+.req-card-sub { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+.req-card-acoes { display: flex; gap: 7px; }
+.req-card-acoes .btn { padding: 6px 11px; font-size: 12.5px; }
+
+/* Modal de cadastro de centro de custo e item */
+.cad-linha {
+  display: flex; align-items: center; gap: 10px; justify-content: space-between;
+  padding: 9px 11px; border-bottom: 1px solid var(--border); font-size: 13px;
+}
+.cad-linha:last-child { border-bottom: none; }
+.cad-desc { color: var(--muted); margin-left: 8px; }
+.cad-um {
+  margin-left: 8px; background: #e8f0f9; color: var(--blue-dark);
+  border-radius: 5px; padding: 1px 7px; font-size: 11.5px; font-weight: 600;
+}
+.cad-linha .btn { padding: 5px 10px; font-size: 12px; }
+#cadastroLista { max-height: 46vh; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+.cad-form { display: grid; grid-template-columns: 1fr 1fr 90px auto; gap: 8px; margin: 12px 0; }
+.cad-form input {
+  padding: 9px 11px; border: 1px solid var(--border); border-radius: 7px;
+  font-size: 13px; color: var(--ink); background: white; min-width: 0;
+}
+
+@media (max-width: 700px) {
+  .req-cabecalho { display: none; }
+  .req-linha { grid-template-columns: 1fr 1fr; }
+  .req-linha .req-desc { grid-column: 1 / -1; }
+  .cad-form { grid-template-columns: 1fr; }
+}
+/* ================== FIM DA FASE 6 =================================== */
+
 /* ===================== FASE 4 — CONFIGURAÇÕES ====================== */
 .cfg-tabela { width: 100%; border-collapse: collapse; }
 .cfg-tabela th {

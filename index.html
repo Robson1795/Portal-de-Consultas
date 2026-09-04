@@ -293,6 +293,75 @@
   </div>
   <!-- ================= FIM BOBINAS DE AÇO ================= -->
 
+  <!-- ================= REQUISIÇÃO ALM ================= -->
+  <div id="requisicaoContent" style="display:none;">
+    <div class="panel">
+      <div class="cfg-barra">
+        <button class="btn" id="reqNovaBtn">Nova requisição</button>
+        <button class="btn" id="reqCadastrosBtn" style="display:none;">Cadastros</button>
+        <span id="reqEmEdicao" style="display:none;"></span>
+        <span class="status-msg" id="reqMsg"></span>
+      </div>
+
+      <div id="reqFormArea" style="padding:16px;">
+        <div class="filtro-grid">
+          <div class="filtro-campo">
+            <label>Unidade</label>
+            <div class="req-fixo" id="reqUnidade">&mdash;</div>
+          </div>
+          <div class="filtro-campo">
+            <label>Solicitante</label>
+            <div class="req-fixo" id="reqSolicitante">&mdash;</div>
+          </div>
+          <div class="filtro-campo">
+            <label for="reqCentroCusto">Centro de custo</label>
+            <select id="reqCentroCusto"><option value="">Selecione...</option></select>
+          </div>
+        </div>
+
+        <div class="req-aviso" id="reqSemCentroCusto" style="display:none;">
+          Nenhum centro de custo cadastrado ainda. Um administrador precisa cadastrar
+          em <b>Cadastros</b> antes de qualquer requisição.
+        </div>
+
+        <div class="req-secao">Narrativa</div>
+        <textarea id="reqNarrativa" placeholder="Para que serve, onde vai ser usado, urgência..."></textarea>
+
+        <div class="req-secao">Itens</div>
+        <div class="req-cabecalho">
+          <div>Código</div><div>Descrição</div><div>UM</div><div>Qtd</div><div></div>
+        </div>
+        <div id="reqItens"></div>
+        <datalist id="reqItensDatalist"></datalist>
+        <button class="btn" id="reqAddItemBtn" style="margin-top:4px;">+ Adicionar item</button>
+
+        <div class="req-aviso" id="reqSemEmail" style="display:none;">
+          Nenhum e-mail de ALM cadastrado para esta unidade — o envio está desabilitado.
+          Dá para salvar o rascunho, e o ALM consegue ver pela lista no portal.
+        </div>
+
+        <div class="filtro-acoes">
+          <button class="btn" id="reqSalvarBtn">Salvar rascunho</button>
+          <button class="btn btn-primary" id="reqEnviarBtn">Enviar por e-mail</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="req-secao">Requisições</div>
+    <div class="panel"><div id="reqLista"></div></div>
+
+    <div class="cfg-nota">
+      <b>Isto é um rascunho, não uma requisição no Datasul.</b> O pedido fica registrado aqui e o
+      botão de enviar abre o e-mail já preenchido no seu Outlook, endereçado ao ALM da sua
+      unidade — <b>você ainda precisa clicar em enviar lá</b>. O ALM então lança no CD1406.
+      <br><br>
+      O portal não envia e-mail por conta própria: não existe servidor neste projeto. A vantagem
+      é que o pedido sai do seu e-mail, então o ALM responde direto para você.
+      Mesmo que o e-mail não saia, a requisição fica salva e o ALM da unidade a vê nesta lista.
+    </div>
+  </div>
+  <!-- ================= FIM REQUISIÇÃO ALM ================= -->
+
   <div id="configContent" style="display:none;">
     <div class="stat-cards">
       <div class="stat-card">
@@ -371,6 +440,26 @@
   <!-- Campo escondido que abre a camera. Fica fora do modal de proposito:
        o js/ocr.js o dispara pelo botao "Registrar contagem por foto". -->
   <input type="file" accept="image/*" capture="environment" id="fotoEtiquetaInput" style="display:none;">
+
+  <!-- Cadastro de centro de custo e item. Só admin abre; o RLS recusa os outros. -->
+  <div class="modal-overlay" id="cadastroModal">
+    <div class="modal-box" style="max-width:620px;">
+      <button class="modal-close" id="cadastroCloseBtn">&#10005;</button>
+      <h3 style="margin-top:0;">Cadastros da Requisição</h3>
+      <div id="cadastroAbas" style="display:flex; gap:8px; margin-bottom:12px;">
+        <button class="btn btn-primary" data-aba="cc" style="flex:1;">Centros de custo</button>
+        <button class="btn" data-aba="item" style="flex:1;">Itens</button>
+      </div>
+      <div class="cad-form">
+        <input type="text" id="cadCodigo" placeholder="Código">
+        <input type="text" id="cadDescricao" placeholder="Descrição">
+        <input type="text" id="cadUm" placeholder="UM" style="display:none;">
+        <button class="btn btn-primary" id="cadAdicionarBtn">Adicionar</button>
+      </div>
+      <div class="status-msg" id="cadastroMsg" style="margin-bottom:10px;"></div>
+      <div id="cadastroLista"></div>
+    </div>
+  </div>
 
   <div class="modal-overlay" id="validacaoModal">
     <div class="modal-box" style="max-width:420px;">
@@ -454,5 +543,6 @@
 <script src="js/bobinas.js"></script>
 <script src="js/ocr.js"></script>
 <script src="js/configuracoes.js"></script>
+<script src="js/requisicao.js"></script>
 </body>
 </html>

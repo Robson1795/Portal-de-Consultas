@@ -35,6 +35,7 @@ servidos são o próprio código-fonte. Divididos na Fase 2a (03/09/2026):
 | `js/bobinas.js` | Módulo Bobinas de Aço |
 | `js/ocr.js` | Validação de bobina por foto |
 | `js/configuracoes.js` | Aba Configurações: administração de usuários (Fase 4) |
+| `js/requisicao.js` | Tela Requisição ALM e o cadastro de centro de custo e item (Fase 6) |
 
 São **scripts clássicos, não módulos**, carregados nessa ordem no fim do `body`. O `let`/`const` de
 nível superior vai para o escopo lexical global, compartilhado entre os arquivos — é por isso que o
@@ -68,7 +69,7 @@ Fluxo:
 5. Aprovado, juntar no `main`. É o `main` que vai para produção.
 
 **Não editar arquivo pela interface web do GitHub, e não colar arquivo inteiro por lá.**
-Foi assim que o código do portal foi perdido três vezes (ver seção 11).
+Foi assim que o código do portal foi perdido três vezes (ver seção 12).
 
 ### Ativar a trava de pré-commit (uma vez por cópia do repositório)
 
@@ -178,7 +179,7 @@ no banco com o domínio `.local`, e não com o e-mail corporativo.
 
 ## 6. Banco de dados (Supabase)
 
-Onze tabelas. Os scripts que as criam estão em `sql/` — mas confira a seção 11 antes de rodar.
+Onze tabelas. Os scripts que as criam estão em `sql/` — mas confira a seção 12 antes de rodar.
 
 | Tabela | Para quê | Observação |
 |---|---|---|
@@ -225,7 +226,40 @@ Onze tabelas. Os scripts que as criam estão em `sql/` — mas confira a seção
 
 ---
 
-## 8. Módulo "Bobinas de Aço"
+## 8. Requisição ALM
+
+Rascunho para lançamento no **CD1406 do Datasul**. **Não abre requisição no Datasul** — a pessoa
+monta o pedido no portal, ele fica registrado, e um botão abre o e-mail já preenchido para o ALM
+da unidade, que lança lá.
+
+Disponível para **todos os perfis**: qualquer conta aprovada pode pedir material.
+
+| Tabela | Para quê |
+|---|---|
+| `requisicoes_alm` | Cabeçalho: unidade, solicitante, centro de custo, narrativa, status |
+| `requisicoes_alm_itens` | Itens do pedido. Duas tabelas porque um pedido leva vários itens, como no CD1406 |
+| `centros_custo` | Lista de centros de custo. Escrita só para admin |
+| `itens_requisicao` | **Catálogo**, não estoque: serve para pedir item que a unidade ainda não tem. A tela oferece o catálogo **mais** os itens do estoque da unidade |
+| `config_unidade` | Por ora, os e-mails do ALM de cada unidade |
+
+**Quem vê a requisição:** o autor, o `estoque_alm` da unidade e o admin. Um consultor não vê o
+pedido de outro.
+
+**Por que o e-mail sai pelo Outlook da pessoa.** Não existe servidor neste projeto — enviar por
+conta própria exigiria uma Edge Function no Supabase mais um provedor de e-mail com chave de API.
+O caminho atual tem uma vantagem real: o pedido sai do e-mail de quem pediu, então o ALM responde
+direto. E como a requisição também fica gravada, o ALM a vê no portal mesmo que o e-mail não saia.
+
+⚠️ **Limite do `mailto`:** alguns clientes cortam URL muito longa. Acima de ~1900 caracteres a
+tela avisa que o e-mail pode sair truncado. Pedido com muitos itens: melhor o ALM abrir no portal.
+
+**Centro de custo e item vêm de lista cadastrada, não de texto livre** — texto livre gera "1406",
+"CC1406", "1.406" e "cd1406" para a mesma coisa. Só admin cadastra, pelo botão **Cadastros** na
+própria tela de Requisição.
+
+---
+
+## 9. Módulo "Bobinas de Aço"
 
 Aba separada, por um link acima da tabela principal, protegida por senha de sessão.
 
@@ -239,7 +273,7 @@ Aba separada, por um link acima da tabela principal, protegida por senha de sess
 
 ---
 
-## 9. Módulo de validação por OCR (bobinas)
+## 10. Módulo de validação por OCR (bobinas)
 
 Entrou em 03/09/2026. Botão **"Registrar contagem por foto"** na página de bobinas.
 
@@ -259,7 +293,7 @@ autenticada, e grava `foto_url`.
 
 ---
 
-## 10. Avisos técnicos
+## 11. Avisos técnicos
 
 - **Supabase Free:** o projeto pausa sozinho após 7 dias sem uso; reativar no painel.
 - **Sem backup automático.** Export manual das 10 tabelas (`Table Editor → Export`, CSV) de vez
@@ -275,7 +309,7 @@ autenticada, e grava `foto_url`.
 
 ---
 
-## 11. Problemas conhecidos e pendências
+## 12. Problemas conhecidos e pendências
 
 ### Já resolvido — fica registrado para não repetir
 

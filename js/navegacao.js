@@ -8,16 +8,19 @@
 // pessoa nao ver o que nao lhe diz respeito, nao para trancar a porta.
 
 // ---- Perfis e o que cada um enxerga ----------------------------------------
+// Requisicao ALM aparece para TODOS os perfis: qualquer pessoa aprovada pode
+// pedir material. Quem atende o pedido e o ALM da unidade.
 const PERFIS = {
-  consultor:   { rotulo: 'Consultor',   paginas: ['estoque'] },
-  estoque_alm: { rotulo: 'Estoque ALM', paginas: ['estoque'] },
-  estoque_aco: { rotulo: 'Estoque Aço', paginas: ['bobinas'] },
-  admin:       { rotulo: 'Admin',       paginas: ['estoque', 'bobinas', 'config'] }
+  consultor:   { rotulo: 'Consultor',   paginas: ['estoque', 'requisicao'] },
+  estoque_alm: { rotulo: 'Estoque ALM', paginas: ['estoque', 'requisicao'] },
+  estoque_aco: { rotulo: 'Estoque Aço', paginas: ['bobinas', 'requisicao'] },
+  admin:       { rotulo: 'Admin',       paginas: ['estoque', 'bobinas', 'requisicao', 'config'] }
 };
 
 const PAGINAS = {
   estoque: { rotulo: 'Consulta de Itens', icone: '🔎', elemento: 'estoqueContent' },
   bobinas: { rotulo: 'Estoque de Aço',    icone: '📦', elemento: 'bobinasContent' },
+  requisicao: { rotulo: 'Requisição ALM', icone: '📝', elemento: 'requisicaoContent' },
   config:  { rotulo: 'Configurações',     icone: '⚙️', elemento: 'configContent' }
 };
 
@@ -75,6 +78,7 @@ function mostrarPagina(id) {
   // Cada pagina carrega os proprios dados ao ser aberta.
   if (id === 'estoque') { pararTempoRealBobinas(); loadData(); }
   if (id === 'bobinas') { abrirTelaBobinas(); }
+  if (id === 'requisicao') { carregarRequisicao(); }
   if (id === 'config')  { carregarUsuarios(); }
 }
 
