@@ -259,6 +259,9 @@ const UNIDADES = {
 let unidadeAtual = '106';
 
 function atualizarSubtituloUnidade() {
+  // O subtitulo saiu do layout na Fase 2b; a unidade agora fica no cabecalho.
+  // Mantido tolerante a ausencia para nao quebrar quem ainda o tenha.
+  if (!document.getElementById('unitSubtitle')) return;
   const u = UNIDADES[unidadeAtual];
   document.getElementById('unitSubtitle').textContent =
     `Unidade ${unidadeAtual}, em ${u.cidade} (${u.uf}). Consulta de itens, quantidades e localizações do almoxarifado.`;
@@ -1016,13 +1019,12 @@ document.getElementById('saveDataBtn').addEventListener('click', async () => {
   }
 });
 
-document.getElementById('unitButtons').addEventListener('click', async (e) => {
-  const btn = e.target.closest('.unit-btn');
-  if (!btn) return;
+// Chamada pelo seletor de unidade do cabecalho (js/navegacao.js). Antes era
+// um listener nos botoes de unidade, que sairam do layout na Fase 2b.
+async function trocarUnidade(cod) {
+  if (!UNIDADES[cod] || cod === unidadeAtual) return;
   const estavaContando = modoContagemAtivo;
-  unidadeAtual = btn.dataset.unidade;
-  document.querySelectorAll('.unit-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
+  unidadeAtual = cod;
   atualizarSubtituloUnidade();
   document.getElementById('searchBox').value = '';
   sortKey = null;
@@ -1031,9 +1033,10 @@ document.getElementById('unitButtons').addEventListener('click', async (e) => {
   if (modoContagemAtivo) desativarModoContagem();
   await loadData();
   await atualizarBotaoEditar();
-  // Se a contagem já estava ativa e essa unidade já foi desbloqueada antes nesta sessão, mantém ativa sem pedir senha de novo
+  // Se a contagem estava ativa e a unidade ja foi desbloqueada nesta sessao,
+  // mantem ativa sem pedir a senha de novo.
   if (estavaContando && unidadeDesbloqueada(unidadeAtual)) {
     await ativarModoContagem();
   }
-});
+}
 

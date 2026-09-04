@@ -10,6 +10,14 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const EDIT_PIN = "2026";
 const PINS_CONTAGEM = { '106': 'INV106', '101': 'INV101', '105': 'INV105' };
 const ADMIN_EMAIL = "robson_alves1995@live.com";
+
+// Espelha o eh_super_admin() do banco. Quem manda e o Postgres; esta lista
+// existe so para a TELA nao mostrar um cargo diferente do que o RLS aplica.
+const SUPER_ADMINS = [
+  "robson_alves1995@live.com",
+  "r.alves1@portal.kingspanisoeste.local",
+  "victor.dobner@portal.kingspanisoeste.local"
+];
 const DOMINIO_USUARIO = "portal.kingspanisoeste.local";
 
 // Nome que aparece destacado em verde na saudacao do cabecalho.

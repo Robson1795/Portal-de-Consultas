@@ -7,11 +7,13 @@
 // ========================================================================
 // BOBINAS DE AÇO
 // ========================================================================
-const SENHA_AUDITORIA = "aço2026"; // [⚠️ CONFIGURAÇÃO] troque aqui quando quiser mudar a senha
+// A senha de sessao "aco2026" saiu na Fase 2b. Ela estava em texto claro num
+// arquivo publico, entao nunca foi seguranca -- e agora o acesso a esta pagina
+// e decidido pelo perfil: quem nao e estoque_aco nem admin nao ve o item no
+// menu, e o RLS recusa os dados no banco de qualquer forma.
 
 let bobinasData = [];
 let bobinasContagemMap = {};
-let bobinasDesbloqueado = sessionStorage.getItem('bobinas_ok') === '1';
 let canalBobinas = null;
 
 function parseNum(v) {
@@ -20,47 +22,6 @@ function parseNum(v) {
   return parseFloat(String(v).replace(/\./g, '').replace(',', '.')) || 0;
 }
 
-document.getElementById('abrirBobinasLink').addEventListener('click', async (e) => {
-  e.preventDefault();
-  if (bobinasDesbloqueado) {
-    await abrirTelaBobinas();
-  } else {
-    document.getElementById('bobinasPinInput').value = '';
-    document.getElementById('bobinasPinMsg').textContent = '';
-    document.getElementById('bobinasPinModal').classList.add('open');
-  }
-});
-
-document.getElementById('bobinasPinCloseBtn').addEventListener('click', () => {
-  document.getElementById('bobinasPinModal').classList.remove('open');
-});
-document.getElementById('bobinasPinModal').addEventListener('click', (e) => {
-  if (e.target.id === 'bobinasPinModal') e.currentTarget.classList.remove('open');
-});
-document.getElementById('bobinasPinSubmitBtn').addEventListener('click', async () => {
-  const val = document.getElementById('bobinasPinInput').value;
-  if (val === SENHA_AUDITORIA) {
-    bobinasDesbloqueado = true;
-    sessionStorage.setItem('bobinas_ok', '1');
-    document.getElementById('bobinasPinModal').classList.remove('open');
-    await abrirTelaBobinas();
-  } else {
-    document.getElementById('bobinasPinMsg').textContent = 'Senha incorreta.';
-  }
-});
-document.getElementById('bobinasPinInput').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') document.getElementById('bobinasPinSubmitBtn').click();
-});
-
-document.getElementById('voltarEstoqueLink').addEventListener('click', (e) => {
-  e.preventDefault();
-  document.getElementById('bobinasContent').style.display = 'none';
-  document.getElementById('estoqueContent').style.display = 'block';
-  document.querySelector('.hero .subtitle').parentElement.querySelectorAll('#unitButtons, #abrirBobinasLink').forEach(el => {});
-  document.getElementById('unitButtons').style.display = 'flex';
-  pararTempoRealBobinas();
-});
-
 async function podeEditarBobinas() {
   if (isAdminAtual) return true;
   const { data } = await sb.from('editores_bobinas').select('email').eq('email', emailUsuarioAtual).maybeSingle();
@@ -68,9 +29,7 @@ async function podeEditarBobinas() {
 }
 
 async function abrirTelaBobinas() {
-  document.getElementById('estoqueContent').style.display = 'none';
-  document.getElementById('unitButtons').style.display = 'none';
-  document.getElementById('bobinasContent').style.display = 'block';
+  // Quem mostra e esconde pagina agora e mostrarPagina(), em js/navegacao.js.
   document.getElementById('bobinasEditToggleRow').style.display = (await podeEditarBobinas()) ? 'flex' : 'none';
   await carregarBobinasContagem();
   await loadBobinas();
