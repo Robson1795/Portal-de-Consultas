@@ -7,6 +7,8 @@
 // ---- Autenticação ----
 let authMode = 'login'; // ou 'signup'
 let nomeCadastroPendente = '';
+let unidadeCadastroPendente = '';
+let cargoCadastroPendente = '';
 
 const authScreen = document.getElementById('authScreen');
 const pendingScreen = document.getElementById('pendingScreen');
@@ -14,6 +16,8 @@ const portalScreen = document.getElementById('portalScreen');
 const tabLoginBtn = document.getElementById('tabLoginBtn');
 const tabSignupBtn = document.getElementById('tabSignupBtn');
 const authNomeCompleto = document.getElementById('authNomeCompleto');
+const authUnidade = document.getElementById('authUnidade');
+const authCargo = document.getElementById('authCargo');
 const authEmail = document.getElementById('authEmail');
 const authPassword = document.getElementById('authPassword');
 const authSubmitBtn = document.getElementById('authSubmitBtn');
@@ -29,11 +33,20 @@ function setAuthMode(mode) {
     tabSignupBtn.className = 'btn';
     authSubmitBtn.textContent = 'Entrar';
     authNomeCompleto.style.display = 'none';
+    authUnidade.style.display = 'none';
+    authCargo.style.display = 'none';
   } else {
     tabLoginBtn.className = 'btn';
     tabSignupBtn.className = 'btn btn-primary';
     authSubmitBtn.textContent = 'Criar conta';
     authNomeCompleto.style.display = 'block';
+    authUnidade.style.display = 'block';
+    authCargo.style.display = 'block';
+    // Preenchido daqui porque a lista de unidades vive em js/estoque.js.
+    if (authUnidade.options.length <= 1) {
+      authUnidade.innerHTML = '<option value="">Selecione a unidade...</option>' +
+        Object.keys(UNIDADES).map(c => `<option value="${c}">${escapeHtml(rotuloUnidade(c))}</option>`).join('');
+    }
   }
 }
 tabLoginBtn.addEventListener('click', () => setAuthMode('login'));
@@ -49,10 +62,24 @@ authSubmitBtn.addEventListener('click', async () => {
     authMsg.className = 'status-msg status-err';
     return;
   }
-  if (authMode === 'signup' && !authNomeCompleto.value.trim()) {
-    authMsg.textContent = 'Preencha seu nome completo.';
-    authMsg.className = 'status-msg status-err';
-    return;
+  if (authMode === 'signup') {
+    // Unidade e cargo sao obrigatorios: sem unidade a pessoa nao consegue
+    // contar, e sem cargo o administrador nao sabe o que aprovar.
+    if (!authNomeCompleto.value.trim()) {
+      authMsg.textContent = 'Preencha seu nome completo.';
+      authMsg.className = 'status-msg status-err';
+      return;
+    }
+    if (!authUnidade.value) {
+      authMsg.textContent = 'Selecione a sua unidade.';
+      authMsg.className = 'status-msg status-err';
+      return;
+    }
+    if (!authCargo.value) {
+      authMsg.textContent = 'Selecione o seu cargo.';
+      authMsg.className = 'status-msg status-err';
+      return;
+    }
   }
   authMsg.textContent = authMode === 'login' ? 'Entrando...' : 'Criando conta...';
   authMsg.className = 'status-msg';
@@ -62,6 +89,8 @@ authSubmitBtn.addEventListener('click', async () => {
       if (error) throw error;
     } else {
       nomeCadastroPendente = authNomeCompleto.value.trim();
+      unidadeCadastroPendente = authUnidade.value;
+      cargoCadastroPendente = authCargo.value;
       const { error } = await sb.auth.signUp({ email, password });
       if (error) throw error;
       authMsg.textContent = 'Conta criada! Entrando...';
@@ -94,8 +123,19 @@ async function registrarAcesso(user) {
 async function verificarAprovacao(user) {
   // Tenta criar a solicitação (se já existir, ignora o erro de duplicidade)
   try {
-    await sb.from('usuarios_permitidos').insert({ user_id: user.id, email: user.email, nome: nomeCadastroPendente || null });
+    // O cargo aqui e um PEDIDO. Um gatilho no banco recusa 'admin' e forca
+    // aprovado = false, entao escolher cargo no cadastro nao da acesso a nada
+    // -- quem libera e o administrador, na aba Configuracoes.
+    await sb.from('usuarios_permitidos').insert({
+      user_id: user.id,
+      email: user.email,
+      nome: nomeCadastroPendente || null,
+      unidade: unidadeCadastroPendente || null,
+      perfil: cargoCadastroPendente || 'consultor'
+    });
     nomeCadastroPendente = '';
+    unidadeCadastroPendente = '';
+    cargoCadastroPendente = '';
   } catch (e) {
     // ja existe uma linha para esse usuario - segue normalmente
   }
@@ -104,19 +144,18 @@ async function verificarAprovacao(user) {
   // nao tiver rodado o script, a consulta falha -- entao cai para o formato
   // antigo em vez de deixar a tela em branco.
   let { data, error } = await sb.from('usuarios_permitidos')
-    .select('aprovado, nome, perfil, unidade, localizacao').eq('user_id', user.id).maybeSingle();
+    .select('aprovado, nome, perfil, unidade').eq('user_id', user.id).maybeSingle();
   if (error) {
     console.warn('Colunas de perfil ausentes, usando o formato antigo:', error.message);
     ({ data, error } = await sb.from('usuarios_permitidos')
       .select('aprovado, nome').eq('user_id', user.id).maybeSingle());
   }
-  if (error || !data) return { aprovado: false, nome: null, perfil: null, unidade: null, localizacao: null };
+  if (error || !data) return { aprovado: false, nome: null, perfil: null, unidade: null };
   return {
     aprovado: data.aprovado === true,
     nome: data.nome,
     perfil: data.perfil || null,
-    unidade: data.unidade || null,
-    localizacao: data.localizacao || null
+    unidade: data.unidade || null
   };
 }
 
@@ -154,7 +193,7 @@ async function mostrarTelaCorreta(session) {
   emailUsuarioAtual = (user.email || '').toLowerCase();
   userIdAtual = user.id;
 
-  const { aprovado, nome, perfil, unidade, localizacao } = await verificarAprovacao(user);
+  const { aprovado, nome, perfil, unidade } = await verificarAprovacao(user);
 
   // O perfil guardado manda, com uma excecao: os super admins valem como admin
   // mesmo que a coluna diga outra coisa -- e o que o eh_super_admin() faz no
@@ -163,7 +202,6 @@ async function mostrarTelaCorreta(session) {
   perfilAtual      = ehSuper ? 'admin' : (perfil || 'consultor');
   isAdminAtual     = perfilAtual === 'admin';
   unidadeDoUsuario = unidade || null;
-  localizacaoAtual = localizacao || null;
   nomeUsuarioAtual = nomeParaExibir(user, nome);
 
   // innerHTML para poder colorir so o nome. O nome vem de usuarios_permitidos,

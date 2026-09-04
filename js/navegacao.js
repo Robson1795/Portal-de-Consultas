@@ -22,7 +22,6 @@ const PAGINAS = {
 };
 
 let perfilAtual = 'consultor';
-let localizacaoAtual = null;
 let paginaAtual = null;
 
 function podeVer(pagina) {
@@ -123,18 +122,12 @@ function montarCabecalho() {
 
   const caixa = document.getElementById('topbarLocal');
   if (permitidas.length === 1) {
-    const u = UNIDADES[permitidas[0]];
-    caixa.innerHTML = `<span class="pin">📍</span><span class="topbar-unidade-fixa">Unidade ${escapeHtml(permitidas[0])} — ${escapeHtml(u.cidade)} (${escapeHtml(u.uf)})</span>`;
+    caixa.innerHTML = `<span class="pin">📍</span><span class="topbar-unidade-fixa">${escapeHtml(rotuloUnidade(permitidas[0]))}</span>`;
   } else {
     caixa.innerHTML = `<span class="pin">📍</span>
       <select id="unitSelect" class="unit-select">${permitidas.map(c =>
-        `<option value="${c}" ${c === unidadeAtual ? 'selected' : ''}>Unidade ${c} — ${escapeHtml(UNIDADES[c].cidade)} (${escapeHtml(UNIDADES[c].uf)})</option>`
+        `<option value="${c}" ${c === unidadeAtual ? 'selected' : ''}>${escapeHtml(rotuloUnidade(c))}</option>`
       ).join('')}</select>`;
     document.getElementById('unitSelect').addEventListener('change', (e) => trocarUnidade(e.target.value));
-  }
-
-  if (localizacaoAtual) {
-    caixa.insertAdjacentHTML('beforeend',
-      `<span class="topbar-localizacao">· ${escapeHtml(localizacaoAtual)}</span>`);
   }
 }

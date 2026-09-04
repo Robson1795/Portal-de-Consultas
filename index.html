@@ -31,6 +31,15 @@
         <button class="btn" id="tabSignupBtn" style="flex:1;">Criar conta</button>
       </div>
       <div>
+        <select id="authUnidade" style="width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:10px; font-size:14px; background:white; color:var(--ink);">
+          <option value="">Selecione a unidade...</option>
+        </select>
+        <select id="authCargo" style="width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:10px; font-size:14px; background:white; color:var(--ink);">
+          <option value="">Selecione o cargo...</option>
+          <option value="consultor">Consultor</option>
+          <option value="estoque_alm">Estoque ALM</option>
+          <option value="estoque_aco">Estoque Aço</option>
+        </select>
         <input type="text" id="authNomeCompleto" placeholder="Seu nome completo" style="width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:10px; font-size:14px; display:none;">
         <input type="text" id="authEmail" placeholder="Nome de usuário (ex: joao.silva)" style="width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:10px; font-size:14px;">
         <input type="password" id="authPassword" placeholder="Sua senha" style="width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:10px; font-size:14px;">
@@ -331,7 +340,6 @@
               <th>Status</th>
               <th>Perfil de acesso</th>
               <th>Unidade</th>
-              <th>Localização</th>
               <th></th>
             </tr>
           </thead>
@@ -348,8 +356,13 @@
       remover o perfil <b>Admin</b> é exclusivo de Victor e Robson.
       O cadeado 🔒 indica linha que o banco recusaria.
       <br><br>
-      Cadastro novo nasce como <b>Consultor</b>, pendente e sem unidade — e sem unidade
-      definida a pessoa não consegue lançar contagem.
+      No cadastro a pessoa escolhe <b>unidade</b> e <b>cargo</b>, e as duas são obrigatórias.
+      O cargo escolhido é um <b>pedido</b>, não uma concessão: a conta nasce pendente, e o
+      administrador confere antes de aprovar. <b>Admin</b> não existe como opção no cadastro —
+      só é concedido aqui, por Victor ou Robson.
+      <br><br>
+      Para o usuário, <b>localização é a própria unidade</b> — não há campo separado. Nos itens
+      do estoque, localização é outra coisa: o endereço físico no almoxarifado.
     </div>
   </div>
 
