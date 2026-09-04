@@ -14,8 +14,8 @@ Sempre em **português do Brasil**.
 
 ## 1. Visão geral
 
-Portal web de consulta e contagem de estoque para a Kingspan Isoeste, cobrindo três unidades
-(106 Araquari-SC, 101 Anápolis-GO, 105 Cambuí-MG), com login individual, permissões por papel,
+Portal web de consulta e contagem de estoque para a Kingspan Isoeste, cobrindo oito unidades,
+com login individual, permissões por papel,
 contagem física em tempo real, fichas técnicas de itens com foto, e um módulo separado para
 auditoria de bobinas de aço.
 
@@ -118,6 +118,31 @@ O que é útil saber sem expor valor nenhum:
 | **Editor de fichas técnicas** | Admin + Joel — editam embalagem (caixa master/fracionada) |
 | **Editor de bobinas** (`editores_bobinas`) | Admin + Jhonatan Palace, Victor Dobner, Izabella — colam a planilha de bobinas |
 | **Novo cadastro** | Fica "aguardando aprovação" até o admin liberar em `usuarios_permitidos` |
+
+### As oito unidades
+
+`101` Anápolis (GO) · `103` Várzea Grande · `104` Vitória de Santo Antão · `105` Cambuí (MG) ·
+`106` Araquari (SC) · `107` Loja · `109` *(a confirmar)* · `110` Leme.
+
+**Não existem 102 nem 108.** As UF de 103, 104, 107 e 110 ainda não foram confirmadas, e a cidade
+da 109 também não — `rotuloUnidade()` em `js/estoque.js` cobre os três casos e nunca imprime
+`Unidade 107 — Loja ()`.
+
+### Localização quer dizer duas coisas diferentes
+
+| Onde | O que é |
+|---|---|
+| **Usuário** | Localização **é a própria unidade**. Não existe campo separado — a coluna `usuarios_permitidos.localizacao` foi removida em 04/09/2026 justamente para não haver duas verdades |
+| **Item de estoque** (`estoque.localizacao`) | O endereço físico no almoxarifado: rua, corredor, prateleira. Ex.: `A-01-01-01`, `CANT B` |
+
+`bobinas_aco.localizacao` segue a segunda definição — é onde a bobina está no pátio.
+
+### Cadastro: unidade e cargo obrigatórios
+
+Quem se cadastra escolhe **unidade** e **cargo**, e as duas são obrigatórias. O cargo é um
+**pedido**, não uma concessão: o gatilho `forca_cadastro_neutro` no banco recusa `admin` e força
+`aprovado = false`, então escolher cargo no cadastro não dá acesso a nada. Quem libera é o
+administrador, na aba Configurações. `Admin` não aparece como opção no cadastro.
 
 ### Perfis (Fase 1, 03/09/2026)
 
