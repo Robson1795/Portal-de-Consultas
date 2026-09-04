@@ -33,7 +33,7 @@ async function carregarUsuarios() {
   aviso.className = 'status-msg';
 
   const { data, error } = await sb.from('usuarios_permitidos')
-    .select('user_id, email, nome, perfil, unidade, localizacao, aprovado, solicitado_em')
+    .select('user_id, email, nome, perfil, unidade, aprovado, solicitado_em')
     .order('aprovado', { ascending: true })
     .order('email', { ascending: true });
 
@@ -73,7 +73,7 @@ function renderUsuarios() {
     }).join('');
 
     const opcoesUnidade = '<option value="">—</option>' + Object.keys(UNIDADES).map(c =>
-      `<option value="${c}" ${u.unidade === c ? 'selected' : ''}>${c} · ${escapeHtml(UNIDADES[c].cidade)}</option>`
+      `<option value="${c}" ${u.unidade === c ? 'selected' : ''}>${escapeHtml(rotuloUnidade(c))}</option>`
     ).join('');
 
     const motivo = ehEuMesmo
@@ -89,8 +89,6 @@ function renderUsuarios() {
       <td><span class="cfg-status ${st.classe}">${st.rotulo}</span></td>
       <td><select class="cfg-perfil" ${travada ? 'disabled' : ''}>${opcoesPerfil}</select></td>
       <td><select class="cfg-unidade" ${travada ? 'disabled' : ''}>${opcoesUnidade}</select></td>
-      <td><input type="text" class="cfg-local" placeholder="ex: Corredor A-G"
-                 value="${escapeHtml(u.localizacao || '')}" ${travada ? 'disabled' : ''}></td>
       <td class="cfg-acoes">
         ${travada
           ? `<span class="cfg-travada" title="${escapeHtml(motivo)}">🔒</span>`
@@ -106,7 +104,6 @@ async function aplicarLinha(tr, aprovar) {
   const alvo = tr.dataset.id;
   const perfil = tr.querySelector('.cfg-perfil').value;
   const unidade = tr.querySelector('.cfg-unidade').value;
-  const local = tr.querySelector('.cfg-local').value.trim();
   const aviso = document.getElementById('cfgMsg');
 
   tr.querySelectorAll('button').forEach(b => b.disabled = true);
@@ -119,7 +116,6 @@ async function aplicarLinha(tr, aprovar) {
     alvo,
     novo_perfil: perfil,
     nova_unidade: unidade || null,
-    nova_localizacao: local || null,
     novo_aprovado: aprovar ? true : null
   });
 

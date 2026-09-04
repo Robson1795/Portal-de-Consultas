@@ -338,11 +338,30 @@ function formatarCaixas(totalPecas, itemCode) {
   return partes.length ? `= ${partes.join(' + ')}` : '';
 }
 
+// As oito unidades. Nao existem 102 nem 108.
+// `cidade` vazia sai como "Unidade 103", sem inventar nome de cidade --
+// preencher quando as cidades das novas unidades forem confirmadas.
 const UNIDADES = {
-  '106': { cidade: 'Araquari', uf: 'SC' },
-  '101': { cidade: 'Anápolis', uf: 'GO' },
-  '105': { cidade: 'Cambuí', uf: 'MG' }
+  '101': { cidade: 'Anápolis',               uf: 'GO' },
+  '103': { cidade: 'Várzea Grande',          uf: ''   },
+  '104': { cidade: 'Vitória de Santo Antão', uf: ''   },
+  '105': { cidade: 'Cambuí',                 uf: 'MG' },
+  '106': { cidade: 'Araquari',               uf: 'SC' },
+  '107': { cidade: 'Loja',                   uf: ''   },
+  '109': { cidade: '',                       uf: ''   },  // a confirmar
+  '110': { cidade: 'Leme',                   uf: ''   }
 };
+
+// Tres formatos, conforme o que se sabe da unidade:
+//   "Unidade 106 — Araquari (SC)"   cidade e UF
+//   "Unidade 110 — Leme"            cidade sem UF confirmada
+//   "Unidade 109"                   nem cidade
+// Nunca sai "Unidade 107 — Loja ()".
+function rotuloUnidade(cod) {
+  const u = UNIDADES[cod];
+  if (!u || !u.cidade) return 'Unidade ' + cod;
+  return u.uf ? `Unidade ${cod} — ${u.cidade} (${u.uf})` : `Unidade ${cod} — ${u.cidade}`;
+}
 let unidadeAtual = '106';
 
 function atualizarSubtituloUnidade() {
