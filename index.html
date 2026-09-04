@@ -412,6 +412,44 @@
       </div>
     </div>
 
+    <div class="req-secao">Configuração por unidade</div>
+    <div class="panel">
+      <div class="cfg-barra">
+        <button class="btn" id="cfgUniRecarregar">Recarregar</button>
+        <span class="status-msg" id="cfgUniMsg"></span>
+      </div>
+      <div class="scroll-hint">Arraste para o lado para ver todas as colunas &rarr;</div>
+      <div class="scroll-area">
+        <table class="cfg-tabela">
+          <thead>
+            <tr>
+              <th>Unidade</th>
+              <th>E-mails do ALM</th>
+              <th>Senha de contagem</th>
+              <th>PIN de edição</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="cfgUniCorpo"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="cfg-nota">
+      <b>E-mails do ALM.</b> Destinatários da Requisição ALM daquela unidade. Vários endereços,
+      separados por ponto e vírgula. Unidade sem e-mail cadastrado tem o envio desabilitado —
+      a requisição ainda pode ser salva, e o ALM a vê pela lista no portal.
+      <br><br>
+      <b>Senha de contagem e PIN de edição.</b> Desde 04/09/2026 estas senhas **não estão mais no
+      código do portal**. Elas vivem aqui, e a conferência acontece dentro do banco: o navegador
+      pergunta "esta senha confere?" e recebe apenas sim ou não. Antes ficavam em
+      <code>js/config.js</code>, visíveis para qualquer pessoa com Ctrl+U.
+      <br><br>
+      Unidade sem senha cadastrada <b>não abre o modo contagem</b> — falha fechado. Se alguém não
+      conseguir entrar na contagem, confira aqui primeiro: foi o que travou a apresentação na
+      unidade 104.
+    </div>
+
     <div class="cfg-nota">
       <b>Como as permissões são aplicadas.</b> Esta tela não decide nada: toda alteração passa
       pela função <code>definir_acesso()</code> no banco, que confere quem está chamando antes

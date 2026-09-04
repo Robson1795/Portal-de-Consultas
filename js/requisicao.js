@@ -99,9 +99,11 @@ async function carregarCatalogoItens() {
 }
 
 async function carregarEmailsAlm() {
-  const { data, error } = await sb.from('config_unidade')
-    .select('emails_alm').eq('unidade', unidadeAtual).maybeSingle();
-  emailsAlmUnidade = (!error && data && data.emails_alm) ? data.emails_alm.trim() : '';
+  // Por funcao, nao pela tabela: `config_unidade` passou a ser legivel so
+  // para admin, porque guarda as senhas. A funcao devolve apenas o e-mail.
+  const { data, error } = await sb.rpc('emails_alm_da_unidade', { uni: unidadeAtual });
+  if (error) console.error('Falha ao carregar os e-mails do ALM:', error.message);
+  emailsAlmUnidade = (!error && data) ? String(data).trim() : '';
   document.getElementById('reqSemEmail').style.display = emailsAlmUnidade ? 'none' : 'block';
   document.getElementById('reqEnviarBtn').disabled = !emailsAlmUnidade;
 }

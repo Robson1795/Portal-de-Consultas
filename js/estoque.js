@@ -999,8 +999,25 @@ contagemBtn.addEventListener('click', () => {
   }
 });
 
-document.getElementById('contagemPinSubmit').addEventListener('click', () => {
-  if (contagemPinInput.value === PINS_CONTAGEM[unidadeAtual]) {
+// A senha nao esta no navegador: o banco responde apenas sim ou nao.
+document.getElementById('contagemPinSubmit').addEventListener('click', async () => {
+  const botao = document.getElementById('contagemPinSubmit');
+  contagemPinMsg.textContent = 'Conferindo...';
+  botao.disabled = true;
+
+  const { data, error } = await sb.rpc('senha_contagem_confere',
+    { uni: unidadeAtual, tentativa: contagemPinInput.value });
+
+  botao.disabled = false;
+  if (error) {
+    // Erro de rede ou funcao ausente nao pode passar por "senha certa",
+    // nem ficar calado.
+    contagemPinMsg.textContent = 'Não foi possível conferir a senha: ' + error.message;
+    console.error('Falha ao conferir a senha de contagem:', error.message);
+    return;
+  }
+  if (data === true) {
+    contagemPinMsg.textContent = '';
     ativarModoContagem();
   } else {
     contagemPinMsg.textContent = 'Senha incorreta.';
@@ -1104,8 +1121,22 @@ document.getElementById('toggleEditBtn').addEventListener('click', () => {
   editPanel.classList.toggle('open');
 });
 
-document.getElementById('pinSubmitBtn').addEventListener('click', () => {
-  if (pinInput.value === EDIT_PIN) {
+document.getElementById('pinSubmitBtn').addEventListener('click', async () => {
+  const botao = document.getElementById('pinSubmitBtn');
+  pinMsg.textContent = 'Conferindo...';
+  botao.disabled = true;
+
+  const { data, error } = await sb.rpc('pin_edicao_confere',
+    { uni: unidadeAtual, tentativa: pinInput.value });
+
+  botao.disabled = false;
+  if (error) {
+    pinMsg.textContent = 'Não foi possível conferir o PIN: ' + error.message;
+    console.error('Falha ao conferir o PIN de edição:', error.message);
+    return;
+  }
+  if (data === true) {
+    pinMsg.textContent = '';
     pinGateArea.style.display = 'none';
     editFormArea.style.display = 'block';
     pasteArea.value = currentData.map(r => [r.item, r.descricao, r.um, r.localizacao, r.quantidade].join('\t')).join('\n');

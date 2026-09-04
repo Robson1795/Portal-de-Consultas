@@ -143,3 +143,92 @@ document.getElementById('cfgCorpo').addEventListener('click', (e) => {
 });
 
 document.getElementById('cfgRecarregar').addEventListener('click', carregarUsuarios);
+
+
+// ===========================================================================
+// CONFIGURAÇÃO POR UNIDADE — e-mails do ALM, senha de contagem, PIN de edição
+//
+// A tabela `config_unidade` é legível só para admin, justamente porque guarda
+// as senhas. Esta seção é o único lugar onde elas aparecem, e para quem já
+// tem acesso a tudo. O portal em si nunca as recebe: confere por função no
+// banco (ver sql/fase7-senhas-na-aba-admin.sql).
+// ===========================================================================
+
+let configUnidades = [];
+
+async function carregarConfigUnidades() {
+  const aviso = document.getElementById('cfgUniMsg');
+  aviso.textContent = 'Carregando...';
+  aviso.className = 'status-msg';
+
+  const { data, error } = await sb.from('config_unidade')
+    .select('unidade, emails_alm, senha_contagem, pin_edicao').order('unidade');
+
+  if (error) {
+    aviso.textContent = 'Não foi possível carregar: ' + error.message;
+    aviso.className = 'status-msg status-err';
+    document.getElementById('cfgUniCorpo').innerHTML = '';
+    return;
+  }
+  aviso.textContent = '';
+  configUnidades = data || [];
+  renderConfigUnidades();
+}
+
+function renderConfigUnidades() {
+  document.getElementById('cfgUniCorpo').innerHTML = configUnidades.map(u => {
+    const faltaEmail = !u.emails_alm;
+    const faltaSenha = !u.senha_contagem;
+    return `
+    <tr data-unidade="${escapeHtml(u.unidade)}">
+      <td>
+        <div class="cfg-nome">${escapeHtml(rotuloUnidade(u.unidade))}</div>
+        ${faltaSenha ? '<div class="cfg-email" style="color:#92400e;">sem senha — contagem bloqueada</div>' : ''}
+        ${faltaEmail ? '<div class="cfg-email" style="color:#92400e;">sem e-mail — envio desabilitado</div>' : ''}
+      </td>
+      <td><input type="text" class="cfgu-emails" placeholder="alm@kingspanisoeste.com.br; outro@..."
+                 value="${escapeHtml(u.emails_alm || '')}" style="max-width:320px;"></td>
+      <td><input type="text" class="cfgu-senha" placeholder="ex: INV${escapeHtml(u.unidade)}"
+                 value="${escapeHtml(u.senha_contagem || '')}" style="max-width:130px;"></td>
+      <td><input type="text" class="cfgu-pin" placeholder="ex: 2026"
+                 value="${escapeHtml(u.pin_edicao || '')}" style="max-width:110px;"></td>
+      <td class="cfg-acoes"><button class="btn cfgu-salvar">Salvar</button></td>
+    </tr>`;
+  }).join('');
+}
+
+document.getElementById('cfgUniCorpo').addEventListener('click', async (e) => {
+  if (!e.target.closest('.cfgu-salvar')) return;
+  const tr = e.target.closest('tr');
+  const unidade = tr.dataset.unidade;
+  const aviso = document.getElementById('cfgUniMsg');
+
+  const emails = tr.querySelector('.cfgu-emails').value.trim();
+  const senha  = tr.querySelector('.cfgu-senha').value.trim();
+  const pin    = tr.querySelector('.cfgu-pin').value.trim();
+
+  tr.querySelectorAll('button').forEach(b => b.disabled = true);
+  aviso.textContent = 'Salvando...';
+  aviso.className = 'status-msg';
+
+  const { error } = await sb.from('config_unidade').update({
+    emails_alm: emails || null,
+    senha_contagem: senha || null,
+    pin_edicao: pin || null,
+    atualizado_em: new Date().toISOString(),
+    atualizado_por: nomeUsuarioAtual
+  }).eq('unidade', unidade);
+
+  tr.querySelectorAll('button').forEach(b => b.disabled = false);
+  if (error) {
+    aviso.textContent = 'Não foi possível salvar a unidade ' + unidade + ': ' + error.message;
+    aviso.className = 'status-msg status-err';
+    console.error('Falha ao salvar config_unidade:', error.message);
+    return;
+  }
+  aviso.textContent = 'Unidade ' + unidade + ' salva.';
+  aviso.className = 'status-msg status-ok';
+  await carregarConfigUnidades();
+});
+
+document.getElementById('cfgUniRecarregar').addEventListener('click', carregarConfigUnidades);

@@ -100,12 +100,23 @@ O que é útil saber sem expor valor nenhum:
 
 - A **chave anon do Supabase** está no `index.html` e é pública por desenho. Isso é aceitável:
   a proteção real são as políticas de RLS de cada tabela.
-- Existem quatro senhas embutidas no JavaScript: um PIN de edição, uma senha de contagem por
-  unidade e uma senha do módulo de bobinas (`EDIT_PIN` e `PINS_CONTAGEM` nas linhas 620-621,
-  `SENHA_AUDITORIA` na linha 1861).
-  ⚠️ **Elas não são segurança.** Estão em texto claro num arquivo que qualquer pessoa baixa —
-  basta abrir o portal e apertar Ctrl+U. Funcionam como trava contra clique acidental.
-  Quem protege dado é o RLS.
+- **Nenhuma senha está no código.** Até 04/09/2026 havia quatro em texto claro no JavaScript
+  (`EDIT_PIN`, `PINS_CONTAGEM`, `SENHA_AUDITORIA`) — públicas, bastava Ctrl+U. Hoje:
+
+  | Senha | Onde está |
+  |---|---|
+  | Contagem, por unidade | `config_unidade.senha_contagem`, editável na aba Configurações |
+  | PIN de edição, por unidade | `config_unidade.pin_edicao`, idem |
+  | Bobinas (`aço2026`) | **removida na Fase 2b** — o perfil controla o acesso |
+
+  A conferência acontece **dentro do banco**, por função `security definer`: o navegador chama
+  `senha_contagem_confere(unidade, tentativa)` e recebe apenas `true` ou `false`. A tabela é
+  legível só para admin, então a senha nunca chega ao navegador — de trava contra clique
+  acidental ela passou a ser proteção de verdade.
+
+  Unidade sem senha cadastrada **não abre o modo contagem**: falha fechado. Se alguém não
+  conseguir entrar na contagem, confira a aba Configurações primeiro — foi o que travou a
+  apresentação na unidade 104.
 
 ---
 
