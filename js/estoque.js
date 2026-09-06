@@ -357,6 +357,16 @@ function calcularCaixas(totalPecas, info) {
   return { caixasMaster, caixasFracionadas, pecasSoltas: restante };
 }
 
+// UM de exibição do item (Pç, Ct, M...), lida do estoque carregado. Rebite
+// vendido em "Ct" (cento) mostrar "50 pçs" na tela confundia quem cadastra
+// -- o numero da caixa e nessa unidade, nao em peca. 'pçs' é só o padrão
+// quando o item não está em currentData (ficha aberta antes do estoque
+// carregar, por exemplo).
+function umDoItem(itemCode) {
+  const linha = currentData.find(r => r.item === itemCode);
+  return (linha && linha.um) ? linha.um : 'pçs';
+}
+
 function formatarCaixas(totalPecas, itemCode) {
   const info = fichaBoxMap.get(itemCode);
   const resultado = calcularCaixas(totalPecas, info);
@@ -364,10 +374,11 @@ function formatarCaixas(totalPecas, itemCode) {
   // Na coluna de contagem nao ha espaço pra frase; so o cálculo numérico
   // aparece ali. "Sem padrão" fica só no modal (mostrarPadraoCaixas).
   if (resultado.semPadrao) return '';
+  const um = umDoItem(itemCode);
   const partes = [];
   if (resultado.caixasMaster > 0) partes.push(`${resultado.caixasMaster} cx master`);
   if (resultado.caixasFracionadas > 0) partes.push(`${resultado.caixasFracionadas} cx fracionada`);
-  if (resultado.pecasSoltas > 0) partes.push(`${resultado.pecasSoltas} pçs soltas`);
+  if (resultado.pecasSoltas > 0) partes.push(`${resultado.pecasSoltas} ${um} soltas`);
   return partes.length ? `= ${partes.join(' + ')}` : '';
 }
 
@@ -453,12 +464,16 @@ function podeEditarEmbalagem() {
 }
 
 function campoEmbalagem(data, itemCode) {
+  // A UM vem do estoque (Pç, Ct, M...), não da ficha. Rebite em "Ct" com o
+  // rótulo fixo "pçs" fazia parecer que "50" era peça quando era cento --
+  // confundia quem estava cadastrando embalagem.
+  const um = escapeHtml(umDoItem(itemCode));
   if (!podeEditarEmbalagem()) {
     if (data.sem_padrao_caixa) {
       return `<div class="modal-label">Embalagem</div><div class="modal-text">Sem padrão de caixa — item avulso.</div>`;
     }
     return data.qtd_caixa_master
-      ? `<div class="modal-label">Embalagem</div><div class="modal-text">Caixa master: ${escapeHtml(data.qtd_caixa_master)} pçs${data.qtd_caixa_fracionada ? ` · Caixa fracionada: ${escapeHtml(data.qtd_caixa_fracionada)} pçs` : ''}</div>`
+      ? `<div class="modal-label">Embalagem</div><div class="modal-text">Caixa master: ${escapeHtml(data.qtd_caixa_master)} ${um}${data.qtd_caixa_fracionada ? ` · Caixa fracionada: ${escapeHtml(data.qtd_caixa_fracionada)} ${um}` : ''}</div>`
       : '';
   }
   const semPadrao = !!data.sem_padrao_caixa;
@@ -466,13 +481,13 @@ function campoEmbalagem(data, itemCode) {
     <div class="modal-label">Embalagem (editável)</div>
     <div style="display:flex; gap:8px; margin-top:4px;">
       <div style="flex:1;">
-        <label style="font-size:11px; color:var(--muted);">Caixa master (pçs)</label>
+        <label style="font-size:11px; color:var(--muted);">Caixa master (${um})</label>
         <input type="text" inputmode="numeric" class="embalagem-input" data-item="${escapeHtml(itemCode)}" data-campo="qtd_caixa_master"
                value="${data.qtd_caixa_master || ''}" placeholder="Ex: 2000" ${semPadrao ? 'disabled' : ''}
                style="width:100%; padding:7px 8px; border:1px solid var(--border); border-radius:6px; font-size:13px;">
       </div>
       <div style="flex:1;">
-        <label style="font-size:11px; color:var(--muted);">Caixa fracionada (pçs)</label>
+        <label style="font-size:11px; color:var(--muted);">Caixa fracionada (${um})</label>
         <input type="text" inputmode="numeric" class="embalagem-input" data-item="${escapeHtml(itemCode)}" data-campo="qtd_caixa_fracionada"
                value="${data.qtd_caixa_fracionada || ''}" placeholder="Ex: 200" ${semPadrao ? 'disabled' : ''}
                style="width:100%; padding:7px 8px; border:1px solid var(--border); border-radius:6px; font-size:13px;">
@@ -630,13 +645,14 @@ document.getElementById('tableBody').addEventListener('click', (e) => {
 const padraoModal = document.getElementById('padraoModal');
 function mostrarPadraoCaixas(btn) {
   const info = fichaBoxMap.get(btn.dataset.item);
+  const um = umDoItem(btn.dataset.item);
   const texto = info && info.semPadrao
     ? 'Este item não tem padrão de caixa — vem avulso.'
     : formatarCaixas(btn.dataset.qtd, btn.dataset.item) || 'Sem padrão de caixa suficiente pra calcular.';
   document.getElementById('padraoCodigo').textContent = 'Item ' + btn.dataset.item;
   document.getElementById('padraoTexto').textContent = texto.replace(/^= /, '');
   document.getElementById('padraoReferencia').textContent = (info && !info.semPadrao)
-    ? `Caixa master: ${info.master} pçs${info.fracionada ? ` · Caixa fracionada: ${info.fracionada} pçs` : ''}`
+    ? `Caixa master: ${info.master} ${um}${info.fracionada ? ` · Caixa fracionada: ${info.fracionada} ${um}` : ''}`
     : '';
   padraoModal.classList.add('open');
 }
