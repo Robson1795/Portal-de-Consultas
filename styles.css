@@ -211,6 +211,12 @@
     border-radius: 50%; width: 30px; height: 30px; cursor: pointer; font-size: 16px;
   }
   .modal-box img { width: 100%; border-radius: 10px; margin-bottom: 12px; background: var(--row-alt); }
+  .modal-foto-pendente {
+    width: 100%; height: 140px; border-radius: 10px; margin-bottom: 12px;
+    background: var(--row-alt); border: 1px dashed var(--border);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted); font-size: 13px; text-align: center; padding: 0 16px;
+  }
   .modal-box h3 { margin: 0 0 4px 0; font-size: 16px; color: var(--blue-dark); }
   .modal-box .modal-item-code { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
   .modal-box .modal-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-top: 12px; margin-bottom: 4px; font-weight: 700; }

@@ -585,6 +585,8 @@ async function openFichaModal(itemCode) {
           await sb.from('fichas_tecnicas').upsert({ item: itemCode }, { onConflict: 'item' });
           await salvarEmbalagem(inp);
         });
+        // Enter salva na hora, sem precisar clicar fora ou dar Tab.
+        inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); });
       });
       const chk = fichaModalBox.querySelector('.sem-padrao-check');
       if (chk) chk.addEventListener('change', async () => {
@@ -597,7 +599,9 @@ async function openFichaModal(itemCode) {
 
   fichaModalBox.innerHTML = `
     <button class="modal-close" id="fichaCloseBtn3">✕</button>
-    ${data.imagem_url ? `<img src="${escapeHtml(data.imagem_url)}" alt="${escapeHtml(data.descricao || itemCode)}">` : ''}
+    ${data.imagem_url
+      ? `<img src="${escapeHtml(data.imagem_url)}" alt="${escapeHtml(data.descricao || itemCode)}">`
+      : `<div class="modal-foto-pendente">📷 Em breve, imagem do material</div>`}
     <h3>${escapeHtml(data.descricao || itemCode)}</h3>
     <div class="modal-item-code">Código: ${escapeHtml(itemCode)}</div>
     ${data.uso ? `<div class="modal-label">Uso recomendado</div><div class="modal-text">${escapeHtml(data.uso)}</div>` : ''}
@@ -606,6 +610,7 @@ async function openFichaModal(itemCode) {
   document.getElementById('fichaCloseBtn3').addEventListener('click', closeFichaModal);
   fichaModalBox.querySelectorAll('.embalagem-input').forEach(inp => {
     inp.addEventListener('change', () => salvarEmbalagem(inp));
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); });
   });
   const chk3 = fichaModalBox.querySelector('.sem-padrao-check');
   if (chk3) chk3.addEventListener('change', () => salvarSemPadrao(chk3));
