@@ -87,12 +87,21 @@ create table if not exists pedido_itens (
   separado_em      timestamptz,
   created_at       timestamptz not null default now(),
 
-  -- Reimportar a planilha A nao pode duplicar item: a chave natural da
-  -- linha e o pedido + a sequencia dele.
-  constraint pedido_itens_seq_unico unique (pedido_id, seq),
+  -- NAO existe chave natural nesta planilha. A tentativa anterior
+  -- (unique pedido_id + seq) foi removida depois de conferir a planilha
+  -- real de 08/09/2026:
+  --   * o mesmo pedido repete o mesmo `seq` em TODAS as linhas
+  --     (KV874472: 7 itens, todos seq = 10);
+  --   * o mesmo item, com a mesma OS, aparece duas vezes com quantidades
+  --     diferentes (KV827905, item 130153, OS 147597, 760 e 30).
+  -- Com aquela constraint a importacao perdia 7 de cada 11 itens. Por isso
+  -- a importacao substitui os itens do pedido inteiro, como o modulo de
+  -- bobinas ja faz.
 
+  -- 'falta_reporte' e a coluna STATUS da planilha com "FALTA REPORTE":
+  -- estado proprio, nem vazio nem separado. Nao conta como concluido.
   constraint pedido_itens_status_valido check (status_separacao in
-    ('aguardando','separado','reportado'))
+    ('aguardando','separado','reportado','falta_reporte'))
 );
 
 create table if not exists exp_acessorios (

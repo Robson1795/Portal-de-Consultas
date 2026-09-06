@@ -500,9 +500,11 @@ td.col-acoes { white-space: nowrap; text-align: center; }
    Menu lateral retratil + cabecalho. O grid da .app-shell tem duas colunas;
    fechar o menu vira a primeira coluna para 0. No celular a lateral sai da
    tela e um overlay cobre o conteudo. */
+/* 262px e nao 232px: "Programação de Separação" e o rotulo mais longo do
+   menu e era cortado no meio (o .nav-item usa white-space: nowrap). */
 .app-shell {
   display: grid;
-  grid-template-columns: 232px 1fr;
+  grid-template-columns: 262px 1fr;
   min-height: 100vh;
   transition: grid-template-columns 0.18s ease;
 }
@@ -580,7 +582,7 @@ td.col-acoes { white-space: nowrap; text-align: center; }
 @media (max-width: 860px) {
   .app-shell { grid-template-columns: 0px 1fr; }
   .app-shell:not(.menu-fechado) .sidebar {
-    position: fixed; top: 0; left: 0; bottom: 0; width: 232px; z-index: 60;
+    position: fixed; top: 0; left: 0; bottom: 0; width: 262px; z-index: 60;
     box-shadow: 4px 0 18px rgba(0,0,0,0.18);
   }
   .app-shell:not(.menu-fechado) #sidebarOverlay {

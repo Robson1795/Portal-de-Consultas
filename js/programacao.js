@@ -476,12 +476,31 @@ function flagDoTextoProg(txt) {
   return null;
 }
 
+// Os tres valores que a coluna STATUS da planilha real usa:
+//   vazio                 -> aguardando
+//   "SEPARADO/REPORTADO"  -> separado
+//   "FALTA REPORTE"       -> falta_reporte
+//
+// "FALTA REPORTE" tem estado proprio de propósito: nao e o mesmo que vazio
+// (ninguem mexeu) nem o mesmo que separado (pronto). Ele NAO conta como
+// concluido -- ver itemConcluido().
 function statusItemDoTexto(txt) {
-  const t = String(txt || '').toLowerCase();
-  if (!t.trim()) return 'aguardando';
-  if (/reportad/.test(t) && !/separad/.test(t)) return 'reportado';
+  const t = String(txt || '').trim().toLowerCase();
+  if (!t) return 'aguardando';
+  if (/falta\s*report/.test(t)) return 'falta_reporte';
   if (/separad/.test(t)) return 'separado';
+  if (/reportad/.test(t)) return 'reportado';
   return 'aguardando';
+}
+
+// Linhas de cabecalho/metadado da planilha A que nao sao pedido:
+// "ALM", "CÓDIGO: PCP-FOR-001", "TÍTULO: ...", "Revisor: ...", "N° Pedido".
+// Sem isto, "ALM" virava um pedido fantasma no banco.
+function ehLinhaCabecalhoA(primeiraColuna) {
+  const t = String(primeiraColuna || '').trim();
+  if (!t) return false;
+  return /^(alm|c[óo]digo\s*:|t[íi]tulo\s*:|revisor\s*:|aprovador\s*:|revis[ãa]o\s*:|unidade\s*:)/i.test(t)
+      || /^(n?[ºo°]?\s*pedido|pedido)/i.test(t);
 }
 
 // "embarque 04/09" na observação -> a data daquele pedido, no lugar da data
@@ -527,15 +546,23 @@ document.getElementById('progImportConfirmBtn').addEventListener('click', async 
   await carregarProgramacao();
 });
 
+// Assinatura da linha, pra reencontrar o mesmo item numa reimportacao.
+// A planilha NAO tem chave: o mesmo pedido repete o mesmo `seq` em todas as
+// linhas (KV874472 tem 7 itens, todos seq=10) e ate o mesmo item com a
+// mesma OS aparece duas vezes com quantidades diferentes. Entao a unica
+// identidade possivel e o conjunto dos campos.
+function assinaturaItemA(i) {
+  return [i.seq, i.codigo_item, i.numero_os_op, i.quantidade].join('|');
+}
+
 async function importarPlanilhaA(linhas, dataRef) {
   const msg = document.getElementById('progImportMsg');
   const itens = [];
   let ignoradas = 0;
 
-  linhas.forEach((col, i) => {
+  linhas.forEach((col) => {
     const numero = (col[0] || '').trim();
-    // Cabeçalho em qualquer posição (ver a mesma decisão em importarPlanilhaB).
-    if (/^(n?[ºo°]?\s*pedido|pedido)/i.test(numero)) return;
+    if (ehLinhaCabecalhoA(numero)) return;
     if (!numero) { ignoradas++; return; }
     const seq = parseInt(col[2], 10);
     itens.push({
@@ -554,12 +581,6 @@ async function importarPlanilhaA(linhas, dataRef) {
 
   if (!itens.length) {
     msg.textContent = 'Nenhuma linha válida. A primeira coluna precisa ser o número do pedido.';
-    msg.className = 'status-msg status-err';
-    return null;
-  }
-  const semSeq = itens.filter(i => i.seq === null).length;
-  if (semSeq === itens.length) {
-    msg.textContent = 'Nenhuma linha tem sequência (coluna Seq). Sem ela não dá para gravar o item — a chave é pedido + seq.';
     msg.className = 'status-msg status-err';
     return null;
   }
@@ -584,27 +605,100 @@ async function importarPlanilhaA(linhas, dataRef) {
   if (erroPedidos) { falhaImport(erroPedidos.message); return null; }
 
   const idPorNumero = new Map((gravados || []).map(p => [p.numero_pedido, p.id]));
+  const idsAfetados = [...idPorNumero.values()];
 
-  // 2) Itens. Sem seq não dá para gravar: a chave natural é pedido + seq.
+  // 2) Antes de substituir, guarda o que o OPERADOR marcou no app. A planilha
+  //    vem do Excel e nao sabe do que foi marcado aqui; sem isso, reimportar
+  //    apagaria o trabalho de quem estava separando.
+  const marcadoNoApp = new Map();
+  if (idsAfetados.length) {
+    const { data: antigos } = await sb.from('pedido_itens')
+      .select('pedido_id, seq, codigo_item, numero_os_op, quantidade, status_separacao, separado_por, separado_em')
+      .in('pedido_id', idsAfetados);
+    (antigos || []).forEach(a => {
+      if (a.status_separacao && a.status_separacao !== 'aguardando') {
+        marcadoNoApp.set(a.pedido_id + '::' + assinaturaItemA(a), a);
+      }
+    });
+  }
+
+  // 3) Substituicao total dos itens desses pedidos. E o mesmo padrao do
+  //    modulo de bobinas: sem chave natural, atualizar linha a linha nao e
+  //    possivel -- some quem saiu da planilha, entra quem chegou.
+  if (idsAfetados.length) {
+    const { error: erroDel } = await sb.from('pedido_itens').delete().in('pedido_id', idsAfetados);
+    if (erroDel) { falhaImport(erroDel.message); return null; }
+  }
+
+  let preservados = 0;
   const paraGravar = itens
-    .filter(i => i.seq !== null && idPorNumero.has(i.numero_pedido))
-    .map(i => ({
-      pedido_id: idPorNumero.get(i.numero_pedido),
-      seq: i.seq, codigo_item: i.codigo_item, descricao: i.descricao,
-      unidade_medida: i.unidade_medida, quantidade: i.quantidade,
-      numero_os_op: i.numero_os_op, observacao: i.observacao,
-      status_separacao: i.status_separacao
-    }));
+    .filter(i => idPorNumero.has(i.numero_pedido))
+    .map(i => {
+      const pedidoId = idPorNumero.get(i.numero_pedido);
+      const linha = {
+        pedido_id: pedidoId,
+        seq: i.seq, codigo_item: i.codigo_item, descricao: i.descricao,
+        unidade_medida: i.unidade_medida, quantidade: i.quantidade,
+        numero_os_op: i.numero_os_op, observacao: i.observacao,
+        status_separacao: i.status_separacao
+      };
+      // A planilha manda quando traz status; quando vem vazia, o que o
+      // operador ja marcou no app prevalece.
+      if (i.status_separacao === 'aguardando') {
+        const anterior = marcadoNoApp.get(pedidoId + '::' + assinaturaItemA(i));
+        if (anterior) {
+          linha.status_separacao = anterior.status_separacao;
+          linha.separado_por = anterior.separado_por;
+          linha.separado_em = anterior.separado_em;
+          preservados++;
+        }
+      }
+      return linha;
+    });
 
-  const { error: erroItens } = await sb.from('pedido_itens')
-    .upsert(paraGravar, { onConflict: 'pedido_id,seq' });
+  const { error: erroItens } = await sb.from('pedido_itens').insert(paraGravar);
   if (erroItens) { falhaImport(erroItens.message); return null; }
 
   const avisos = [];
-  if (ignoradas) avisos.push(`${ignoradas} linha(s) sem pedido ignorada(s)`);
-  if (semSeq) avisos.push(`${semSeq} sem sequência não gravada(s)`);
+  if (ignoradas) avisos.push(`${ignoradas} linha(s) em branco ou de cabeçalho ignorada(s)`);
+  if (preservados) avisos.push(`${preservados} marcação(ões) feita(s) no app preservada(s)`);
   return `${paraGravar.length} item(ns) em ${porPedido.size} pedido(s) importado(s).`
     + (avisos.length ? ' ' + avisos.join('; ') + '.' : '');
+}
+
+// Layout real da planilha de carregamento (conferido com a planilha de
+// 08/09/2026). O bloco de veiculo e o horario NAO vem em linha propria:
+// eles ficam nas duas primeiras colunas da PRIMEIRA linha do bloco, e vem
+// vazios nas linhas seguintes -- e o "arrasta" (forward-fill) do Excel.
+//
+//   col 0  bloco de veiculo + entrega  "TRUCK 8,5M - ENTREGA 09/09"
+//   col 1  horario                     "06H"
+//   col 2  numero do pedido            "KV875303"
+//   col 3  cliente (abreviado)         "PLASSON DO B"
+//   col 4  cidade (ja com UF junto)    "CRICIUMA/SC"
+//   col 5  UF                          "SC"
+//   col 6  modalidade de frete         "CIF"
+//   col 7  descricao do produto
+//   col 8  quantidade                  "423,07"
+//   col 9  valor                       "R$ 52.689,14"
+//   col 10 Sim/Nao                     "Não"
+//   col 11 observacao                  "Engenharia" / "Avulso" / vazio
+//   col 12 vendedor/representante       "RACHEL RUBIANE STOCK"
+const COL_B = {
+  bloco: 0, horario: 1, pedido: 2, cliente: 3, cidade: 4, uf: 5,
+  frete: 6, produto: 7, quantidade: 8, valor: 9, flag: 10,
+  observacao: 11, vendedor: 12
+};
+
+// "TRUCK 8,5M - ENTREGA 09/09" -> {veiculo: "TRUCK 8,5M", entrega: "09/09"}
+// A data de entrega vem grudada no nome do veiculo; sem separar, ela se
+// perderia e o pedido usaria so a data digitada no formulario.
+function separarBlocoVeiculo(texto) {
+  const t = String(texto || '').trim();
+  if (!t) return { veiculo: null, entrega: null };
+  const m = t.match(/^(.*?)\s*[-–]\s*ENTREGA\s+(\d{1,2})\s*\/\s*(\d{1,2})/i);
+  if (m) return { veiculo: m[1].trim(), entrega: `${m[3].padStart(2, '0')}-${m[2].padStart(2, '0')}` };
+  return { veiculo: t, entrega: null };
 }
 
 async function importarPlanilhaB(linhas, dataRef) {
@@ -612,41 +706,45 @@ async function importarPlanilhaB(linhas, dataRef) {
   const pedidos = new Map();
   let veiculoAtual = null;
   let horarioAtual = null;
+  let entregaAtual = null;
   let ignoradas = 0;
 
-  linhas.forEach((col, i) => {
-    const preenchidas = col.filter(c => c);
-    const primeiro = (col[0] || '').trim();
+  linhas.forEach((col) => {
+    const bloco = (col[COL_B.bloco] || '').trim();
+    const horaCol = (col[COL_B.horario] || '').trim();
+    const numero = (col[COL_B.pedido] || '').trim();
 
-    // Linha de bloco: uma informação só na linha inteira (célula mesclada
-    // colada vira texto na 1ª coluna e vazio nas demais).
-    if (preenchidas.length === 1) {
-      const hora = horarioDoTextoProg(primeiro);
-      if (hora) { horarioAtual = hora; return; }
-      if (RE_VEICULO_PROG.test(primeiro)) { veiculoAtual = primeiro; horarioAtual = null; return; }
-      return;
+    // Forward-fill: quando a linha traz bloco/horario, eles passam a valer
+    // para ela e para as seguintes ate aparecer o proximo bloco.
+    if (bloco) {
+      const sep = separarBlocoVeiculo(bloco);
+      veiculoAtual = sep.veiculo;
+      entregaAtual = sep.entrega;
     }
-    // Cabeçalho em QUALQUER posição, não só na primeira linha: na planilha B
-    // ele vem depois das linhas de bloco (CARRETA, 07H), e algumas versões
-    // repetem o cabeçalho a cada bloco. Nenhum número de pedido começa com
-    // "pedido", então isso não descarta dado de verdade.
-    if (/^(n?[ºo°]?\s*pedido|pedido)/i.test(primeiro)) return;
-    if (!primeiro) { ignoradas++; return; }
+    if (horaCol) {
+      const hora = horarioDoTextoProg(horaCol);
+      if (hora) horarioAtual = hora;
+    }
 
-    // Número repetido na planilha: o último vence. O upsert recusaria o lote
-    // inteiro se o mesmo par (unidade, número) aparecesse duas vezes.
-    pedidos.set(primeiro, {
+    // Titulo da planilha ("PEDIDOS PROGRAMADOS 08/09") e cabecalho.
+    if (/^(n?[ºo°]?\s*pedido|pedido)/i.test(numero)) return;
+    if (!numero) { ignoradas++; return; }
+
+    // O mesmo pedido aparece em varias linhas (uma por carga/quantidade).
+    // Aqui interessa o cabecalho do pedido, entao a ultima linha vence --
+    // o upsert recusaria o lote se o mesmo par (unidade, numero) repetisse.
+    pedidos.set(numero, {
       unidade: unidadeAtual,
-      numero_pedido: primeiro,
-      cliente: col[1] || null,
-      cidade: col[2] || null,
-      uf: (col[3] || '').toUpperCase() || null,
-      modalidade_frete: (col[4] || '').toUpperCase() || null,
+      numero_pedido: numero,
+      cliente: col[COL_B.cliente] || null,
+      cidade: col[COL_B.cidade] || null,
+      uf: (col[COL_B.uf] || '').toUpperCase() || null,
+      modalidade_frete: (col[COL_B.frete] || '').toUpperCase() || null,
       tipo_veiculo: veiculoAtual,
-      data_carregamento: dataRef,
+      data_carregamento: entregaAtual ? `${String(dataRef).slice(0, 4)}-${entregaAtual}` : dataRef,
       horario_carregamento: horarioAtual,
-      observacao_carregamento: col[9] || null,
-      flag_adicional: flagDoTextoProg(col[8])
+      observacao_carregamento: col[COL_B.observacao] || null,
+      flag_adicional: flagDoTextoProg(col[COL_B.flag])
     });
   });
 
