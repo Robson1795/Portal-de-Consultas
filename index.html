@@ -363,6 +363,103 @@
   </div>
   <!-- ================= FIM REQUISIÇÃO ALM ================= -->
 
+  <!-- ================= PROGRAMAÇÃO DE SEPARAÇÃO ================= -->
+  <!-- Três telas do mesmo fluxo (separar -> endereçar -> carregar) em
+       sub-abas, para não ocupar três lugares no menu lateral. -->
+  <div id="programacaoContent" style="display:none;">
+    <div class="panel">
+      <div class="cfg-barra">
+        <div id="progAbas" style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn btn-primary" data-prog-aba="separacao">Separação</button>
+          <button class="btn" data-prog-aba="exp">EXP Acessórios</button>
+          <button class="btn" data-prog-aba="carregamento">Carregamento</button>
+        </div>
+        <button class="btn" id="progImportarBtn" style="margin-left:auto;">Importar planilhas</button>
+        <button class="btn" id="progAtualizarBtn">Atualizar</button>
+      </div>
+      <div class="status-msg" id="progMsg" style="padding:0 16px;"></div>
+
+      <!-- ---- Aba 1: Separação (itens da Planilha A) ---- -->
+      <div id="progSeparacao" class="prog-aba">
+        <div class="stat-cards" style="padding:14px 16px 0;">
+          <div class="stat-card">
+            <div class="stat-icone azul">📋</div>
+            <div class="stat-texto">
+              <div class="stat-rotulo">Itens no total</div>
+              <div class="stat-valor" id="progTotalItens">-</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icone" style="background:#fef3c7;">⏳</div>
+            <div class="stat-texto">
+              <div class="stat-rotulo">Pendentes</div>
+              <div class="stat-valor" id="progPendentes">-</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icone" style="background:#dcfce7;">✅</div>
+            <div class="stat-texto">
+              <div class="stat-rotulo">Separados</div>
+              <div class="stat-valor" id="progSeparados">-</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cfg-barra">
+          <input type="text" id="progBusca" placeholder="Buscar pedido, cliente ou item..." style="flex:1; min-width:200px;">
+          <select id="progFiltroStatus">
+            <option value="">Todos os status</option>
+            <option value="aguardando">Só pendentes</option>
+            <option value="separado">Só separados</option>
+          </select>
+        </div>
+
+        <div class="scroll-area">
+          <table id="progTabelaItens">
+            <thead>
+              <tr>
+                <th>Pedido</th><th>Cliente</th><th>Seq</th><th>Item</th>
+                <th>Descrição</th><th>UM</th><th>Qtd</th><th>OS/OP</th>
+                <th>Status</th><th>Ação</th>
+              </tr>
+            </thead>
+            <tbody id="progItensBody"></tbody>
+          </table>
+        </div>
+        <div class="empty-msg" id="progItensVazio" style="display:none;">
+          Nenhum item importado ainda. Use "Importar planilhas".
+        </div>
+      </div>
+
+      <!-- ---- Aba 2: EXP Acessórios (visão cruzada por pedido) ---- -->
+      <div id="progExp" class="prog-aba" style="display:none;">
+        <div class="scroll-area">
+          <table>
+            <thead>
+              <tr>
+                <th>Pedido</th><th>Cliente / Destino</th><th>Carregamento</th>
+                <th>Itens</th><th>Status consolidado</th><th>Endereço</th><th>Ação</th>
+              </tr>
+            </thead>
+            <tbody id="progExpBody"></tbody>
+          </table>
+        </div>
+        <div class="empty-msg" id="progExpVazio" style="display:none;">
+          Nenhum pedido na grade de carregamento ainda.
+        </div>
+      </div>
+
+      <!-- ---- Aba 3: Carregamento (grade por bloco e horário) ---- -->
+      <div id="progCarregamento" class="prog-aba" style="display:none;">
+        <div id="progGrade" style="padding:14px 16px;"></div>
+        <div class="empty-msg" id="progGradeVazio" style="display:none;">
+          Nenhum pedido programado. Importe a planilha de carregamento.
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- ================= FIM PROGRAMAÇÃO DE SEPARAÇÃO ================= -->
+
   <div id="configContent" style="display:none;">
     <div class="stat-cards">
       <div class="stat-card">
@@ -481,6 +578,33 @@
   <input type="file" accept="image/*" capture="environment" id="fotoEtiquetaInput" style="display:none;">
 
   <!-- Cadastro de centro de custo e item. Só admin abre; o RLS recusa os outros. -->
+  <!-- Importação das duas planilhas da programação -->
+  <div class="modal-overlay" id="progImportModal">
+    <div class="modal-box" style="max-width:680px;">
+      <button class="modal-close" id="progImportCloseBtn">&#10005;</button>
+      <h3 style="margin-top:0;">Importar planilhas da programação</h3>
+
+      <div id="progImportAbas" style="display:flex; gap:8px; margin-bottom:12px;">
+        <button class="btn btn-primary" data-imp-aba="A" style="flex:1;">Planilha A — itens</button>
+        <button class="btn" data-imp-aba="B" style="flex:1;">Planilha B — carregamento</button>
+      </div>
+
+      <div class="modal-label">Data de carregamento desta planilha</div>
+      <input type="date" id="progImportData" style="width:100%; margin-bottom:10px;">
+
+      <div class="modal-text" id="progImportFormato" style="margin-bottom:8px;"></div>
+
+      <textarea id="progImportTexto" rows="9" placeholder="Cole aqui as células copiadas do Excel (Ctrl+C na planilha, Ctrl+V aqui)."
+                style="width:100%; font-family:monospace; font-size:12px;"></textarea>
+
+      <div class="cfg-barra" style="padding:10px 0 0;">
+        <button class="btn btn-primary" id="progImportConfirmBtn">Conferir e importar</button>
+        <span class="status-msg" id="progImportMsg"></span>
+      </div>
+      <div id="progImportPrevia" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="cadastroModal">
     <div class="modal-box" style="max-width:620px;">
       <button class="modal-close" id="cadastroCloseBtn">&#10005;</button>
@@ -604,5 +728,6 @@
 <script src="js/ocr.js"></script>
 <script src="js/configuracoes.js"></script>
 <script src="js/requisicao.js"></script>
+<script src="js/programacao.js"></script>
 </body>
 </html>

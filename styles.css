@@ -327,6 +327,38 @@
 }
 .st-ativo    { background: #e2f6ea; color: #1d7a45; }
 .st-pendente { background: #fef3c7; color: #92400e; }
+.st-inativo  { background: #eef2f6; color: var(--muted); }
+
+/* ---- Programacao de Separacao ------------------------------------------- */
+/* A grade de carregamento imita o desenho da planilha original: blocos de
+   veiculo, e dentro de cada um, os horarios. Quem usa ja conhece esse
+   formato -- mudar a organizacao visual so criaria retrabalho de leitura. */
+.prog-bloco {
+  border: 1px solid var(--border); border-radius: 12px;
+  margin-bottom: 14px; overflow: hidden; background: var(--panel);
+}
+.prog-bloco-titulo {
+  background: var(--blue); color: #fff; padding: 9px 14px;
+  font-weight: 700; font-size: 13.5px; letter-spacing: 0.3px;
+}
+.prog-hora { border-top: 1px solid var(--border); padding: 10px 14px; }
+.prog-hora-rotulo {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 12.5px; font-weight: 700; color: var(--blue-dark);
+  margin-bottom: 7px;
+}
+.prog-card {
+  border: 1px solid var(--border); border-radius: 9px;
+  padding: 9px 11px; margin-bottom: 7px; background: var(--row-alt);
+}
+.prog-card-feito { opacity: 0.62; }
+.prog-card-topo { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; font-size: 13.5px; }
+.prog-card-acoes { margin-top: 7px; }
+.prog-obs-critica {
+  margin-top: 5px; padding: 5px 9px; border-radius: 7px;
+  background: #fee2e2; color: #991b1b; font-size: 12.5px; font-weight: 600;
+}
+.prog-aba table { min-width: 900px; }
 .cfg-tabela select, .cfg-tabela input[type="text"] {
   padding: 7px 9px; border: 1px solid var(--border); border-radius: 7px;
   font-size: 13px; background: white; color: var(--ink); max-width: 190px;
