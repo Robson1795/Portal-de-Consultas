@@ -10,6 +10,10 @@ let modoContagemAtivo = false;
 let nomeUsuarioAtual = '';
 let fichaImageMap = new Map();
 let fichaBoxMap = new Map();
+// Item ja "trabalhado": tem foto, embalagem numerica, ou foi marcado como
+// sem padrao de caixa. Decide a cor do botao de ficha na lista (pendente
+// x normal) -- ver render() e a classe .ficha-btn.pendente no styles.css.
+let fichaFeitoSet = new Set();
 let sortKey = null;
 let sortDir = 1;
 
@@ -75,12 +79,14 @@ function render(rows, intervalo) {
       <td>${escapeHtml(r.descricao)}</td>
       <td>${escapeHtml(r.um)}</td>
       <td class="loc"><span class="loc-chip">${escapeHtml(r.localizacao)}</span></td>
-      <td class="col-padrao" style="text-align:center;">${fichaBoxMap.has(r.item) ? `<button class="padrao-btn" data-item="${escapeHtml(r.item)}" data-qtd="${escapeHtml(r.quantidade)}" title="Ver padrão de caixas esperado">📦</button>` : ''}</td>
+      <td class="col-padrao" style="text-align:center;">${fichaBoxMap.has(r.item)
+        ? `<button class="padrao-btn" data-item="${escapeHtml(r.item)}" data-qtd="${escapeHtml(r.quantidade)}" title="Ver padrão de caixas esperado">📦</button>`
+        : (podeEditarEmbalagem() ? `<button class="avulso-btn" data-item="${escapeHtml(r.item)}" title="Marcar como item avulso, sem padrão de caixa">AVULSO</button>` : '')}</td>
       <td class="num">${escapeHtml(r.quantidade)}</td>
       <td class="col-acoes" style="display:${modoContagemAtivo ? 'none' : 'table-cell'};">
-        ${fichaImageMap.has(r.item)
-          ? `<button class="acao-btn ficha-btn" data-item="${escapeHtml(r.item)}" title="Ver foto e ficha técnica">👁</button>${fichaImageMap.get(r.item) ? `<img class="print-only-thumb" src="${escapeHtml(fichaImageMap.get(r.item))}" alt="">` : ''}`
-          : ''}
+        <button class="acao-btn ficha-btn${fichaFeitoSet.has(r.item) ? '' : ' pendente'}" data-item="${escapeHtml(r.item)}"
+                title="${fichaFeitoSet.has(r.item) ? 'Ver foto e ficha técnica' : 'Ainda não cadastrado — clique para preencher'}">👁</button>
+        ${fichaImageMap.get(r.item) ? `<img class="print-only-thumb" src="${escapeHtml(fichaImageMap.get(r.item))}" alt="">` : ''}
         <button class="acao-btn compare-btn" data-item="${escapeHtml(r.item)}" title="Comparar entre unidades">⇄</button>
       </td>
       <td class="col-contagem" style="display:${modoContagemAtivo ? 'table-cell' : 'none'};">
@@ -211,8 +217,12 @@ function applyFilterAndSort() {
     rows = rows.filter(r => String(r.localizacao).toLowerCase().includes(alvo));
   }
   if (filtros.um) rows = rows.filter(r => r.um === filtros.um);
-  if (filtros.padrao === 'com') rows = rows.filter(r => fichaBoxMap.has(r.item));
-  if (filtros.padrao === 'sem') rows = rows.filter(r => !fichaBoxMap.has(r.item));
+  // Tres estados agora, nao dois: numero definido / marcado avulso / nada
+  // ainda. fichaBoxMap.has() sozinho nao decide "com" porque ele passou a
+  // incluir tambem quem foi marcado como avulso.
+  if (filtros.padrao === 'com') rows = rows.filter(r => { const i = fichaBoxMap.get(r.item); return !!(i && !i.semPadrao); });
+  if (filtros.padrao === 'avulso') rows = rows.filter(r => { const i = fichaBoxMap.get(r.item); return !!(i && i.semPadrao); });
+  if (filtros.padrao === 'pendente') rows = rows.filter(r => !fichaBoxMap.has(r.item));
   if (filtros.zerado) rows = rows.filter(r => parseQtd(r.quantidade) === 0);
   if (filtros.comFoto) rows = rows.filter(r => fichaImageMap.has(r.item));
   if (filtros.divergente) {
@@ -297,23 +307,45 @@ function updateStats() {
 
 async function loadFichaImageMap() {
   try {
-    const { data, error } = await sb.from('fichas_tecnicas').select('item, imagem_url, qtd_caixa_master, qtd_caixa_fracionada');
+    const { data, error } = await sb.from('fichas_tecnicas')
+      .select('item, imagem_url, qtd_caixa_master, qtd_caixa_fracionada, sem_padrao_caixa');
     if (error) throw error;
     fichaImageMap = new Map((data || []).map(r => [r.item, r.imagem_url]));
+    // Entra no mapa quem tem numero de caixa OU foi marcado como "sem padrao"
+    // (o item existe, só que vem avulso). calcularCaixas() trata os dois:
+    // com master numerico calcula; com semPadrao, devolve o marcador.
     fichaBoxMap = new Map((data || [])
-      .filter(r => r.qtd_caixa_master)
-      .map(r => [r.item, { master: r.qtd_caixa_master, fracionada: r.qtd_caixa_fracionada }]));
+      .filter(r => r.qtd_caixa_master || r.sem_padrao_caixa)
+      .map(r => [r.item, {
+        master: r.qtd_caixa_master || null,
+        fracionada: r.qtd_caixa_fracionada || null,
+        semPadrao: !!r.sem_padrao_caixa
+      }]));
+    // "Trabalhado" pra fins de cor do botao: tem foto, tem numero de caixa,
+    // ou foi explicitamente marcado como sem padrao. Cadastro totalmente
+    // vazio (linha existe mas nada preenchido) continua contando como
+    // pendente -- é so um upsert de rascunho feito ao digitar o 1º campo.
+    fichaFeitoSet = new Set((data || [])
+      .filter(r => r.imagem_url || r.qtd_caixa_master || r.sem_padrao_caixa)
+      .map(r => r.item));
   } catch (e) {
     console.warn('Não foi possível carregar a lista de fichas técnicas:', e.message);
     fichaImageMap = new Map();
     fichaBoxMap = new Map();
+    fichaFeitoSet = new Set();
   }
 }
 
 // Calcula quantas caixas master fechadas, caixas fracionadas fechadas, e peças soltas
 // cabem num total de peças, com base no tamanho de cada tipo de caixa.
+//
+// Item marcado como "sem padrão de caixa" (vem avulso) não tem `master`
+// numérico pra dividir -- devolve um marcador próprio em vez de tentar
+// calcular (número / null viraria NaN).
 function calcularCaixas(totalPecas, info) {
-  if (!info || !info.master) return null;
+  if (!info) return null;
+  if (info.semPadrao) return { semPadrao: true };
+  if (!info.master) return null;
   let restante = Math.round(parseQtd(String(totalPecas)));
   const caixasMaster = Math.floor(restante / info.master);
   restante -= caixasMaster * info.master;
@@ -329,6 +361,9 @@ function formatarCaixas(totalPecas, itemCode) {
   const info = fichaBoxMap.get(itemCode);
   const resultado = calcularCaixas(totalPecas, info);
   if (!resultado) return '';
+  // Na coluna de contagem nao ha espaço pra frase; so o cálculo numérico
+  // aparece ali. "Sem padrão" fica só no modal (mostrarPadraoCaixas).
+  if (resultado.semPadrao) return '';
   const partes = [];
   if (resultado.caixasMaster > 0) partes.push(`${resultado.caixasMaster} cx master`);
   if (resultado.caixasFracionadas > 0) partes.push(`${resultado.caixasFracionadas} cx fracionada`);
@@ -408,6 +443,9 @@ const fichaModalBox = document.getElementById('fichaModalBox');
 
 function closeFichaModal() {
   fichaModal.classList.remove('open');
+  // Reflete na lista o que mudou dentro do modal (cor do botão de ficha,
+  // filtro de padrão de caixa) sem precisar recarregar a página inteira.
+  applyFilterAndSort();
 }
 
 function podeEditarEmbalagem() {
@@ -416,28 +454,85 @@ function podeEditarEmbalagem() {
 
 function campoEmbalagem(data, itemCode) {
   if (!podeEditarEmbalagem()) {
+    if (data.sem_padrao_caixa) {
+      return `<div class="modal-label">Embalagem</div><div class="modal-text">Sem padrão de caixa — item avulso.</div>`;
+    }
     return data.qtd_caixa_master
       ? `<div class="modal-label">Embalagem</div><div class="modal-text">Caixa master: ${escapeHtml(data.qtd_caixa_master)} pçs${data.qtd_caixa_fracionada ? ` · Caixa fracionada: ${escapeHtml(data.qtd_caixa_fracionada)} pçs` : ''}</div>`
       : '';
   }
+  const semPadrao = !!data.sem_padrao_caixa;
   return `
     <div class="modal-label">Embalagem (editável)</div>
     <div style="display:flex; gap:8px; margin-top:4px;">
       <div style="flex:1;">
         <label style="font-size:11px; color:var(--muted);">Caixa master (pçs)</label>
         <input type="text" inputmode="numeric" class="embalagem-input" data-item="${escapeHtml(itemCode)}" data-campo="qtd_caixa_master"
-               value="${data.qtd_caixa_master || ''}" placeholder="Ex: 2000"
+               value="${data.qtd_caixa_master || ''}" placeholder="Ex: 2000" ${semPadrao ? 'disabled' : ''}
                style="width:100%; padding:7px 8px; border:1px solid var(--border); border-radius:6px; font-size:13px;">
       </div>
       <div style="flex:1;">
         <label style="font-size:11px; color:var(--muted);">Caixa fracionada (pçs)</label>
         <input type="text" inputmode="numeric" class="embalagem-input" data-item="${escapeHtml(itemCode)}" data-campo="qtd_caixa_fracionada"
-               value="${data.qtd_caixa_fracionada || ''}" placeholder="Ex: 200"
+               value="${data.qtd_caixa_fracionada || ''}" placeholder="Ex: 200" ${semPadrao ? 'disabled' : ''}
                style="width:100%; padding:7px 8px; border:1px solid var(--border); border-radius:6px; font-size:13px;">
       </div>
     </div>
+    <label style="display:flex; align-items:center; gap:6px; margin-top:8px; font-size:12.5px; color:var(--muted); cursor:pointer;">
+      <input type="checkbox" class="sem-padrao-check" data-item="${escapeHtml(itemCode)}" ${semPadrao ? 'checked' : ''}>
+      Este item não tem padrão de caixa (vem avulso)
+    </label>
     <div class="status-msg" id="embalagemMsg" style="margin-top:4px;"></div>
   `;
+}
+
+// Marca/desmarca "item avulso, sem padrão de caixa". Ao marcar, zera e
+// desabilita os dois campos numéricos -- os dois formatos não convivem
+// (calcularCaixas() trataria número + semPadrao juntos de forma ambígua).
+async function salvarSemPadrao(checkbox) {
+  const itemCode = checkbox.dataset.item;
+  const marcado = checkbox.checked;
+  const msg = document.getElementById('embalagemMsg');
+  const inputs = fichaModalBox.querySelectorAll('.embalagem-input');
+  try {
+    const patch = { sem_padrao_caixa: marcado };
+    if (marcado) { patch.qtd_caixa_master = null; patch.qtd_caixa_fracionada = null; }
+    const { error } = await sb.from('fichas_tecnicas').update(patch).eq('item', itemCode);
+    if (error) throw error;
+
+    inputs.forEach(inp => { inp.disabled = marcado; if (marcado) inp.value = ''; });
+    if (marcado) {
+      fichaBoxMap.set(itemCode, { master: null, fracionada: null, semPadrao: true });
+    } else {
+      fichaBoxMap.delete(itemCode); // volta a "pendente" ate alguem preencher um numero
+    }
+    fichaFeitoSet.add(itemCode); // marcar (nos dois sentidos) já é uma decisão tomada
+    if (msg) { msg.textContent = 'Salvo!'; msg.className = 'status-msg status-ok'; setTimeout(() => { if (msg) msg.textContent = ''; }, 2000); }
+  } catch (err) {
+    checkbox.checked = !marcado; // desfaz visualmente, já que não gravou
+    if (msg) { msg.textContent = 'Erro: ' + err.message; msg.className = 'status-msg status-err'; }
+  }
+}
+
+// Botão "AVULSO" direto na lista: marca sem_padrao_caixa sem abrir o modal.
+// Pra quem está passando item por item marcando o que não tem caixa, abrir
+// modal -> marcar -> fechar por item seria lento demais.
+//
+// Sem confirm() de propósito -- travaria esse fluxo rápido a cada clique.
+// Engano se desfaz abrindo a ficha (👁) e desmarcando o checkbox de lá.
+async function marcarAvulsoRapido(itemCode) {
+  try {
+    const { error } = await sb.from('fichas_tecnicas').upsert(
+      { item: itemCode, sem_padrao_caixa: true, qtd_caixa_master: null, qtd_caixa_fracionada: null },
+      { onConflict: 'item' }
+    );
+    if (error) throw error;
+    fichaBoxMap.set(itemCode, { master: null, fracionada: null, semPadrao: true });
+    fichaFeitoSet.add(itemCode);
+    applyFilterAndSort();
+  } catch (err) {
+    alert(`Não foi possível marcar o item ${itemCode} como avulso: ${err.message}`);
+  }
 }
 
 async function salvarEmbalagem(input) {
@@ -452,11 +547,14 @@ async function salvarEmbalagem(input) {
     if (error) throw error;
     if (msg) { msg.textContent = 'Salvo!'; msg.className = 'status-msg status-ok'; setTimeout(() => { if (msg) msg.textContent = ''; }, 2000); }
     if (fichaBoxMap.has(itemCode) || valor) {
-      const atual = fichaBoxMap.get(itemCode) || { master: null, fracionada: null };
+      const atual = fichaBoxMap.get(itemCode) || { master: null, fracionada: null, semPadrao: false };
       if (campo === 'qtd_caixa_master') atual.master = valor ? parseFloat(valor) : null;
       if (campo === 'qtd_caixa_fracionada') atual.fracionada = valor ? parseFloat(valor) : null;
-      fichaBoxMap.set(itemCode, atual);
+      if (valor) atual.semPadrao = false; // preencheu numero -- os dois estados nao convivem
+      if (atual.master || atual.semPadrao) fichaBoxMap.set(itemCode, atual);
+      else fichaBoxMap.delete(itemCode);
     }
+    if (valor) fichaFeitoSet.add(itemCode); // numero preenchido conta como "trabalhado"
   } catch (err) {
     if (msg) { msg.textContent = 'Erro: ' + err.message; msg.className = 'status-msg status-err'; }
   }
@@ -488,6 +586,11 @@ async function openFichaModal(itemCode) {
           await salvarEmbalagem(inp);
         });
       });
+      const chk = fichaModalBox.querySelector('.sem-padrao-check');
+      if (chk) chk.addEventListener('change', async () => {
+        await sb.from('fichas_tecnicas').upsert({ item: itemCode }, { onConflict: 'item' });
+        await salvarSemPadrao(chk);
+      });
     }
     return;
   }
@@ -504,6 +607,8 @@ async function openFichaModal(itemCode) {
   fichaModalBox.querySelectorAll('.embalagem-input').forEach(inp => {
     inp.addEventListener('change', () => salvarEmbalagem(inp));
   });
+  const chk3 = fichaModalBox.querySelector('.sem-padrao-check');
+  if (chk3) chk3.addEventListener('change', () => salvarSemPadrao(chk3));
 }
 
 document.getElementById('tableBody').addEventListener('click', (e) => {
@@ -513,15 +618,19 @@ document.getElementById('tableBody').addEventListener('click', (e) => {
   if (compareBtn) { openCompareModal(compareBtn.dataset.item); return; }
   const padraoBtn = e.target.closest('.padrao-btn');
   if (padraoBtn) { mostrarPadraoCaixas(padraoBtn); return; }
+  const avulsoBtn = e.target.closest('.avulso-btn');
+  if (avulsoBtn) { marcarAvulsoRapido(avulsoBtn.dataset.item); return; }
 });
 
 const padraoModal = document.getElementById('padraoModal');
 function mostrarPadraoCaixas(btn) {
-  const texto = formatarCaixas(btn.dataset.qtd, btn.dataset.item) || 'Sem padrão de caixa suficiente pra calcular.';
   const info = fichaBoxMap.get(btn.dataset.item);
+  const texto = info && info.semPadrao
+    ? 'Este item não tem padrão de caixa — vem avulso.'
+    : formatarCaixas(btn.dataset.qtd, btn.dataset.item) || 'Sem padrão de caixa suficiente pra calcular.';
   document.getElementById('padraoCodigo').textContent = 'Item ' + btn.dataset.item;
   document.getElementById('padraoTexto').textContent = texto.replace(/^= /, '');
-  document.getElementById('padraoReferencia').textContent = info
+  document.getElementById('padraoReferencia').textContent = (info && !info.semPadrao)
     ? `Caixa master: ${info.master} pçs${info.fracionada ? ` · Caixa fracionada: ${info.fracionada} pçs` : ''}`
     : '';
   padraoModal.classList.add('open');

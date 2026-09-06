@@ -412,6 +412,20 @@ td.col-acoes { white-space: nowrap; text-align: center; }
   cursor: pointer; font-size: 14px; padding: 4px 8px; line-height: 1.2; margin: 0 1px;
 }
 .acao-btn:hover { background: #dde6ee; }
+/* Item sem foto/embalagem cadastrada ainda -- destaque pra quem esta
+   passando item por item cadastrando. Some sozinho ao preencher. */
+.ficha-btn.pendente { background: #fff3cd; border-color: #f0c419; }
+.ficha-btn.pendente:hover { background: #ffe9a8; }
+
+/* Botao rapido pra marcar "sem padrao de caixa" direto na lista, sem abrir
+   o modal -- tracejado de proposito, pra parecer "ainda em aberto, clique
+   pra decidir" em vez de uma acao normal do dia a dia. */
+.avulso-btn {
+  border: 1px dashed #b0b7c0; background: transparent; border-radius: 6px;
+  cursor: pointer; font-size: 10px; font-weight: 700; letter-spacing: 0.3px;
+  padding: 3px 6px; color: var(--muted); white-space: nowrap;
+}
+.avulso-btn:hover { background: #fee2e2; border-color: #f87171; color: #b91c1c; }
 
 .paginacao {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
