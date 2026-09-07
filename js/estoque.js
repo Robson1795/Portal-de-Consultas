@@ -382,19 +382,27 @@ function formatarCaixas(totalPecas, itemCode) {
   return partes.length ? `= ${partes.join(' + ')}` : '';
 }
 
-// As oito unidades. Nao existem 102 nem 108.
+// As nove unidades fabris. Nao existem 102 nem 108.
 // `cidade` vazia sai como "Unidade 103", sem inventar nome de cidade --
 // preencher quando as cidades das novas unidades forem confirmadas.
 const UNIDADES = {
-  '101': { cidade: 'Anápolis',               uf: 'GO' },
-  '103': { cidade: 'Várzea Grande',          uf: ''   },
-  '104': { cidade: 'Vitória de Santo Antão', uf: ''   },
-  '105': { cidade: 'Cambuí',                 uf: 'MG' },
-  '106': { cidade: 'Araquari',               uf: 'SC' },
-  '107': { cidade: 'Loja',                   uf: ''   },
-  '109': { cidade: '',                       uf: ''   },  // a confirmar
-  '110': { cidade: 'Leme',                   uf: ''   }
+  '101':  { cidade: 'Anápolis',               uf: 'GO' },
+  '103':  { cidade: 'Várzea Grande',          uf: ''   },
+  '104':  { cidade: 'Vitória de Santo Antão', uf: ''   },
+  '105':  { cidade: 'Cambuí',                 uf: 'MG' },
+  '106':  { cidade: 'Araquari',               uf: 'SC' },
+  '107':  { cidade: 'Loja',                   uf: ''   },
+  '109':  { cidade: '',                       uf: ''   },  // a confirmar
+  '110':  { cidade: 'Leme',                   uf: ''   },
+  '1101': { cidade: 'Trading',                uf: ''   }
 };
+
+// Estoque SESMT: mesmo formato do estoque fabril (item, descrição, UM,
+// localização, quantidade) e mora na mesma tabela `estoque`, só que com
+// este codigo de unidade proprio -- por isso NAO entra em UNIDADES: ele
+// nao aparece no seletor de unidade do topo (nao e uma fabrica), tem
+// entrada propria no menu lateral (ver js/navegacao.js).
+const UNIDADE_SESMT = 'SESMT';
 
 // Tres formatos, conforme o que se sabe da unidade:
 //   "Unidade 106 — Araquari (SC)"   cidade e UF

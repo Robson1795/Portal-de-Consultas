@@ -14,14 +14,19 @@
 // ela move separacao, enderecamento e saida de material de verdade, diferente
 // da Requisicao (que e so pedir). Quem faz esse fluxo e o ALM da unidade.
 const PERFIS = {
-  consultor:   { rotulo: 'Consultor',   paginas: ['estoque', 'requisicao'] },
-  estoque_alm: { rotulo: 'Estoque ALM', paginas: ['estoque', 'requisicao', 'programacao'] },
+  consultor:   { rotulo: 'Consultor',   paginas: ['estoque', 'sesmt', 'requisicao'] },
+  estoque_alm: { rotulo: 'Estoque ALM', paginas: ['estoque', 'sesmt', 'requisicao', 'programacao'] },
   estoque_aco: { rotulo: 'Estoque Aço', paginas: ['bobinas', 'requisicao'] },
-  admin:       { rotulo: 'Admin',       paginas: ['estoque', 'bobinas', 'requisicao', 'programacao', 'config'] }
+  admin:       { rotulo: 'Admin',       paginas: ['estoque', 'sesmt', 'bobinas', 'requisicao', 'programacao', 'config'] }
 };
 
 const PAGINAS = {
   estoque: { rotulo: 'Consulta de Itens', icone: '🔎', elemento: 'estoqueContent' },
+  // Estoque SESMT usa a MESMA tela de Consulta de Itens (mesmo formato de
+  // dado: item/descricao/UM/local/qtd, na mesma tabela `estoque`), so que
+  // com o codigo de unidade UNIDADE_SESMT em vez de uma fabrica -- por isso
+  // aponta pro mesmo elemento. Ver a troca de unidade em mostrarPagina().
+  sesmt: { rotulo: 'Estoque SESMT', icone: '⛑️', elemento: 'estoqueContent' },
   bobinas: { rotulo: 'Estoque de Aço',    icone: '📦', elemento: 'bobinasContent' },
   requisicao: { rotulo: 'Requisição ALM', icone: '📝', elemento: 'requisicaoContent' },
   programacao: { rotulo: 'Programação de Separação', icone: '🚚', elemento: 'programacaoContent' },
@@ -68,6 +73,9 @@ function marcarItemAtivo() {
 function mostrarPagina(id) {
   if (!PAGINAS[id] || !podeVer(id)) return;
 
+  const indoParaSesmt = (id === 'sesmt');
+  const saindoDoSesmt = (paginaAtual === 'sesmt' && id !== 'sesmt');
+
   Object.values(PAGINAS).forEach(p => {
     const el = document.getElementById(p.elemento);
     if (el) el.style.display = 'none';
@@ -79,8 +87,21 @@ function mostrarPagina(id) {
   marcarItemAtivo();
   fecharMenuNoCelular();
 
+  // SESMT reusa a tela de Consulta de Itens, so que com o codigo de unidade
+  // proprio (nao e uma fabrica, entao nao aparece no seletor do topo).
+  // Entrando: troca a unidade ativa e fixa o topo. Saindo: reconstroi o
+  // cabecalho do jeito normal (unidade fabril da pessoa, com ou sem
+  // seletor) -- mais seguro que tentar guardar/restaurar o valor anterior.
+  if (indoParaSesmt) {
+    unidadeAtual = UNIDADE_SESMT;
+    const caixa = document.getElementById('topbarLocal');
+    if (caixa) caixa.innerHTML = '<span class="pin">⛑️</span><span class="topbar-unidade-fixa">Estoque SESMT</span>';
+  } else if (saindoDoSesmt) {
+    montarCabecalho();
+  }
+
   // Cada pagina carrega os proprios dados ao ser aberta.
-  if (id === 'estoque') { pararTempoRealBobinas(); loadData(); }
+  if (id === 'estoque' || id === 'sesmt') { pararTempoRealBobinas(); loadData(); }
   if (id === 'bobinas') { abrirTelaBobinas(); }
   if (id === 'requisicao') { carregarRequisicao(); }
   if (id === 'programacao') { carregarProgramacao(); }
