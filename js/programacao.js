@@ -1585,14 +1585,13 @@ function montarHtmlExpControle(scriptAutoImprimir) {
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
 <title>Controle EXP — ${escapeHtml(rotuloUnidade(unidadeAtual))} — ${new Date().toLocaleDateString('pt-BR')}</title>
 <style>
-  html, body { height: 100%; }
-  body { font-family: Arial, sans-serif; padding: 16px; box-sizing: border-box; display: flex; flex-direction: column; }
+  body { font-family: Arial, sans-serif; padding: 16px; box-sizing: border-box; }
   table { border-collapse: collapse; width: 100%; font-size: 13px; }
   th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
   th { background: #004894; color: white; }
   tr:nth-child(even) { background: #f7f9fb; }
   .endereco-grande {
-    margin-top: auto; flex-shrink: 0; text-align: center;
+    text-align: center; page-break-before: avoid; page-break-inside: avoid;
     font-size: 15vw; line-height: 1; font-weight: 900; letter-spacing: 0.05em;
     padding: 40px 0 10px; word-break: break-word;
   }
