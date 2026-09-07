@@ -701,9 +701,21 @@ function separarBlocoVeiculo(texto) {
   return { veiculo: t, entrega: null };
 }
 
+// Combina data+hora num numero comparavel, pra achar a carga mais proxima.
+// So a hora nao basta: um pedido pode ter carga "10/09 07h" e "09/09 15h"
+// -- 15h parece "mais tarde" mas 09/09 e antes de 10/09. Sem data valida
+// (nunca deveria acontecer, mas nao trava a importacao por isso), empurra
+// pro fim pra nao vencer por engano uma carga que tem data certa.
+function instanteCarga(dataIso, horaHhmm) {
+  if (!dataIso || !horaHhmm) return Infinity;
+  const t = Date.parse(`${dataIso}T${horaHhmm}:00`);
+  return Number.isFinite(t) ? t : Infinity;
+}
+
 async function importarPlanilhaB(linhas, dataRef) {
   const msg = document.getElementById('progImportMsg');
   const pedidos = new Map();
+  const cargasPorPedido = new Map(); // so pra avisar quem tem mais de uma
   let veiculoAtual = null;
   let horarioAtual = null;
   let entregaAtual = null;
@@ -730,9 +742,25 @@ async function importarPlanilhaB(linhas, dataRef) {
     if (/^(n?[ºo°]?\s*pedido|pedido)/i.test(numero)) return;
     if (!numero) { ignoradas++; return; }
 
-    // O mesmo pedido aparece em varias linhas (uma por carga/quantidade).
-    // Aqui interessa o cabecalho do pedido, entao a ultima linha vence --
-    // o upsert recusaria o lote se o mesmo par (unidade, numero) repetisse.
+    const dataDaCarga = entregaAtual ? `${String(dataRef).slice(0, 4)}-${entregaAtual}` : dataRef;
+
+    // O mesmo pedido aparece em varias linhas -- e pode estar em cargas de
+    // dias e veiculos diferentes (ex.: parte sai 10/09 07h, resto so 09/09
+    // 15h). So uma linha de carregamento sobrevive por pedido (sem tabela
+    // de cargas nao da pra guardar as duas), entao fica a MAIS PROXIMA no
+    // tempo -- e a que decide a urgencia de separar. As demais so contam
+    // pro aviso "aparece em mais de uma carga".
+    if (cargasPorPedido.has(numero)) {
+      cargasPorPedido.set(numero, cargasPorPedido.get(numero) + 1);
+    } else {
+      cargasPorPedido.set(numero, 1);
+    }
+
+    const existente = pedidos.get(numero);
+    const instanteNovo = instanteCarga(dataDaCarga, horarioAtual);
+    const instanteAtual = existente ? instanteCarga(existente.data_carregamento, existente.horario_carregamento) : Infinity;
+    if (existente && instanteAtual <= instanteNovo) return; // a que ja estava guardada e igual ou mais cedo
+
     pedidos.set(numero, {
       unidade: unidadeAtual,
       numero_pedido: numero,
@@ -741,7 +769,7 @@ async function importarPlanilhaB(linhas, dataRef) {
       uf: (col[COL_B.uf] || '').toUpperCase() || null,
       modalidade_frete: (col[COL_B.frete] || '').toUpperCase() || null,
       tipo_veiculo: veiculoAtual,
-      data_carregamento: entregaAtual ? `${String(dataRef).slice(0, 4)}-${entregaAtual}` : dataRef,
+      data_carregamento: dataDaCarga,
       horario_carregamento: horarioAtual,
       observacao_carregamento: col[COL_B.observacao] || null,
       flag_adicional: flagDoTextoProg(col[COL_B.flag])
@@ -754,6 +782,8 @@ async function importarPlanilhaB(linhas, dataRef) {
     return null;
   }
 
+  const comVariasCargas = [...cargasPorPedido.entries()].filter(([, n]) => n > 1);
+
   const lista = [...pedidos.values()];
   const { error } = await sb.from('pedidos').upsert(lista, { onConflict: 'unidade,numero_pedido' });
   if (error) { falhaImport(error.message); return null; }
@@ -762,6 +792,12 @@ async function importarPlanilhaB(linhas, dataRef) {
   const avisos = [];
   if (ignoradas) avisos.push(`${ignoradas} linha(s) sem pedido ignorada(s)`);
   if (semHorario) avisos.push(`${semHorario} sem horário (não veio linha de bloco antes)`);
+  if (comVariasCargas.length) {
+    // O app so guarda 1 carga por pedido (a mais proxima). Sem este aviso,
+    // ninguem saberia que o pedido tem mais volume saindo depois.
+    const detalhe = comVariasCargas.map(([num, n]) => `${num} (${n})`).join(', ');
+    avisos.push(`${comVariasCargas.length} pedido(s) em mais de uma carga — mostrando só a mais próxima: ${detalhe}`);
+  }
   return `${lista.length} pedido(s) na grade de carregamento.`
     + (avisos.length ? ' ' + avisos.join('; ') + '.' : '');
 }
