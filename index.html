@@ -616,6 +616,14 @@
             <input type="text" id="confHistBusca" placeholder="Buscar por nº pedido, item ou localização..."
                    style="flex:1; min-width:200px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
           </div>
+
+          <!-- ---- Relatorio do dia pro PCP: "isso que carregou foi faturado?" ---- -->
+          <div class="cfg-barra">
+            <span class="modal-label" style="margin:0;">Relatório de saídas do dia</span>
+            <input type="date" id="relPcpData" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+            <button class="btn btn-primary" id="relPcpGerarBtn" style="margin-left:auto;">Gerar e enviar pro PCP</button>
+          </div>
+          <div class="status-msg" id="relPcpMsg" style="padding:0 16px 8px;"></div>
           <div class="scroll-area">
             <table>
               <thead>
@@ -742,6 +750,7 @@
             <tr>
               <th>Unidade</th>
               <th>E-mails do ALM</th>
+              <th>E-mail do PCP</th>
               <th>Senha de contagem</th>
               <th>PIN de edição</th>
               <th></th>
@@ -756,6 +765,9 @@
       <b>E-mails do ALM.</b> Destinatários da Requisição ALM daquela unidade. Vários endereços,
       separados por ponto e vírgula. Unidade sem e-mail cadastrado tem o envio desabilitado —
       a requisição ainda pode ser salva, e o ALM a vê pela lista no portal.
+      <br><br>
+      <b>E-mail do PCP.</b> Destinatário do relatório de saídas do Controle EXP Acessórios (aba
+      Saída/Conferência). Unidade sem e-mail cadastrado tem o botão de gerar relatório desabilitado.
       <br><br>
       <b>Senha de contagem e PIN de edição.</b> Desde 04/09/2026 estas senhas **não estão mais no
       código do portal**. Elas vivem aqui, e a conferência acontece dentro do banco: o navegador

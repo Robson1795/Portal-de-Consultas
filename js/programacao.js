@@ -1643,6 +1643,107 @@ document.getElementById('confHistBody').addEventListener('click', async (e) => {
   if (ok) await carregarProgramacao();
 });
 
+// ---- Relatório de saídas do dia pro PCP -------------------------------------
+// "isso que saiu pro carregamento foi realmente faturado?" (pedido do
+// Robson). Mesmo padrão de mailto da Requisição ALM: o portal não manda
+// e-mail sozinho (não existe servidor aqui), só abre pronto no Outlook —
+// a pessoa confere e clica em enviar. O e-mail do PCP fica em
+// config_unidade (aba Configurações), NÃO fixo no código: cada unidade
+// tem o próprio PCP.
+(function iniciarDataRelatorioPcp() {
+  const hoje = new Date().toLocaleDateString('en-CA'); // AAAA-MM-DD, formato do <input type="date">
+  document.getElementById('relPcpData').value = hoje;
+})();
+
+// Monta o mailto do relatório -- função pura (não mexe no DOM nem navega),
+// separada do listener só pra poder testar a lógica sem precisar simular
+// clique de botão nem navegação de verdade.
+function montarRelatorioPcp(dataEscolhida, emailPcp) {
+  // Compara por data local (nao UTC) -- e a mesma data que a coluna
+  // "Retirado em" mostra na tela (toLocaleString), pra bater com o que a
+  // pessoa esta vendo.
+  const saidasDoDia = progExpControle.filter(l =>
+    l.status === 'retirado' && l.retirado_em
+    && new Date(l.retirado_em).toLocaleDateString('en-CA') === dataEscolhida);
+
+  if (!saidasDoDia.length) {
+    return { ok: false, mensagem: 'Nenhuma saída registrada nessa data.' };
+  }
+
+  const dataFormatada = new Date(dataEscolhida + 'T00:00:00').toLocaleDateString('pt-BR');
+  const assunto = `Saídas EXP ${rotuloUnidade(unidadeAtual)} - ${dataFormatada}`;
+
+  const linhas = saidasDoDia
+    .sort((a, b) => new Date(a.retirado_em) - new Date(b.retirado_em))
+    .map(l => {
+      const desc = expCtrlDescMap.get(l.codigo_item);
+      const quando = new Date(l.retirado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      return `${quando}  Pedido ${l.numero_pedido || '—'}  |  Item ${l.codigo_item} - ${desc && desc.descricao ? desc.descricao : 'sem descrição'}`
+        + `  |  Qtd ${l.quantidade != null ? l.quantidade : '—'}  |  Retirado por ${l.retirado_por || '—'}`;
+    });
+
+  const corpo = [
+    `Relatório de saídas do Controle EXP Acessórios — ${rotuloUnidade(unidadeAtual)} — ${dataFormatada}`,
+    `${saidasDoDia.length} item(ns) saíram para o carregamento nesse dia.`,
+    '',
+    ...linhas,
+    '',
+    'Favor confirmar se todos os pedidos acima foram realmente faturados.',
+    '--',
+    'Relatório gerado pelo Portal de Estoque (Controle EXP Acessórios).'
+  ].join('\n');
+
+  const href = 'mailto:' + encodeURIComponent(emailPcp)
+             + '?subject=' + encodeURIComponent(assunto)
+             + '&body=' + encodeURIComponent(corpo);
+
+  const cortado = href.length > 1900;
+  return {
+    ok: true,
+    href,
+    cortado,
+    quantidade: saidasDoDia.length,
+    mensagem: cortado
+      ? `${saidasDoDia.length} saída(s) encontrada(s). ATENÇÃO: são muitos itens e o e-mail pode sair cortado `
+        + '— confira antes de enviar, ou exporte o CSV do Controle EXP pra anexar em vez de listar tudo no corpo.'
+      : `${saidasDoDia.length} saída(s) encontrada(s). Abrindo o e-mail — confira e clique em enviar.`
+  };
+}
+
+document.getElementById('relPcpGerarBtn').addEventListener('click', async () => {
+  const msg = document.getElementById('relPcpMsg');
+  const btn = document.getElementById('relPcpGerarBtn');
+  const dataEscolhida = document.getElementById('relPcpData').value;
+
+  if (!dataEscolhida) {
+    msg.textContent = 'Escolha uma data.';
+    msg.className = 'status-msg status-err';
+    return;
+  }
+
+  btn.disabled = true;
+  msg.textContent = 'Buscando e-mail do PCP...';
+  msg.className = 'status-msg';
+
+  const { data: config, error: erroConfig } = await sb.from('config_unidade')
+    .select('email_pcp').eq('unidade', unidadeAtual).maybeSingle();
+
+  btn.disabled = false;
+
+  if (erroConfig || !config || !config.email_pcp) {
+    msg.textContent = 'Esta unidade não tem e-mail do PCP cadastrado. Peça pro admin cadastrar em Configurações.';
+    msg.className = 'status-msg status-err';
+    return;
+  }
+
+  const resultado = montarRelatorioPcp(dataEscolhida, config.email_pcp);
+  msg.textContent = resultado.mensagem;
+  msg.className = resultado.ok ? (resultado.cortado ? 'status-msg status-err' : 'status-msg status-ok') : 'status-msg status-err';
+  if (!resultado.ok) return;
+
+  window.location.href = resultado.href;
+});
+
 // ---- Catálogo EXP: a planilha que sai do sistema (Item, Descrição, UM, -----
 // Depósito, Referência, Lote, Quantidade), colada de vez em quando. Um item
 // pode aparecer várias vezes -- cada linha é um LOTE diferente do mesmo

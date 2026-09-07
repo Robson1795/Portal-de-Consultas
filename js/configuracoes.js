@@ -162,7 +162,7 @@ async function carregarConfigUnidades() {
   aviso.className = 'status-msg';
 
   const { data, error } = await sb.from('config_unidade')
-    .select('unidade, emails_alm, senha_contagem, pin_edicao').order('unidade');
+    .select('unidade, emails_alm, email_pcp, senha_contagem, pin_edicao').order('unidade');
 
   if (error) {
     aviso.textContent = 'Não foi possível carregar: ' + error.message;
@@ -188,6 +188,8 @@ function renderConfigUnidades() {
       </td>
       <td><input type="text" class="cfgu-emails" placeholder="alm@kingspanisoeste.com.br; outro@..."
                  value="${escapeHtml(u.emails_alm || '')}" style="max-width:320px;"></td>
+      <td><input type="text" class="cfgu-email-pcp" placeholder="pcp@kingspanisoeste.com.br"
+                 value="${escapeHtml(u.email_pcp || '')}" style="max-width:240px;"></td>
       <td><input type="text" class="cfgu-senha" placeholder="ex: INV${escapeHtml(u.unidade)}"
                  value="${escapeHtml(u.senha_contagem || '')}" style="max-width:130px;"></td>
       <td><input type="text" class="cfgu-pin" placeholder="ex: 2026"
@@ -203,9 +205,10 @@ document.getElementById('cfgUniCorpo').addEventListener('click', async (e) => {
   const unidade = tr.dataset.unidade;
   const aviso = document.getElementById('cfgUniMsg');
 
-  const emails = tr.querySelector('.cfgu-emails').value.trim();
-  const senha  = tr.querySelector('.cfgu-senha').value.trim();
-  const pin    = tr.querySelector('.cfgu-pin').value.trim();
+  const emails    = tr.querySelector('.cfgu-emails').value.trim();
+  const emailPcp  = tr.querySelector('.cfgu-email-pcp').value.trim();
+  const senha     = tr.querySelector('.cfgu-senha').value.trim();
+  const pin       = tr.querySelector('.cfgu-pin').value.trim();
 
   tr.querySelectorAll('button').forEach(b => b.disabled = true);
   aviso.textContent = 'Salvando...';
@@ -213,6 +216,7 @@ document.getElementById('cfgUniCorpo').addEventListener('click', async (e) => {
 
   const { error } = await sb.from('config_unidade').update({
     emails_alm: emails || null,
+    email_pcp: emailPcp || null,
     senha_contagem: senha || null,
     pin_edicao: pin || null,
     atualizado_em: new Date().toISOString(),
