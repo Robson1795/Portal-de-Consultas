@@ -328,6 +328,12 @@
 .st-ativo    { background: #e2f6ea; color: #1d7a45; }
 .st-pendente { background: #fef3c7; color: #92400e; }
 .st-inativo  { background: #eef2f6; color: var(--muted); }
+/* Urgencia do pedido conforme o horario do carregamento (vw_pedidos_prioridade).
+   Usadas na aba Separacao e EXP -- ver ROTULO_PRIORIDADE em js/programacao.js. */
+.st-atrasado { background: #fde2e2; color: #b91c1c; }
+.st-urgente  { background: #fde2e2; color: #b91c1c; }
+.st-atencao  { background: #fef3c7; color: #92400e; }
+.st-no-prazo { background: #e2f6ea; color: #1d7a45; }
 
 /* ---- Programacao de Separacao ------------------------------------------- */
 /* A grade de carregamento imita o desenho da planilha original: blocos de

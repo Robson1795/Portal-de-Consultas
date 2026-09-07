@@ -102,6 +102,38 @@ function dataCurta(data) {
   return (ano && mes && dia) ? `${dia}/${mes}` : String(data);
 }
 
+// ---- Prioridade (a razao de ser da aba Carregamento) ------------------------
+// A view vw_pedidos_prioridade ja calcula tudo isso no banco (mesmo lugar
+// pra todo mundo, sem depender do relogio do navegador de cada um). Aqui so
+// traduz pra rotulo/cor e decide a ordem -- é isso que faz a Separacao
+// mostrar primeiro o pedido cujo caminhao sai antes.
+const ROTULO_PRIORIDADE = {
+  atrasado: 'Atrasado', urgente: 'Urgente', atencao: 'Atenção',
+  no_prazo: 'No prazo', concluido: 'Concluído', sem_agenda: 'Sem agenda'
+};
+const CLASSE_PRIORIDADE = {
+  atrasado: 'st-atrasado', urgente: 'st-urgente', atencao: 'st-atencao',
+  no_prazo: 'st-no-prazo', concluido: 'st-ativo', sem_agenda: 'st-inativo'
+};
+
+function tagPrioridade(pedido) {
+  if (!pedido || !pedido.prioridade) return '';
+  const classe = CLASSE_PRIORIDADE[pedido.prioridade] || 'st-inativo';
+  const rotulo = ROTULO_PRIORIDADE[pedido.prioridade] || pedido.prioridade;
+  return `<span class="cfg-status ${classe}">${escapeHtml(rotulo)}</span>`;
+}
+
+// Pedido sem horario (`momento_carregamento` null) vai pro fim -- nao da
+// pra dizer que e urgente, mas tambem nao pode sumir da lista.
+function compararPorUrgencia(pedidoA, pedidoB) {
+  const ta = pedidoA ? pedidoA.momento_carregamento : null;
+  const tb = pedidoB ? pedidoB.momento_carregamento : null;
+  if (!ta && !tb) return 0;
+  if (!ta) return 1;
+  if (!tb) return -1;
+  return new Date(ta) - new Date(tb);
+}
+
 // ---- Aba 1: Separação -------------------------------------------------------
 function renderSeparacao() {
   const total = progItens.length;
@@ -128,6 +160,11 @@ function renderSeparacao() {
   if (filtro === 'aguardando') linhas = linhas.filter(({ item }) => !itemConcluido(item));
   if (filtro === 'separado')   linhas = linhas.filter(({ item }) => itemConcluido(item));
 
+  // A razao desta aba existir: separar primeiro o que tem caminhao saindo
+  // antes. Ordena pelo pedido (momento_carregamento); dentro do mesmo
+  // pedido mantem a ordem que ja vinha (seq), sem embaralhar os itens.
+  linhas = [...linhas].sort((a, b) => compararPorUrgencia(a.pedido, b.pedido));
+
   const corpo = document.getElementById('progItensBody');
   const vazio = document.getElementById('progItensVazio');
   document.getElementById('progTabelaItens').style.display = linhas.length ? 'table' : 'none';
@@ -139,6 +176,9 @@ function renderSeparacao() {
     corpo.innerHTML = '';
     return;
   }
+
+  const ROTULO_STATUS_ITEM = { aguardando: 'Pendente', separado: 'Separado', reportado: 'Separado', falta_reporte: 'Falta reporte' };
+  const CLASSE_STATUS_ITEM = { aguardando: 'st-pendente', separado: 'st-ativo', reportado: 'st-ativo', falta_reporte: 'st-atencao' };
 
   corpo.innerHTML = linhas.map(({ item, pedido }) => {
     const feito = itemConcluido(item);
@@ -152,7 +192,8 @@ function renderSeparacao() {
       <td class="loc">${escapeHtml(item.unidade_medida || '—')}</td>
       <td class="num">${escapeHtml(item.quantidade != null ? item.quantidade : '—')}</td>
       <td class="loc">${escapeHtml(item.numero_os_op || '—')}</td>
-      <td><span class="cfg-status ${feito ? 'st-ativo' : 'st-pendente'}">${feito ? 'Separado' : 'Pendente'}</span></td>
+      <td>${escapeHtml(item.observacao || '—')}</td>
+      <td><span class="cfg-status ${CLASSE_STATUS_ITEM[item.status_separacao] || 'st-pendente'}">${escapeHtml(ROTULO_STATUS_ITEM[item.status_separacao] || 'Pendente')}</span></td>
       <td class="col-acoes">
         <button class="btn prog-alternar" data-id="${escapeHtml(item.id)}">
           ${feito ? 'Desmarcar' : 'Marcar separado'}
@@ -228,7 +269,10 @@ function statusConsolidado(pedido) {
 
 function renderExp() {
   // Só os pedidos que estão na grade de carregamento (vieram da Planilha B).
-  const naGrade = progPedidos.filter(p => p.horario_carregamento || p.tipo_veiculo);
+  // Ordenado pelo mesmo criterio da Separacao: caminhao que sai antes, primeiro.
+  const naGrade = progPedidos
+    .filter(p => p.horario_carregamento || p.tipo_veiculo)
+    .sort(compararPorUrgencia);
   const corpo = document.getElementById('progExpBody');
   const vazio = document.getElementById('progExpVazio');
   vazio.style.display = naGrade.length ? 'none' : 'block';
@@ -245,6 +289,7 @@ function renderExp() {
       <td>${escapeHtml(p.cliente || '—')}${destino ? `<div class="cad-desc">${escapeHtml(destino)}</div>` : ''}</td>
       <td class="loc">${dataCurta(p.data_carregamento)} ${horaCurta(p.horario_carregamento)}
         <div class="cad-desc">${escapeHtml(p.tipo_veiculo || '—')}</div></td>
+      <td>${tagPrioridade(p)}</td>
       <td class="num">${itens.length ? `${feitos} de ${itens.length}` : '—'}</td>
       <td><span class="cfg-status ${st.classe}">${st.rotulo}</span></td>
       <td>
