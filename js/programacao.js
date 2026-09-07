@@ -1070,6 +1070,23 @@ async function gravarExpControle() {
   await carregarProgramacao();
 }
 
+// Mesmo filtro da busca (#expCtrlBusca) usado tanto pra desenhar a lista
+// quanto pra exportar/imprimir -- assim, pra imprimir só o que tem numa
+// localização, é só digitar ela na busca antes de clicar em Imprimir ou
+// Exportar (nenhum controle novo, reaproveita o que já existe).
+function linhasFiltradasExpControle() {
+  const busca = document.getElementById('expCtrlBusca').value.trim().toLowerCase();
+  let linhas = progExpControle;
+  if (busca) {
+    linhas = linhas.filter(l =>
+      String(l.localizacao).toLowerCase().includes(busca) ||
+      String(l.codigo_item).toLowerCase().includes(busca) ||
+      String(l.numero_pedido).toLowerCase().includes(busca) ||
+      String(l.numero_os_op).toLowerCase().includes(busca));
+  }
+  return linhas;
+}
+
 function renderExpControle(erroCarregamento) {
   const corpo = document.getElementById('expCtrlBody');
   const vazio = document.getElementById('expCtrlVazio');
@@ -1082,16 +1099,7 @@ function renderExpControle(erroCarregamento) {
     return;
   }
 
-  const busca = document.getElementById('expCtrlBusca').value.trim().toLowerCase();
-  let linhas = progExpControle;
-  if (busca) {
-    linhas = linhas.filter(l =>
-      String(l.localizacao).toLowerCase().includes(busca) ||
-      String(l.codigo_item).toLowerCase().includes(busca) ||
-      String(l.numero_pedido).toLowerCase().includes(busca) ||
-      String(l.numero_os_op).toLowerCase().includes(busca));
-  }
-
+  const linhas = linhasFiltradasExpControle();
   vazio.style.display = linhas.length ? 'none' : 'block';
   if (!linhas.length) {
     vazio.textContent = progExpControle.length
@@ -1510,7 +1518,7 @@ document.getElementById('expCtrlBody').addEventListener('keydown', (e) => {
 const EXP_EXPORT_CABECALHO = ['Localização', 'Item', 'Descrição', 'UM', 'Nº Pedido', 'Quantidade', 'Nº OP', 'Lote', 'Referência', 'Status', 'Entrada em', 'Saída em'];
 
 function linhasExportacaoExpControle() {
-  return progExpControle.map(l => {
+  return linhasFiltradasExpControle().map(l => {
     const desc = expCtrlDescMap.get(l.codigo_item);
     return [
       l.localizacao || '', l.codigo_item, desc && desc.descricao ? desc.descricao : '', desc && desc.um ? desc.um : '',
@@ -1557,6 +1565,11 @@ function exportarExpControleXlsx(nomeBase) {
 function montarHtmlExpControle(scriptAutoImprimir) {
   const linhasHtml = linhasExportacaoExpControle().map(linha =>
     `<tr>${linha.map(v => `<td>${escapeHtml(v != null ? v : '')}</td>`).join('')}</tr>`).join('');
+  const busca = document.getElementById('expCtrlBusca').value.trim();
+  // Mostra o filtro no papel: se a folha vai pro pallet (o Robson: "essa
+  // folha coloco no pallet"), precisa deixar claro que é só daquela
+  // localização, não a lista inteira.
+  const subtitulo = busca ? ` — busca: "${escapeHtml(busca)}"` : '';
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
 <title>Controle EXP — ${escapeHtml(rotuloUnidade(unidadeAtual))} — ${new Date().toLocaleDateString('pt-BR')}</title>
 <style>
@@ -1567,7 +1580,7 @@ function montarHtmlExpControle(scriptAutoImprimir) {
   tr:nth-child(even) { background: #f7f9fb; }
   @media print { body { padding: 0; } }
 </style></head><body>
-<h2>Controle EXP Acessórios — ${escapeHtml(rotuloUnidade(unidadeAtual))} — ${new Date().toLocaleDateString('pt-BR')}</h2>
+<h2>Controle EXP Acessórios — ${escapeHtml(rotuloUnidade(unidadeAtual))} — ${new Date().toLocaleDateString('pt-BR')}${subtitulo}</h2>
 <table><thead><tr>${EXP_EXPORT_CABECALHO.map(c => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead>
 <tbody>${linhasHtml}</tbody></table>
 ${scriptAutoImprimir ? '<script>window.onload = () => window.print();<' + '/script>' : ''}
@@ -1579,11 +1592,20 @@ function exportarExpControleHtml(nomeBase) {
   baixarArquivo(new Blob([html], { type: 'text/html;charset=utf-8;' }), nomeBase + '.html');
 }
 
+// Exportar/Imprimir respeitam a busca (#expCtrlBusca) -- pra pegar só o
+// que tem numa localização, é só digitar ela na busca antes de clicar
+// (mesmo filtro que já estreita a lista na tela).
 document.getElementById('expCtrlExportarBtn').addEventListener('click', () => {
-  if (!progExpControle.length) { alert('Nenhum item no Controle EXP para exportar.'); return; }
+  const linhas = linhasFiltradasExpControle();
+  if (!linhas.length) {
+    alert(progExpControle.length ? 'Nenhum item bate com a busca atual.' : 'Nenhum item no Controle EXP para exportar.');
+    return;
+  }
 
   const formato = document.getElementById('expCtrlExportarFormato').value;
-  const nomeBase = `controle-exp-${unidadeAtual}-${new Date().toISOString().slice(0, 10)}`;
+  const busca = document.getElementById('expCtrlBusca').value.trim();
+  const sufixoBusca = busca ? '-' + busca.replace(/[^a-z0-9]+/gi, '') : '';
+  const nomeBase = `controle-exp-${unidadeAtual}${sufixoBusca}-${new Date().toISOString().slice(0, 10)}`;
 
   if (formato === 'xlsx') exportarExpControleXlsx(nomeBase);
   else if (formato === 'html') exportarExpControleHtml(nomeBase);
@@ -1594,7 +1616,11 @@ document.getElementById('expCtrlExportarBtn').addEventListener('click', () => {
 // própria caixa de impressão do navegador tem "Salvar como PDF", então
 // cobre o PDF de graça, sem precisar de outra biblioteca.
 document.getElementById('expCtrlImprimirBtn').addEventListener('click', () => {
-  if (!progExpControle.length) { alert('Nenhum item no Controle EXP para imprimir.'); return; }
+  const linhas = linhasFiltradasExpControle();
+  if (!linhas.length) {
+    alert(progExpControle.length ? 'Nenhum item bate com a busca atual.' : 'Nenhum item no Controle EXP para imprimir.');
+    return;
+  }
   const aba = window.open('', '_blank');
   if (!aba) { alert('O navegador bloqueou a nova aba. Libere pop-ups pra este site e tente de novo.'); return; }
   aba.document.write(montarHtmlExpControle(true));
