@@ -1106,7 +1106,9 @@ function renderExpControle(erroCarregamento) {
     const retirado = l.status === 'retirado';
     return `
     <tr${retirado ? ' style="opacity:0.6;"' : ''}>
-      <td class="loc"><span class="loc-chip">${escapeHtml(l.localizacao || '—')}</span></td>
+      <td class="loc"><input type="text" class="expctrl-loc-input" data-id="${escapeHtml(l.id)}"
+             value="${escapeHtml(l.localizacao || '')}" placeholder="—"
+             style="width:90px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px;"></td>
       <td class="item">${escapeHtml(l.codigo_item)}</td>
       <td>${desc && desc.descricao ? escapeHtml(desc.descricao) : '—'}</td>
       <td class="loc">${desc && desc.um ? escapeHtml(desc.um) : '—'}</td>
@@ -1463,6 +1465,39 @@ document.getElementById('expCtrlBody').addEventListener('click', async (e) => {
     const ok = await marcarSaidaExpControle(btnSaida.dataset.id, nomeUsuarioAtual);
     if (ok) await carregarProgramacao();
   }
+});
+
+// Localização editável direto na lista -- pra quando o item muda de lugar
+// depois de já registrado, sem precisar excluir e digitar tudo de novo.
+// 'focusout' (não 'blur') porque bubbla até o <tbody> delegado. Não
+// recarrega a tela toda: só atualiza o registro em memória, senão o campo
+// perderia o foco a cada edição.
+document.getElementById('expCtrlBody').addEventListener('focusout', async (e) => {
+  const input = e.target.closest('.expctrl-loc-input');
+  if (!input) return;
+
+  const item = progExpControle.find(l => l.id === input.dataset.id);
+  if (!item) return;
+
+  const novaLocalizacao = input.value.trim() || null;
+  if (novaLocalizacao === (item.localizacao || null)) return; // nada mudou
+
+  input.disabled = true;
+  const { error } = await sb.from('exp_controle_itens').update({ localizacao: novaLocalizacao }).eq('id', item.id);
+  input.disabled = false;
+
+  if (error) {
+    alert('Não foi possível salvar a localização: ' + error.message);
+    input.value = item.localizacao || '';
+    return;
+  }
+  item.localizacao = novaLocalizacao;
+  input.style.borderColor = 'var(--blue)';
+  setTimeout(() => { input.style.borderColor = ''; }, 1200);
+});
+
+document.getElementById('expCtrlBody').addEventListener('keydown', (e) => {
+  if (e.target.classList.contains('expctrl-loc-input') && e.key === 'Enter') e.target.blur();
 });
 
 // Exportar CSV pra conferir contra o sistema (a planilha real, ou outra
