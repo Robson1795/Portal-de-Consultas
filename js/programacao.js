@@ -23,6 +23,7 @@ let progPedidos = [];       // vw_pedidos_prioridade (pedido + contagem de itens
 let progItens = [];         // pedido_itens dos pedidos carregados
 let progExpControle = [];   // exp_controle_itens -- localizacao por item, pro inventario
 let expCtrlDescMap = new Map(); // codigo_item -> {descricao, um}, resolvido em cascata pra exibir a lista
+let catalogoExpItens = []; // catalogo_exp_itens -- planilha do sistema, carregada só ao entrar na página
 
 // ---- Carga da tela ---------------------------------------------------------
 async function carregarProgramacao() {
@@ -102,8 +103,13 @@ function trocarAbaExpAcessorios(aba) {
   document.querySelectorAll('#expAbas [data-exp-aba]').forEach(b => {
     b.className = b.dataset.expAba === aba ? 'btn btn-primary' : 'btn';
   });
+  // O formulário de registro (Entrada/Saída, os dois modos) não faz
+  // sentido na aba Catálogo -- lá só se importa/consulta a planilha do
+  // sistema, não se registra movimentação nenhuma.
+  document.getElementById('expRegistroContainer').style.display = aba === 'catalogo' ? 'none' : 'block';
   document.getElementById('expEntradaAba').style.display = aba === 'entrada' ? 'block' : 'none';
   document.getElementById('progConferencia').style.display = aba === 'saida' ? 'block' : 'none';
+  document.getElementById('expCatalogoAba').style.display = aba === 'catalogo' ? 'block' : 'none';
   if (aba === 'saida') renderConferencia();
 }
 
@@ -916,19 +922,30 @@ function parseExpControleTexto(texto) {
     }));
 }
 
-// Busca a descricao/UM em cascata: primeiro no catalogo da Requisicao ALM
-// (itens_requisicao -- o Robson cadastra ali, ver js/requisicao.js), depois
-// no estoque (qualquer unidade, cobre o que ja esta no almoxarifado e ainda
-// nao foi cadastrado no catalogo). Gravar de novo aqui duplicaria dado que
-// ja existe nesses dois lugares.
+// Busca a descricao/UM em cascata: primeiro o Catalogo EXP (planilha do
+// sistema, ja em memoria -- mais especifico pros itens desta pagina),
+// depois o catalogo da Requisicao ALM (itens_requisicao -- o Robson
+// cadastra ali, ver js/requisicao.js), depois o estoque (qualquer unidade,
+// cobre o que ja esta no almoxarifado e ainda nao foi cadastrado em
+// nenhum catalogo). Gravar de novo aqui duplicaria dado que ja existe
+// nesses lugares.
 async function buscarDescricoesItens(codigos) {
   const unicos = [...new Set(codigos)].filter(Boolean);
   const mapa = new Map();
   if (!unicos.length) return mapa;
 
-  const { data: doCatalogo } = await sb.from('itens_requisicao')
-    .select('codigo, descricao, um').in('codigo', unicos);
-  (doCatalogo || []).forEach(r => mapa.set(r.codigo, { descricao: r.descricao, um: r.um }));
+  unicos.forEach(c => {
+    if (mapa.has(c)) return;
+    const doCatalogoExp = catalogoExpItens.find(l => l.codigo_item === c && l.descricao);
+    if (doCatalogoExp) mapa.set(c, { descricao: doCatalogoExp.descricao, um: doCatalogoExp.um });
+  });
+
+  const faltandoAlm = unicos.filter(c => !mapa.has(c));
+  if (faltandoAlm.length) {
+    const { data: doCatalogo } = await sb.from('itens_requisicao')
+      .select('codigo, descricao, um').in('codigo', faltandoAlm);
+    (doCatalogo || []).forEach(r => mapa.set(r.codigo, { descricao: r.descricao, um: r.um }));
+  }
 
   const faltando = unicos.filter(c => !mapa.has(c));
   if (faltando.length) {
@@ -1208,6 +1225,7 @@ const EXP_WIZ_PASSOS = [
 
 let expWizPasso = 0;
 let expWizDados = {};
+let expWizDicaCatalogoTexto = ''; // preenchida quando o item bate com o Catálogo EXP
 
 function rotuloTipoAtual() {
   return document.getElementById('expManualTipo').value === 'saida' ? 'Saída' : 'Entrada';
@@ -1216,8 +1234,13 @@ function rotuloTipoAtual() {
 function iniciarWizardManual() {
   expWizPasso = 0;
   expWizDados = {};
+  expWizDicaCatalogoTexto = '';
   renderWizardPasso();
 }
+
+// Passos onde a dica do Catálogo EXP faz sentido mostrar (depois que o
+// item já foi digitado) -- não em Item/Pedido/Quantidade, que vêm antes.
+const EXP_WIZ_PASSOS_COM_DICA = ['localizacao', 'numero_os_op', 'lote', 'referencia'];
 
 function renderWizardPasso() {
   document.getElementById('expWizMsg').textContent = '';
@@ -1234,6 +1257,11 @@ function renderWizardPasso() {
   campo.placeholder = passo.opcional ? 'Deixe em branco se não tiver' : passo.rotulo;
   document.getElementById('expWizVoltarBtn').disabled = expWizPasso === 0;
   document.getElementById('expWizAvancarBtn').textContent = 'Avançar';
+
+  const dica = document.getElementById('expWizCatalogoDica');
+  dica.textContent = EXP_WIZ_PASSOS_COM_DICA.includes(passo.campo) ? expWizDicaCatalogoTexto : '';
+  dica.className = 'status-msg';
+
   campo.focus();
 }
 
@@ -1246,6 +1274,22 @@ function salvarPassoAtual() {
     return false;
   }
   expWizDados[passo.campo] = valor;
+
+  // Assim que o Item é confirmado, já consulta o Catálogo EXP: se só tem 1
+  // lote pra esse item, preenche Referência/Lote sozinho (sem sobrescrever
+  // o que a pessoa já tiver digitado); se tem vários, guarda o texto de
+  // ajuda pra mostrar nos próximos passos.
+  if (passo.campo === 'codigo_item') {
+    expWizDicaCatalogoTexto = '';
+    const lotes = lotesDoItemNoCatalogo(valor);
+    if (lotes.length === 1) {
+      if (!expWizDados.referencia && lotes[0].referencia) expWizDados.referencia = lotes[0].referencia;
+      if (!expWizDados.lote && lotes[0].lote) expWizDados.lote = lotes[0].lote;
+      expWizDicaCatalogoTexto = 'Referência/Lote preenchidos do Catálogo EXP (edite se precisar).';
+    } else if (lotes.length > 1) {
+      expWizDicaCatalogoTexto = `${lotes.length} lotes no Catálogo EXP pra este item — confira qual é: ${textoAjudaLotes(lotes)}`;
+    }
+  }
   return true;
 }
 
@@ -1304,6 +1348,7 @@ document.getElementById('expWizAvancarBtn').addEventListener('click', async () =
   };
   expWizPasso = 0;
   expWizDados = preservar;
+  expWizDicaCatalogoTexto = ''; // recalculada quando o próximo item for digitado
   renderWizardPasso(); // limpa expWizMsg -- por isso a mensagem de sucesso é escrita DEPOIS
   msg.textContent = resultado.mensagem;
   msg.className = resultado.aviso ? 'status-msg status-err' : 'status-msg status-ok';
@@ -1551,4 +1596,170 @@ document.getElementById('confHistBody').addEventListener('click', async (e) => {
   if (!confirm('Desfazer esta retirada? O item volta para "na expedição" no Controle EXP.')) return;
   const ok = await marcarSaidaExpControle(btn.dataset.id, null, 'na_expedicao');
   if (ok) await carregarProgramacao();
+});
+
+// ---- Catálogo EXP: a planilha que sai do sistema (Item, Descrição, UM, -----
+// Depósito, Referência, Lote, Quantidade), colada de vez em quando. Um item
+// pode aparecer várias vezes -- cada linha é um LOTE diferente do mesmo
+// item -- então isto NÃO é a mesma tabela do Controle EXP (que é por
+// movimentação); é só um catálogo de consulta pra ajudar a preencher.
+// Carregada uma vez ao entrar na página (não em carregarProgramacao(), que
+// roda a cada movimentação registrada -- recarregar isto tudo toda hora
+// seria desperdício, é uma tabela grande e muda raramente).
+
+function ehLinhaCabecalhoCatalogoExp(primeiraColuna) {
+  return String(primeiraColuna || '').trim().toLowerCase() === 'item';
+}
+
+function parseCatalogoExpTexto(texto) {
+  return texto.split(/\r?\n/)
+    .map(l => l.trim())
+    .filter(l => l.length > 0)
+    .map(l => l.split('\t').map(c => c.trim()))
+    .filter(cols => cols[0] && !ehLinhaCabecalhoCatalogoExp(cols[0]))
+    .map(cols => ({
+      codigo_item: cols[0],
+      descricao: cols[1] || null,
+      um: cols[2] || null,
+      deposito: cols[3] || null,
+      referencia: cols[4] || null,
+      lote: cols[5] || null,
+      quantidade: cols[6] ? parseQtd(cols[6]) : null
+    }));
+}
+
+async function carregarCatalogoExp() {
+  const { data, error } = await sb.from('catalogo_exp_itens').select('*').eq('unidade', unidadeAtual);
+  catalogoExpItens = error ? [] : (data || []);
+  renderCatalogoExp(error ? error.message : null);
+}
+
+document.getElementById('catalogoExpImportarBtn').addEventListener('click', async () => {
+  const texto = document.getElementById('catalogoExpTexto').value;
+  const msg = document.getElementById('catalogoExpMsg');
+  const btn = document.getElementById('catalogoExpImportarBtn');
+
+  const linhas = parseCatalogoExpTexto(texto);
+  if (!linhas.length) {
+    msg.textContent = 'Cole ao menos uma linha com o código do item.';
+    msg.className = 'status-msg status-err';
+    return;
+  }
+
+  const confirmado = confirm(`Importar ${linhas.length} linha(s)? Isso substitui TODO o Catálogo EXP desta unidade pelo que está colado agora.`);
+  if (!confirmado) return;
+
+  btn.disabled = true;
+  msg.textContent = 'Importando...';
+  msg.className = 'status-msg';
+
+  const registros = linhas.map(l => ({ unidade: unidadeAtual, ...l, atualizado_por: nomeUsuarioAtual }));
+
+  // Substitui tudo -- a planilha do sistema é a fonte da verdade agora;
+  // mesclar com o que tinha antes deixaria lote de item que já saiu do
+  // estoque. Mesmo padrão da Planilha A da Programação de Separação.
+  const { error: erroDelete } = await sb.from('catalogo_exp_itens').delete().eq('unidade', unidadeAtual);
+  if (erroDelete) {
+    btn.disabled = false;
+    msg.textContent = 'NÃO IMPORTOU: ' + erroDelete.message;
+    msg.className = 'status-msg status-err';
+    return;
+  }
+
+  const { error: erroInsert } = await sb.from('catalogo_exp_itens').insert(registros);
+  btn.disabled = false;
+
+  if (erroInsert) {
+    msg.textContent = 'NÃO IMPORTOU: ' + erroInsert.message;
+    msg.className = 'status-msg status-err';
+    console.error('Falha ao importar Catálogo EXP:', erroInsert.message);
+    return;
+  }
+
+  msg.textContent = `${registros.length} linha(s) importada(s).`;
+  msg.className = 'status-msg status-ok';
+  document.getElementById('catalogoExpTexto').value = '';
+  await carregarCatalogoExp();
+});
+
+function renderCatalogoExp(erroCarregamento) {
+  const corpo = document.getElementById('catalogoExpBody');
+  const vazio = document.getElementById('catalogoExpVazio');
+  const contagem = document.getElementById('catalogoExpContagem');
+
+  if (erroCarregamento) {
+    vazio.style.display = 'block';
+    vazio.textContent = 'Não foi possível carregar: ' + erroCarregamento
+      + ' — se a mensagem falar em tabela inexistente, sql/programacao-06-catalogo-exp.sql ainda não foi rodado no Supabase.';
+    corpo.innerHTML = '';
+    contagem.textContent = '';
+    return;
+  }
+
+  const busca = document.getElementById('catalogoExpBusca').value.trim().toLowerCase();
+  let linhas = catalogoExpItens;
+  if (busca) {
+    linhas = linhas.filter(l =>
+      String(l.codigo_item).toLowerCase().includes(busca) ||
+      String(l.descricao).toLowerCase().includes(busca) ||
+      String(l.lote).toLowerCase().includes(busca));
+  }
+
+  contagem.textContent = `${catalogoExpItens.length} linha(s) no catálogo`
+    + (busca ? `, ${linhas.length} na busca` : '');
+
+  vazio.style.display = linhas.length ? 'none' : 'block';
+  if (!linhas.length) {
+    vazio.textContent = catalogoExpItens.length
+      ? 'Nenhuma linha bate com a busca.'
+      : 'Nenhum item no Catálogo EXP ainda -- cole a relação do sistema acima.';
+    corpo.innerHTML = '';
+    return;
+  }
+
+  corpo.innerHTML = linhas.map(l => `
+    <tr>
+      <td class="item">${escapeHtml(l.codigo_item)}</td>
+      <td>${escapeHtml(l.descricao || '—')}</td>
+      <td class="loc">${escapeHtml(l.um || '—')}</td>
+      <td class="loc">${escapeHtml(l.referencia || '—')}</td>
+      <td class="loc">${escapeHtml(l.lote || '—')}</td>
+      <td class="num">${l.quantidade != null ? escapeHtml(l.quantidade) : '—'}</td>
+    </tr>`).join('');
+}
+
+document.getElementById('catalogoExpBusca').addEventListener('input', () => renderCatalogoExp(null));
+
+// Ajuda a preencher Referência/Lote a partir do Catálogo EXP quando a
+// pessoa digita o código do item: se só existe 1 lote em estoque pra
+// aquele item, preenche sozinho (sem sobrescrever o que já foi digitado);
+// se existem vários, mostra a lista pra pessoa escolher na mão -- preencher
+// errado sozinho seria pior do que deixar em branco.
+function lotesDoItemNoCatalogo(codigo) {
+  return catalogoExpItens.filter(l => l.codigo_item === codigo && (l.referencia || l.lote));
+}
+
+function textoAjudaLotes(lotes) {
+  return lotes.map(l => `${l.lote || '—'} (ref ${l.referencia || '—'}, ${l.quantidade != null ? l.quantidade : '?'} ${l.um || ''})`).join('; ');
+}
+
+document.getElementById('expManualItem').addEventListener('blur', () => {
+  const codigo = document.getElementById('expManualItem').value.trim();
+  const dica = document.getElementById('expManualCatalogoDica');
+  if (!codigo) { dica.textContent = ''; return; }
+
+  const lotes = lotesDoItemNoCatalogo(codigo);
+  if (!lotes.length) { dica.textContent = ''; return; }
+
+  if (lotes.length === 1) {
+    const campoRef = document.getElementById('expManualRef');
+    const campoLote = document.getElementById('expManualLote');
+    if (!campoRef.value.trim() && lotes[0].referencia) campoRef.value = lotes[0].referencia;
+    if (!campoLote.value.trim() && lotes[0].lote) campoLote.value = lotes[0].lote;
+    dica.textContent = 'Referência/Lote preenchidos do Catálogo EXP (edite se precisar).';
+    dica.className = 'status-msg status-ok';
+  } else {
+    dica.textContent = `${lotes.length} lotes no Catálogo EXP pra este item — confira qual é: ${textoAjudaLotes(lotes)}`;
+    dica.className = 'status-msg';
+  }
 });

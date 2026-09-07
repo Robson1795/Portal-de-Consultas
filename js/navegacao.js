@@ -109,7 +109,7 @@ function mostrarPagina(id) {
   if (id === 'bobinas') { abrirTelaBobinas(); }
   if (id === 'requisicao') { carregarRequisicao(); }
   if (id === 'programacao') { carregarProgramacao(); }
-  if (id === 'expacessorios') { trocarAbaExpAcessorios('entrada'); carregarProgramacao(); }
+  if (id === 'expacessorios') { trocarAbaExpAcessorios('entrada'); carregarProgramacao(); carregarCatalogoExp(); }
   if (id === 'config')  { carregarUsuarios(); carregarConfigUnidades(); }
 }
 

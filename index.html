@@ -470,6 +470,7 @@
         <div id="expAbas" style="display:flex; gap:8px; flex-wrap:wrap;">
           <button class="btn btn-primary" data-exp-aba="entrada">Entrada</button>
           <button class="btn" data-exp-aba="saida">Saída / Conferência</button>
+          <button class="btn" data-exp-aba="catalogo">Catálogo</button>
         </div>
         <button class="btn" id="expAtualizarBtn" style="margin-left:auto;">Atualizar</button>
       </div>
@@ -480,55 +481,60 @@
            interfaces pro mesmo registro -- "tudo de uma vez" (rápido no
            computador) e "passo a passo" (um campo grande por tela, melhor
            no celular). Entra no passo a passo sozinho em tela pequena; a
-           pessoa pode trocar a qualquer momento, e a escolha fica salva. -->
-      <div style="padding:16px 16px 0;">
-        <div class="cfg-barra" style="flex-wrap:wrap;">
-          <select id="expManualTipo" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px; font-weight:600;">
-            <option value="entrada">⬇️ Entrada</option>
-            <option value="saida">⬆️ Saída</option>
-          </select>
-          <button class="btn" id="expModoToggleBtn" style="margin-left:auto;">📱 Passo a passo</button>
+           pessoa pode trocar a qualquer momento, e a escolha fica salva.
+           Some na aba Catálogo -- lá não se registra movimentação. -->
+      <div id="expRegistroContainer">
+        <div style="padding:16px 16px 0;">
+          <div class="cfg-barra" style="flex-wrap:wrap;">
+            <select id="expManualTipo" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px; font-weight:600;">
+              <option value="entrada">⬇️ Entrada</option>
+              <option value="saida">⬆️ Saída</option>
+            </select>
+            <button class="btn" id="expModoToggleBtn" style="margin-left:auto;">📱 Passo a passo</button>
+          </div>
         </div>
-      </div>
 
-      <!-- ---- Formulário completo: todos os campos numa tela só ---- -->
-      <div id="expFormCompleto" style="padding:10px 16px 0;">
-        <div class="modal-text" style="margin-bottom:10px;">
-          Digite um item de cada vez -- é a forma mais rápida quando não veio de planilha
-          nenhuma. Nº do pedido, localização, OP e lote continuam preenchidos pro próximo
-          item. Nº da OP, lote e referência ficam em branco se o item não tiver.
+        <!-- ---- Formulário completo: todos os campos numa tela só ---- -->
+        <div id="expFormCompleto" style="padding:10px 16px 0;">
+          <div class="modal-text" style="margin-bottom:10px;">
+            Digite um item de cada vez -- é a forma mais rápida quando não veio de planilha
+            nenhuma. Nº do pedido, localização, OP e lote continuam preenchidos pro próximo
+            item. Nº da OP, lote e referência ficam em branco se o item não tiver.
+          </div>
+          <div class="cfg-barra" style="flex-wrap:wrap;">
+            <input type="text" id="expManualItem" placeholder="Item *"
+                   style="width:110px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+            <input type="text" id="expManualPedido" placeholder="Nº Pedido"
+                   style="width:110px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+            <input type="text" id="expManualQtd" placeholder="Quantidade"
+                   style="width:110px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+            <input type="text" id="expManualLocal" placeholder="Localização"
+                   style="width:130px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+            <input type="text" id="expManualOp" placeholder="Nº da OP"
+                   style="width:110px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+            <input type="text" id="expManualLote" placeholder="Lote"
+                   style="width:110px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+            <input type="text" id="expManualRef" placeholder="Referência"
+                   style="width:130px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+            <button class="btn btn-primary" id="expManualAdicionarBtn">Registrar</button>
+          </div>
+          <div class="status-msg" id="expManualCatalogoDica" style="margin-top:4px;"></div>
+          <div class="status-msg" id="expManualMsg" style="margin-top:6px;"></div>
         </div>
-        <div class="cfg-barra" style="flex-wrap:wrap;">
-          <input type="text" id="expManualItem" placeholder="Item *"
-                 style="width:110px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
-          <input type="text" id="expManualPedido" placeholder="Nº Pedido"
-                 style="width:110px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
-          <input type="text" id="expManualQtd" placeholder="Quantidade"
-                 style="width:110px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
-          <input type="text" id="expManualLocal" placeholder="Localização"
-                 style="width:130px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
-          <input type="text" id="expManualOp" placeholder="Nº da OP"
-                 style="width:110px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
-          <input type="text" id="expManualLote" placeholder="Lote"
-                 style="width:110px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
-          <input type="text" id="expManualRef" placeholder="Referência"
-                 style="width:130px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
-          <button class="btn btn-primary" id="expManualAdicionarBtn">Registrar</button>
-        </div>
-        <div class="status-msg" id="expManualMsg" style="margin-top:6px;"></div>
-      </div>
 
-      <!-- ---- Passo a passo: um campo grande de cada vez (celular) ---- -->
-      <div id="expFormWizard" style="display:none; padding:10px 16px 0;">
-        <div class="modal-label" id="expWizPasso" style="margin-bottom:8px;"></div>
-        <input type="text" id="expWizInput"
-               style="width:100%; padding:14px; font-size:18px; border:1px solid var(--border); border-radius:10px; box-sizing:border-box;">
-        <div id="expWizRevisao" style="display:none; margin-top:6px;"></div>
-        <div class="cfg-barra" style="padding:12px 0 0;">
-          <button class="btn" id="expWizVoltarBtn">Voltar</button>
-          <button class="btn btn-primary" id="expWizAvancarBtn" style="margin-left:auto;">Avançar</button>
+        <!-- ---- Passo a passo: um campo grande de cada vez (celular) ---- -->
+        <div id="expFormWizard" style="display:none; padding:10px 16px 0;">
+          <div class="modal-label" id="expWizPasso" style="margin-bottom:8px;"></div>
+          <input type="text" id="expWizInput"
+                 style="width:100%; padding:14px; font-size:18px; border:1px solid var(--border); border-radius:10px; box-sizing:border-box;">
+          <div class="status-msg" id="expWizCatalogoDica" style="margin-top:6px;"></div>
+          <div id="expWizRevisao" style="display:none; margin-top:6px;"></div>
+          <div class="cfg-barra" style="padding:12px 0 0;">
+            <button class="btn" id="expWizVoltarBtn">Voltar</button>
+            <button class="btn btn-primary" id="expWizAvancarBtn" style="margin-left:auto;">Avançar</button>
+          </div>
+          <div class="status-msg" id="expWizMsg" style="margin-top:6px;"></div>
         </div>
-        <div class="status-msg" id="expWizMsg" style="margin-top:6px;"></div>
       </div>
 
       <!-- ---- Entrada: localizacao por ITEM (nao por pedido inteiro) ---- -->
@@ -611,6 +617,49 @@
           <div class="empty-msg" id="confHistVazio" style="display:none;">
             Nenhuma retirada registrada ainda.
           </div>
+        </div>
+      </div>
+
+      <!-- ---- Catálogo EXP: planilha do sistema, so de leitura/importacao ---- -->
+      <!-- Item, Descricao, UM, Deposito, Referencia, Lote, Quantidade -- o
+           Robson exporta do sistema de vez em quando. Um item pode aparecer
+           varias vezes (um lote por linha); por isso reimportar SUBSTITUI
+           tudo, nao soma. Ajuda a preencher Descricao/UM sempre, e
+           Referencia/Lote quando so ha 1 lote em estoque pra aquele item. -->
+      <div id="expCatalogoAba" class="prog-aba" style="display:none;">
+        <div style="padding:16px;">
+          <div class="modal-text" style="margin-bottom:8px;">
+            Cole aqui a relação que sai do sistema (<b>Item, Descrição, UM, Depósito, Referência,
+            Lote, Quantidade</b>, uma linha por lote). A linha de cabeçalho, se vier junto, é
+            ignorada sozinha. Importar <b>substitui todo o catálogo desta unidade</b> pelo que
+            for colado agora.
+          </div>
+          <textarea id="catalogoExpTexto" rows="8" placeholder="Cole aqui as células copiadas do Excel (Ctrl+C na planilha, Ctrl+V aqui)."
+                    style="width:100%; font-family:monospace; font-size:12px;"></textarea>
+          <div class="cfg-barra" style="padding:10px 0 0;">
+            <button class="btn btn-primary" id="catalogoExpImportarBtn">Importar (substitui tudo)</button>
+            <span class="status-msg" id="catalogoExpMsg"></span>
+          </div>
+        </div>
+
+        <div class="cfg-barra">
+          <input type="text" id="catalogoExpBusca" placeholder="Buscar por item, descrição ou lote..."
+                 style="flex:1; min-width:200px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <span class="status-msg" id="catalogoExpContagem" style="margin-left:auto;"></span>
+        </div>
+
+        <div class="scroll-area">
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th><th>Descrição</th><th>UM</th><th>Referência</th><th>Lote</th><th>Quantidade</th>
+              </tr>
+            </thead>
+            <tbody id="catalogoExpBody"></tbody>
+          </table>
+        </div>
+        <div class="empty-msg" id="catalogoExpVazio" style="display:none;">
+          Nenhum item no Catálogo EXP ainda -- cole a relação do sistema acima.
         </div>
       </div>
     </div>
