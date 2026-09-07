@@ -476,17 +476,29 @@
 
       <!-- ---- Registrar movimentação: entrada OU saída, item a item ---- -->
       <!-- Visível nas duas sub-abas -- é o mesmo registro (exp_controle_itens),
-           só muda o status inicial conforme o Tipo de Movimentação. -->
+           só muda o status inicial conforme o Tipo de Movimentação. Duas
+           interfaces pro mesmo registro -- "tudo de uma vez" (rápido no
+           computador) e "passo a passo" (um campo grande por tela, melhor
+           no celular). Entra no passo a passo sozinho em tela pequena; a
+           pessoa pode trocar a qualquer momento, e a escolha fica salva. -->
       <div style="padding:16px 16px 0;">
-        <div class="modal-text" style="margin-bottom:10px;">
-          Digite um item de cada vez -- é a forma mais rápida quando não veio de planilha
-          nenhuma. Localização, nº do pedido e lote continuam preenchidos pro próximo item.
-        </div>
         <div class="cfg-barra" style="flex-wrap:wrap;">
           <select id="expManualTipo" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px; font-weight:600;">
             <option value="entrada">⬇️ Entrada</option>
             <option value="saida">⬆️ Saída</option>
           </select>
+          <button class="btn" id="expModoToggleBtn" style="margin-left:auto;">📱 Passo a passo</button>
+        </div>
+      </div>
+
+      <!-- ---- Formulário completo: todos os campos numa tela só ---- -->
+      <div id="expFormCompleto" style="padding:10px 16px 0;">
+        <div class="modal-text" style="margin-bottom:10px;">
+          Digite um item de cada vez -- é a forma mais rápida quando não veio de planilha
+          nenhuma. Nº do pedido, localização, OP e lote continuam preenchidos pro próximo
+          item. Nº da OP, lote e referência ficam em branco se o item não tiver.
+        </div>
+        <div class="cfg-barra" style="flex-wrap:wrap;">
           <input type="text" id="expManualItem" placeholder="Item *"
                  style="width:110px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
           <input type="text" id="expManualPedido" placeholder="Nº Pedido"
@@ -495,6 +507,8 @@
                  style="width:110px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
           <input type="text" id="expManualLocal" placeholder="Localização"
                  style="width:130px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <input type="text" id="expManualOp" placeholder="Nº da OP"
+                 style="width:110px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
           <input type="text" id="expManualLote" placeholder="Lote"
                  style="width:110px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
           <input type="text" id="expManualRef" placeholder="Referência"
@@ -504,6 +518,19 @@
         <div class="status-msg" id="expManualMsg" style="margin-top:6px;"></div>
       </div>
 
+      <!-- ---- Passo a passo: um campo grande de cada vez (celular) ---- -->
+      <div id="expFormWizard" style="display:none; padding:10px 16px 0;">
+        <div class="modal-label" id="expWizPasso" style="margin-bottom:8px;"></div>
+        <input type="text" id="expWizInput"
+               style="width:100%; padding:14px; font-size:18px; border:1px solid var(--border); border-radius:10px; box-sizing:border-box;">
+        <div id="expWizRevisao" style="display:none; margin-top:6px;"></div>
+        <div class="cfg-barra" style="padding:12px 0 0;">
+          <button class="btn" id="expWizVoltarBtn">Voltar</button>
+          <button class="btn btn-primary" id="expWizAvancarBtn" style="margin-left:auto;">Avançar</button>
+        </div>
+        <div class="status-msg" id="expWizMsg" style="margin-top:6px;"></div>
+      </div>
+
       <!-- ---- Entrada: localizacao por ITEM (nao por pedido inteiro) ---- -->
       <div id="expEntradaAba" class="prog-aba">
         <div style="padding:6px 16px 0;">
@@ -511,9 +538,10 @@
         </div>
         <div id="expCtrlColarArea" style="padding:16px; display:none;">
           <div class="modal-text" style="margin-bottom:8px;">
-            Cole as colunas <b>Item, Nº Pedido, Quantidade, Localização, Lote, Referência</b> — a
-            Descrição e a UM são buscadas sozinhas (catálogo da Requisição ALM, depois o estoque).
-            Linha em branco é ignorada.
+            Cole as colunas <b>Item, Nº Pedido, Quantidade, Localização, Nº da OP, Lote,
+            Referência</b> — a Descrição e a UM são buscadas sozinhas (catálogo da Requisição
+            ALM, depois o estoque). Nº da OP, Lote e Referência podem ficar em branco. Linha em
+            branco é ignorada.
           </div>
           <textarea id="expCtrlTexto" rows="6" placeholder="Cole aqui as células copiadas do Excel (Ctrl+C na planilha, Ctrl+V aqui)."
                     style="width:100%; font-family:monospace; font-size:12px;"></textarea>
@@ -535,7 +563,7 @@
             <thead>
               <tr>
                 <th>Localização</th><th>Item</th><th>Descrição</th><th>UM</th>
-                <th>Qtd</th><th>Nº Pedido</th><th>Lote</th><th>Referência</th><th>Ação</th>
+                <th>Qtd</th><th>Nº Pedido</th><th>Nº OP</th><th>Lote</th><th>Referência</th><th>Ação</th>
               </tr>
             </thead>
             <tbody id="expCtrlBody"></tbody>

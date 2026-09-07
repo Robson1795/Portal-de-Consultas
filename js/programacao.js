@@ -910,8 +910,9 @@ function parseExpControleTexto(texto) {
       numero_pedido: cols[1] || null,
       quantidade: cols[2] ? parseQtd(cols[2]) : null,
       localizacao: cols[3] || null,
-      lote: cols[4] || null,
-      referencia: cols[5] || null
+      numero_os_op: cols[4] || null,
+      lote: cols[5] || null,
+      referencia: cols[6] || null
     }));
 }
 
@@ -970,7 +971,7 @@ document.getElementById('expCtrlConferirBtn').addEventListener('click', async ()
   previa.innerHTML = `
     <table>
       <thead>
-        <tr><th>Item</th><th>Descrição</th><th>UM</th><th>Qtd</th><th>Nº Pedido</th><th>Local</th><th>Lote</th><th>Referência</th></tr>
+        <tr><th>Item</th><th>Descrição</th><th>UM</th><th>Qtd</th><th>Nº Pedido</th><th>Local</th><th>Nº OP</th><th>Lote</th><th>Referência</th></tr>
       </thead>
       <tbody>
         ${expCtrlPendentes.map(l => `
@@ -981,6 +982,7 @@ document.getElementById('expCtrlConferirBtn').addEventListener('click', async ()
             <td class="num">${l.quantidade != null ? escapeHtml(l.quantidade) : '—'}</td>
             <td class="loc">${escapeHtml(l.numero_pedido || '—')}</td>
             <td class="loc">${escapeHtml(l.localizacao || '—')}</td>
+            <td class="loc">${escapeHtml(l.numero_os_op || '—')}</td>
             <td class="loc">${escapeHtml(l.lote || '—')}</td>
             <td class="loc">${escapeHtml(l.referencia || '—')}</td>
           </tr>`).join('')}
@@ -1004,6 +1006,7 @@ async function gravarExpControle() {
     codigo_item: l.codigo_item,
     quantidade: l.quantidade,
     localizacao: l.localizacao,
+    numero_os_op: l.numero_os_op,
     lote: l.lote,
     referencia: l.referencia,
     registrado_por: nomeUsuarioAtual
@@ -1045,7 +1048,8 @@ function renderExpControle(erroCarregamento) {
     linhas = linhas.filter(l =>
       String(l.localizacao).toLowerCase().includes(busca) ||
       String(l.codigo_item).toLowerCase().includes(busca) ||
-      String(l.numero_pedido).toLowerCase().includes(busca));
+      String(l.numero_pedido).toLowerCase().includes(busca) ||
+      String(l.numero_os_op).toLowerCase().includes(busca));
   }
 
   vazio.style.display = linhas.length ? 'none' : 'block';
@@ -1068,6 +1072,7 @@ function renderExpControle(erroCarregamento) {
       <td class="loc">${desc && desc.um ? escapeHtml(desc.um) : '—'}</td>
       <td class="num">${l.quantidade != null ? escapeHtml(l.quantidade) : '—'}</td>
       <td class="loc">${escapeHtml(l.numero_pedido || '—')}</td>
+      <td class="loc">${escapeHtml(l.numero_os_op || '—')}</td>
       <td class="loc">${escapeHtml(l.lote || '—')}</td>
       <td class="loc">${escapeHtml(l.referencia || '—')}</td>
       <td>${retirado
@@ -1109,36 +1114,22 @@ async function marcarSaidaExpControle(id, conferente, novoStatus) {
 document.getElementById('expCtrlBusca').addEventListener('input', () => renderExpControle(null));
 
 // Digitação manual, item a item -- pra quando o dado nao vem de planilha
-// nenhuma (a pessoa esta com o material na mao e so quer registrar o local).
-// Mesma tabela e mesma busca de descricao do fluxo de colar; localizacao,
-// pedido e lote ficam preenchidos pro proximo item por conveniencia.
-document.getElementById('expManualAdicionarBtn').addEventListener('click', async () => {
-  const msg = document.getElementById('expManualMsg');
-  const campoItem = document.getElementById('expManualItem');
-  const codigo = campoItem.value.trim();
+// nenhuma (a pessoa esta com o material na mao e so quer registrar o
+// local). Duas interfaces (formulario completo e passo-a-passo) chamam
+// esta MESMA funcao pra nao duplicar a gravacao.
+async function gravarMovimentacaoManual({ codigo, pedido, quantidadeTexto, local, op, lote, ref, tipo }) {
+  codigo = (codigo || '').trim();
+  if (!codigo) return { ok: false, mensagem: 'Informe o código do item.' };
 
-  if (!codigo) {
-    msg.textContent = 'Informe o código do item.';
-    msg.className = 'status-msg status-err';
-    campoItem.focus();
-    return;
-  }
-
-  const btn = document.getElementById('expManualAdicionarBtn');
-  btn.disabled = true;
-  msg.textContent = 'Salvando...';
-  msg.className = 'status-msg';
-
-  const tipo = document.getElementById('expManualTipo').value; // 'entrada' ou 'saida'
-  const quantidadeTexto = document.getElementById('expManualQtd').value.trim();
   const linha = {
     unidade: unidadeAtual,
-    numero_pedido: document.getElementById('expManualPedido').value.trim() || null,
+    numero_pedido: (pedido || '').trim() || null,
     codigo_item: codigo,
-    quantidade: quantidadeTexto ? parseQtd(quantidadeTexto) : null,
-    localizacao: document.getElementById('expManualLocal').value.trim() || null,
-    lote: document.getElementById('expManualLote').value.trim() || null,
-    referencia: document.getElementById('expManualRef').value.trim() || null,
+    quantidade: (quantidadeTexto || '').trim() ? parseQtd(quantidadeTexto.trim()) : null,
+    localizacao: (local || '').trim() || null,
+    numero_os_op: (op || '').trim() || null,
+    lote: (lote || '').trim() || null,
+    referencia: (ref || '').trim() || null,
     registrado_por: nomeUsuarioAtual
   };
   // Tipo de Movimentação decide o status inicial do registro: uma Saída
@@ -1151,30 +1142,214 @@ document.getElementById('expManualAdicionarBtn').addEventListener('click', async
   }
 
   const { error } = await sb.from('exp_controle_itens').insert([linha]);
-  btn.disabled = false;
-
   if (error) {
-    msg.textContent = 'NÃO SALVOU: ' + error.message;
-    msg.className = 'status-msg status-err';
     console.error('Falha ao gravar item manual do Controle EXP:', error.message);
-    return;
+    return { ok: false, mensagem: 'NÃO SALVOU: ' + error.message };
   }
 
   const semDescricao = !(await buscarDescricoesItens([codigo])).get(codigo);
   const rotuloTipo = tipo === 'saida' ? 'Saída' : 'Entrada';
-  msg.textContent = `${rotuloTipo} do item ${codigo} salva.` + (semDescricao ? ' ⚠ Descrição não encontrada — confira o código.' : '');
-  msg.className = semDescricao ? 'status-msg status-err' : 'status-msg status-ok';
+  await carregarProgramacao();
+  trocarAbaExpAcessorios(tipo === 'saida' ? 'saida' : 'entrada');
+  return {
+    ok: true,
+    aviso: semDescricao,
+    mensagem: `${rotuloTipo} do item ${codigo} salva.` + (semDescricao ? ' ⚠ Descrição não encontrada — confira o código.' : '')
+  };
+}
+
+// ---- Formulário completo (todos os campos numa tela) -----------------------
+document.getElementById('expManualAdicionarBtn').addEventListener('click', async () => {
+  const msg = document.getElementById('expManualMsg');
+  const btn = document.getElementById('expManualAdicionarBtn');
+  const campoItem = document.getElementById('expManualItem');
+
+  btn.disabled = true;
+  msg.textContent = 'Salvando...';
+  msg.className = 'status-msg';
+
+  const resultado = await gravarMovimentacaoManual({
+    codigo: campoItem.value,
+    pedido: document.getElementById('expManualPedido').value,
+    quantidadeTexto: document.getElementById('expManualQtd').value,
+    local: document.getElementById('expManualLocal').value,
+    op: document.getElementById('expManualOp').value,
+    lote: document.getElementById('expManualLote').value,
+    ref: document.getElementById('expManualRef').value,
+    tipo: document.getElementById('expManualTipo').value
+  });
+
+  btn.disabled = false;
+  msg.textContent = resultado.mensagem;
+  msg.className = resultado.ok ? (resultado.aviso ? 'status-msg status-err' : 'status-msg status-ok') : 'status-msg status-err';
+  if (!resultado.ok) { campoItem.focus(); return; }
 
   document.getElementById('expManualItem').value = '';
   document.getElementById('expManualQtd').value = '';
   campoItem.focus();
-  await carregarProgramacao();
-  trocarAbaExpAcessorios(tipo === 'saida' ? 'saida' : 'entrada');
 });
 
 document.getElementById('expManualItem').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') document.getElementById('expManualAdicionarBtn').click();
 });
+
+// ---- Passo-a-passo: um campo grande por tela, "Item" primeiro, na ordem -
+// do formulario completo. So o Item e obrigatorio -- Nº da OP, Lote e
+// Referencia sao itens de producao que nem todo pedido tem.
+const EXP_WIZ_PASSOS = [
+  { campo: 'codigo_item',   rotulo: 'Item', obrigatorio: true },
+  { campo: 'numero_pedido', rotulo: 'Nº do Pedido' },
+  { campo: 'quantidade',    rotulo: 'Quantidade' },
+  { campo: 'localizacao',   rotulo: 'Localização' },
+  { campo: 'numero_os_op',  rotulo: 'Nº da OP', opcional: true },
+  { campo: 'lote',          rotulo: 'Lote', opcional: true },
+  { campo: 'referencia',    rotulo: 'Referência', opcional: true }
+];
+
+let expWizPasso = 0;
+let expWizDados = {};
+
+function rotuloTipoAtual() {
+  return document.getElementById('expManualTipo').value === 'saida' ? 'Saída' : 'Entrada';
+}
+
+function iniciarWizardManual() {
+  expWizPasso = 0;
+  expWizDados = {};
+  renderWizardPasso();
+}
+
+function renderWizardPasso() {
+  document.getElementById('expWizMsg').textContent = '';
+  if (expWizPasso >= EXP_WIZ_PASSOS.length) { renderWizardRevisao(); return; }
+
+  document.getElementById('expWizRevisao').style.display = 'none';
+  const campo = document.getElementById('expWizInput');
+  campo.style.display = 'block';
+
+  const passo = EXP_WIZ_PASSOS[expWizPasso];
+  document.getElementById('expWizPasso').textContent =
+    `${rotuloTipoAtual()} — passo ${expWizPasso + 1} de ${EXP_WIZ_PASSOS.length}: ${passo.rotulo}` + (passo.opcional ? ' (opcional)' : '');
+  campo.value = expWizDados[passo.campo] || '';
+  campo.placeholder = passo.opcional ? 'Deixe em branco se não tiver' : passo.rotulo;
+  document.getElementById('expWizVoltarBtn').disabled = expWizPasso === 0;
+  document.getElementById('expWizAvancarBtn').textContent = 'Avançar';
+  campo.focus();
+}
+
+function salvarPassoAtual() {
+  const passo = EXP_WIZ_PASSOS[expWizPasso];
+  const valor = document.getElementById('expWizInput').value.trim();
+  if (passo.obrigatorio && !valor) {
+    document.getElementById('expWizMsg').textContent = `Informe ${passo.rotulo.toLowerCase()}.`;
+    document.getElementById('expWizMsg').className = 'status-msg status-err';
+    return false;
+  }
+  expWizDados[passo.campo] = valor;
+  return true;
+}
+
+function renderWizardRevisao() {
+  document.getElementById('expWizInput').style.display = 'none';
+  document.getElementById('expWizPasso').textContent = `${rotuloTipoAtual()} — confira antes de registrar`;
+  const rev = document.getElementById('expWizRevisao');
+  rev.style.display = 'block';
+  rev.innerHTML = EXP_WIZ_PASSOS.map(p =>
+    `<div style="display:flex; justify-content:space-between; gap:10px; padding:6px 0; border-bottom:1px solid var(--border);">
+       <span>${escapeHtml(p.rotulo)}</span><b>${escapeHtml(expWizDados[p.campo] || '—')}</b>
+     </div>`).join('');
+  document.getElementById('expWizVoltarBtn').disabled = false;
+  document.getElementById('expWizAvancarBtn').textContent = 'Registrar';
+}
+
+document.getElementById('expWizAvancarBtn').addEventListener('click', async () => {
+  if (expWizPasso < EXP_WIZ_PASSOS.length) {
+    if (!salvarPassoAtual()) return;
+    expWizPasso++;
+    renderWizardPasso();
+    return;
+  }
+
+  const btn = document.getElementById('expWizAvancarBtn');
+  const msg = document.getElementById('expWizMsg');
+  btn.disabled = true;
+  msg.textContent = 'Salvando...';
+  msg.className = 'status-msg';
+
+  const resultado = await gravarMovimentacaoManual({
+    codigo: expWizDados.codigo_item,
+    pedido: expWizDados.numero_pedido,
+    quantidadeTexto: expWizDados.quantidade,
+    local: expWizDados.localizacao,
+    op: expWizDados.numero_os_op,
+    lote: expWizDados.lote,
+    ref: expWizDados.referencia,
+    tipo: document.getElementById('expManualTipo').value
+  });
+
+  btn.disabled = false;
+  msg.textContent = resultado.mensagem;
+  msg.className = resultado.ok ? (resultado.aviso ? 'status-msg status-err' : 'status-msg status-ok') : 'status-msg status-err';
+  if (!resultado.ok) return;
+
+  // Nº do pedido, localização, OP, lote e referência ficam preenchidos pro
+  // próximo item (mesma conveniência do formulário completo); só item e
+  // quantidade voltam em branco, porque mudam a cada item de verdade.
+  const preservar = {
+    numero_pedido: expWizDados.numero_pedido,
+    localizacao: expWizDados.localizacao,
+    numero_os_op: expWizDados.numero_os_op,
+    lote: expWizDados.lote,
+    referencia: expWizDados.referencia
+  };
+  expWizPasso = 0;
+  expWizDados = preservar;
+  renderWizardPasso(); // limpa expWizMsg -- por isso a mensagem de sucesso é escrita DEPOIS
+  msg.textContent = resultado.mensagem;
+  msg.className = resultado.aviso ? 'status-msg status-err' : 'status-msg status-ok';
+});
+
+document.getElementById('expWizVoltarBtn').addEventListener('click', () => {
+  if (expWizPasso === 0) return;
+  if (expWizPasso < EXP_WIZ_PASSOS.length) salvarPassoAtual();
+  expWizPasso--;
+  renderWizardPasso();
+});
+
+document.getElementById('expWizInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); document.getElementById('expWizAvancarBtn').click(); }
+});
+
+// ---- Alternância formulário completo <-> passo-a-passo (celular) ----------
+// Em tela pequena entra direto no passo-a-passo (um campo grande de cada
+// vez -- mais fácil de digitar com o polegar). A pessoa pode trocar na mão
+// a qualquer momento; a escolha fica salva pro próximo acesso. Vem DEPOIS
+// das funções do wizard de propósito: aplicarModoManual() pode chamar
+// iniciarWizardManual() assim que o script carrega, então essas funções
+// (e o const EXP_WIZ_PASSOS) precisam já estar inicializadas nesse ponto.
+const CHAVE_MODO_MANUAL_LS = 'expModoManualPref';
+let expModoManual = 'completo';
+
+function aplicarModoManual() {
+  const wizard = expModoManual === 'wizard';
+  document.getElementById('expFormCompleto').style.display = wizard ? 'none' : 'block';
+  document.getElementById('expFormWizard').style.display = wizard ? 'block' : 'none';
+  document.getElementById('expModoToggleBtn').textContent = wizard ? '🖥️ Tudo de uma vez' : '📱 Passo a passo';
+  if (wizard) iniciarWizardManual();
+}
+
+document.getElementById('expModoToggleBtn').addEventListener('click', () => {
+  expModoManual = expModoManual === 'wizard' ? 'completo' : 'wizard';
+  try { localStorage.setItem(CHAVE_MODO_MANUAL_LS, expModoManual); } catch (err) { /* localStorage bloqueado -- so nao lembra */ }
+  aplicarModoManual();
+});
+
+(function iniciarModoManualPadrao() {
+  let salvo = null;
+  try { salvo = localStorage.getItem(CHAVE_MODO_MANUAL_LS); } catch (err) { /* segue sem lembrar */ }
+  expModoManual = salvo || (window.matchMedia('(max-width: 860px)').matches ? 'wizard' : 'completo');
+  aplicarModoManual();
+})();
 
 document.getElementById('expCtrlBody').addEventListener('click', async (e) => {
   const btnExcluir = e.target.closest('.expctrl-excluir');
@@ -1199,9 +1374,9 @@ document.getElementById('expCtrlBody').addEventListener('click', async (e) => {
 document.getElementById('expCtrlExportarBtn').addEventListener('click', () => {
   if (!progExpControle.length) { alert('Nenhum item no Controle EXP para exportar.'); return; }
 
-  const cabecalho = ['Localização', 'Item', 'Nº Pedido', 'Quantidade', 'Lote', 'Referência'];
+  const cabecalho = ['Localização', 'Item', 'Nº Pedido', 'Quantidade', 'Nº OP', 'Lote', 'Referência'];
   const linhasCsv = progExpControle.map(l => [
-    l.localizacao || '', l.codigo_item, l.numero_pedido || '', l.quantidade != null ? l.quantidade : '', l.lote || '', l.referencia || ''
+    l.localizacao || '', l.codigo_item, l.numero_pedido || '', l.quantidade != null ? l.quantidade : '', l.numero_os_op || '', l.lote || '', l.referencia || ''
   ]);
   // ; como separador (nao vírgula) porque o numero brasileiro usa vírgula
   // decimal -- Excel PT-BR abre certo direto com ;.
