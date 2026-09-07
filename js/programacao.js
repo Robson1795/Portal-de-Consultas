@@ -1549,10 +1549,15 @@ function exportarExpControleXlsx(nomeBase) {
   XLSX.writeFile(livro, nomeBase + '.xlsx');
 }
 
-function exportarExpControleHtml(nomeBase) {
+// Reaproveitada pelo Exportar HTML e pelo Imprimir -- mesmo layout nos
+// dois, só muda o que acontece com o HTML depois (baixar vs abrir e
+// mandar pra impressora). `scriptAutoImprimir` só entra na versão que
+// abre pra imprimir; no arquivo baixado ninguém quer isso disparando
+// sozinho toda vez que a pessoa só quer abrir o arquivo pra olhar.
+function montarHtmlExpControle(scriptAutoImprimir) {
   const linhasHtml = linhasExportacaoExpControle().map(linha =>
     `<tr>${linha.map(v => `<td>${escapeHtml(v != null ? v : '')}</td>`).join('')}</tr>`).join('');
-  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
 <title>Controle EXP — ${escapeHtml(rotuloUnidade(unidadeAtual))} — ${new Date().toLocaleDateString('pt-BR')}</title>
 <style>
   body { font-family: Arial, sans-serif; padding: 16px; }
@@ -1560,11 +1565,17 @@ function exportarExpControleHtml(nomeBase) {
   th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
   th { background: #004894; color: white; }
   tr:nth-child(even) { background: #f7f9fb; }
+  @media print { body { padding: 0; } }
 </style></head><body>
 <h2>Controle EXP Acessórios — ${escapeHtml(rotuloUnidade(unidadeAtual))} — ${new Date().toLocaleDateString('pt-BR')}</h2>
 <table><thead><tr>${EXP_EXPORT_CABECALHO.map(c => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead>
 <tbody>${linhasHtml}</tbody></table>
+${scriptAutoImprimir ? '<script>window.onload = () => window.print();<' + '/script>' : ''}
 </body></html>`;
+}
+
+function exportarExpControleHtml(nomeBase) {
+  const html = montarHtmlExpControle(false);
   baixarArquivo(new Blob([html], { type: 'text/html;charset=utf-8;' }), nomeBase + '.html');
 }
 
@@ -1577,6 +1588,17 @@ document.getElementById('expCtrlExportarBtn').addEventListener('click', () => {
   if (formato === 'xlsx') exportarExpControleXlsx(nomeBase);
   else if (formato === 'html') exportarExpControleHtml(nomeBase);
   else exportarExpControleCsv(nomeBase);
+});
+
+// Abre a mesma listagem numa aba nova já pronta pra impressora -- a
+// própria caixa de impressão do navegador tem "Salvar como PDF", então
+// cobre o PDF de graça, sem precisar de outra biblioteca.
+document.getElementById('expCtrlImprimirBtn').addEventListener('click', () => {
+  if (!progExpControle.length) { alert('Nenhum item no Controle EXP para imprimir.'); return; }
+  const aba = window.open('', '_blank');
+  if (!aba) { alert('O navegador bloqueou a nova aba. Libere pop-ups pra este site e tente de novo.'); return; }
+  aba.document.write(montarHtmlExpControle(true));
+  aba.document.close();
 });
 
 // ---- Aba 4: Conferência EXP (quem retira fisicamente pro carregamento) ----
