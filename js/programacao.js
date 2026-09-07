@@ -21,6 +21,8 @@ let progAbaAtual = 'separacao';
 let progImportAba = 'A';
 let progPedidos = [];       // vw_pedidos_prioridade (pedido + contagem de itens)
 let progItens = [];         // pedido_itens dos pedidos carregados
+let progExpControle = [];   // exp_controle_itens -- localizacao por item, pro inventario
+let expCtrlDescMap = new Map(); // codigo_item -> {descricao, um}, resolvido em cascata pra exibir a lista
 
 // ---- Carga da tela ---------------------------------------------------------
 async function carregarProgramacao() {
@@ -34,13 +36,22 @@ async function carregarProgramacao() {
     return;
   }
 
-  const [pedidos, itens] = await Promise.all([
+  const [pedidos, itens, expCtrl] = await Promise.all([
     sb.from('vw_pedidos_prioridade').select('*'),
-    sb.from('pedido_itens').select('*').order('seq', { ascending: true })
+    sb.from('pedido_itens').select('*').order('seq', { ascending: true }),
+    sb.from('exp_controle_itens').select('*').order('localizacao', { ascending: true })
   ]);
 
   if (pedidos.error) return falhaProgramacao(pedidos.error.message);
   if (itens.error)  return falhaProgramacao(itens.error.message);
+  // exp_controle_itens e novo (sql/programacao-03-controle-exp.sql) -- se o
+  // script ainda nao rodou, o resto da tela continua funcionando; so essa
+  // secao fica vazia, com o erro visivel ali em vez de travar a pagina toda.
+  progExpControle = expCtrl.error ? [] : (expCtrl.data || []);
+  // A tabela nao guarda descricao/UM (decisao consciente, ver o SQL) --
+  // busca de novo em cascata pra exibir a lista ja gravada, mesma logica
+  // do preview antes de gravar.
+  expCtrlDescMap = await buscarDescricoesItens(progExpControle.map(l => l.codigo_item));
 
   progPedidos = pedidos.data || [];
   progItens = itens.data || [];
@@ -48,6 +59,7 @@ async function carregarProgramacao() {
   renderSeparacao();
   renderExp();
   renderCarregamento();
+  renderExpControle(expCtrl.error ? expCtrl.error.message : null);
 }
 
 function falhaProgramacao(mensagem) {
@@ -853,3 +865,232 @@ function falhaImport(mensagem) {
   msg.className = 'status-msg status-err';
   console.error('Falha ao importar planilha da programação:', mensagem);
 }
+
+// ---- Controle EXP: localizacao por item, pra ajudar o inventario -----------
+// Diferente do endereco de pedido (exp_acessorios, 1 por pedido): aqui cada
+// ITEM separado ganha seu proprio local, lote e referencia -- um pedido
+// pode ter pecas guardadas em lugares diferentes da expedicao.
+
+document.getElementById('expCtrlToggleBtn').addEventListener('click', () => {
+  const area = document.getElementById('expCtrlColarArea');
+  area.style.display = area.style.display === 'none' ? 'block' : 'none';
+});
+
+let expCtrlPendentes = []; // linhas conferidas, aguardando o clique em "Gravar"
+
+function parseExpControleTexto(texto) {
+  return texto.split(/\r?\n/)
+    .map(l => l.trim())
+    .filter(l => l.length > 0)
+    .map(l => l.split('\t').map(c => c.trim()))
+    .filter(cols => cols[0]) // sem codigo do item, a linha nao serve pra nada
+    .map(cols => ({
+      codigo_item: cols[0],
+      numero_pedido: cols[1] || null,
+      quantidade: cols[2] ? parseQtd(cols[2]) : null,
+      localizacao: cols[3] || null,
+      lote: cols[4] || null,
+      referencia: cols[5] || null
+    }));
+}
+
+// Busca a descricao/UM em cascata: primeiro no catalogo da Requisicao ALM
+// (itens_requisicao -- o Robson cadastra ali, ver js/requisicao.js), depois
+// no estoque (qualquer unidade, cobre o que ja esta no almoxarifado e ainda
+// nao foi cadastrado no catalogo). Gravar de novo aqui duplicaria dado que
+// ja existe nesses dois lugares.
+async function buscarDescricoesItens(codigos) {
+  const unicos = [...new Set(codigos)].filter(Boolean);
+  const mapa = new Map();
+  if (!unicos.length) return mapa;
+
+  const { data: doCatalogo } = await sb.from('itens_requisicao')
+    .select('codigo, descricao, um').in('codigo', unicos);
+  (doCatalogo || []).forEach(r => mapa.set(r.codigo, { descricao: r.descricao, um: r.um }));
+
+  const faltando = unicos.filter(c => !mapa.has(c));
+  if (faltando.length) {
+    const { data: doEstoque } = await sb.from('estoque')
+      .select('item, descricao, um').in('item', faltando);
+    (doEstoque || []).forEach(r => {
+      if (!mapa.has(r.item)) mapa.set(r.item, { descricao: r.descricao, um: r.um });
+    });
+  }
+  return mapa;
+}
+
+document.getElementById('expCtrlConferirBtn').addEventListener('click', async () => {
+  const texto = document.getElementById('expCtrlTexto').value;
+  const msg = document.getElementById('expCtrlMsg');
+  const previa = document.getElementById('expCtrlPrevia');
+
+  const linhas = parseExpControleTexto(texto);
+  if (!linhas.length) {
+    msg.textContent = 'Cole ao menos uma linha com o código do item.';
+    msg.className = 'status-msg status-err';
+    previa.innerHTML = '';
+    return;
+  }
+
+  msg.textContent = 'Buscando descrição dos itens...';
+  msg.className = 'status-msg';
+  const mapaDescricoes = await buscarDescricoesItens(linhas.map(l => l.codigo_item));
+
+  expCtrlPendentes = linhas.map(l => {
+    const achou = mapaDescricoes.get(l.codigo_item);
+    return { ...l, descricao: achou ? achou.descricao : null, um: achou ? achou.um : null };
+  });
+
+  const semDescricao = expCtrlPendentes.filter(l => !l.descricao).length;
+  msg.textContent = `${expCtrlPendentes.length} linha(s) conferida(s).`
+    + (semDescricao ? ` ${semDescricao} sem descrição encontrada — confira o código.` : '');
+  msg.className = semDescricao ? 'status-msg status-err' : 'status-msg status-ok';
+
+  previa.innerHTML = `
+    <table>
+      <thead>
+        <tr><th>Item</th><th>Descrição</th><th>UM</th><th>Qtd</th><th>Nº Pedido</th><th>Local</th><th>Lote</th><th>Referência</th></tr>
+      </thead>
+      <tbody>
+        ${expCtrlPendentes.map(l => `
+          <tr${l.descricao ? '' : ' style="background:#fee2e2;"'}>
+            <td class="item">${escapeHtml(l.codigo_item)}</td>
+            <td>${l.descricao ? escapeHtml(l.descricao) : '⚠ não encontrada'}</td>
+            <td class="loc">${escapeHtml(l.um || '—')}</td>
+            <td class="num">${l.quantidade != null ? escapeHtml(l.quantidade) : '—'}</td>
+            <td class="loc">${escapeHtml(l.numero_pedido || '—')}</td>
+            <td class="loc">${escapeHtml(l.localizacao || '—')}</td>
+            <td class="loc">${escapeHtml(l.lote || '—')}</td>
+            <td class="loc">${escapeHtml(l.referencia || '—')}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>
+    <div class="cfg-barra" style="padding:10px 0 0;">
+      <button class="btn btn-primary" id="expCtrlGravarBtn">Gravar ${expCtrlPendentes.length} item(ns)</button>
+    </div>
+  `;
+  document.getElementById('expCtrlGravarBtn').addEventListener('click', gravarExpControle);
+});
+
+async function gravarExpControle() {
+  const msg = document.getElementById('expCtrlMsg');
+  const btn = document.getElementById('expCtrlGravarBtn');
+  if (btn) btn.disabled = true;
+
+  const linhas = expCtrlPendentes.map(l => ({
+    unidade: unidadeAtual,
+    numero_pedido: l.numero_pedido,
+    codigo_item: l.codigo_item,
+    quantidade: l.quantidade,
+    localizacao: l.localizacao,
+    lote: l.lote,
+    referencia: l.referencia,
+    registrado_por: nomeUsuarioAtual
+  }));
+
+  const { error } = await sb.from('exp_controle_itens').insert(linhas);
+  if (btn) btn.disabled = false;
+
+  if (error) {
+    msg.textContent = 'NÃO SALVOU: ' + error.message;
+    msg.className = 'status-msg status-err';
+    console.error('Falha ao gravar Controle EXP:', error.message);
+    return;
+  }
+
+  msg.textContent = `${linhas.length} item(ns) gravado(s) no Controle EXP.`;
+  msg.className = 'status-msg status-ok';
+  document.getElementById('expCtrlTexto').value = '';
+  document.getElementById('expCtrlPrevia').innerHTML = '';
+  expCtrlPendentes = [];
+  await carregarProgramacao();
+}
+
+function renderExpControle(erroCarregamento) {
+  const corpo = document.getElementById('expCtrlBody');
+  const vazio = document.getElementById('expCtrlVazio');
+
+  if (erroCarregamento) {
+    vazio.style.display = 'block';
+    vazio.textContent = 'Não foi possível carregar: ' + erroCarregamento
+      + ' — se a mensagem falar em tabela inexistente, sql/programacao-03-controle-exp.sql ainda não foi rodado no Supabase.';
+    corpo.innerHTML = '';
+    return;
+  }
+
+  const busca = document.getElementById('expCtrlBusca').value.trim().toLowerCase();
+  let linhas = progExpControle;
+  if (busca) {
+    linhas = linhas.filter(l =>
+      String(l.localizacao).toLowerCase().includes(busca) ||
+      String(l.codigo_item).toLowerCase().includes(busca) ||
+      String(l.numero_pedido).toLowerCase().includes(busca));
+  }
+
+  vazio.style.display = linhas.length ? 'none' : 'block';
+  if (!linhas.length) {
+    vazio.textContent = progExpControle.length
+      ? 'Nenhum item bate com a busca.'
+      : 'Nenhum item registrado no Controle EXP ainda.';
+    corpo.innerHTML = '';
+    return;
+  }
+
+  corpo.innerHTML = linhas.map(l => {
+    const desc = expCtrlDescMap.get(l.codigo_item);
+    return `
+    <tr>
+      <td class="loc"><span class="loc-chip">${escapeHtml(l.localizacao || '—')}</span></td>
+      <td class="item">${escapeHtml(l.codigo_item)}</td>
+      <td>${desc && desc.descricao ? escapeHtml(desc.descricao) : '—'}</td>
+      <td class="loc">${desc && desc.um ? escapeHtml(desc.um) : '—'}</td>
+      <td class="num">${l.quantidade != null ? escapeHtml(l.quantidade) : '—'}</td>
+      <td class="loc">${escapeHtml(l.numero_pedido || '—')}</td>
+      <td class="loc">${escapeHtml(l.lote || '—')}</td>
+      <td class="loc">${escapeHtml(l.referencia || '—')}</td>
+      <td class="col-acoes">
+        <button class="acao-btn expctrl-excluir" data-id="${escapeHtml(l.id)}" title="Excluir este registro">🗑</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+document.getElementById('expCtrlBusca').addEventListener('input', () => renderExpControle(null));
+document.getElementById('expCtrlAtualizarBtn').addEventListener('click', carregarProgramacao);
+
+document.getElementById('expCtrlBody').addEventListener('click', async (e) => {
+  const btn = e.target.closest('.expctrl-excluir');
+  if (!btn) return;
+  const confirmado = confirm('Excluir este registro do Controle EXP? Não afeta a separação nem o estoque, só some da lista de localização.');
+  if (!confirmado) return;
+  const { error } = await sb.from('exp_controle_itens').delete().eq('id', btn.dataset.id);
+  if (error) { alert('Não foi possível excluir: ' + error.message); return; }
+  await carregarProgramacao();
+});
+
+// Exportar CSV pra conferir contra o sistema (a planilha real, ou outra
+// fonte) -- e o motivo do Robson ter pedido este controle: "tiro a relação
+// do sistema e confronto pra ver se as quantidades batem".
+document.getElementById('expCtrlExportarBtn').addEventListener('click', () => {
+  if (!progExpControle.length) { alert('Nenhum item no Controle EXP para exportar.'); return; }
+
+  const cabecalho = ['Localização', 'Item', 'Nº Pedido', 'Quantidade', 'Lote', 'Referência'];
+  const linhasCsv = progExpControle.map(l => [
+    l.localizacao || '', l.codigo_item, l.numero_pedido || '', l.quantidade != null ? l.quantidade : '', l.lote || '', l.referencia || ''
+  ]);
+  // ; como separador (nao vírgula) porque o numero brasileiro usa vírgula
+  // decimal -- Excel PT-BR abre certo direto com ;.
+  const csv = [cabecalho, ...linhasCsv]
+    .map(linha => linha.map(v => `"${String(v).replace(/"/g, '""')}"`).join(';'))
+    .join('\r\n');
+
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `controle-exp-${unidadeAtual}-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+});

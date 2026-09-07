@@ -447,6 +447,51 @@
         <div class="empty-msg" id="progExpVazio" style="display:none;">
           Nenhum pedido na grade de carregamento ainda.
         </div>
+
+        <!-- ---- Controle EXP: localizacao por ITEM (nao por pedido inteiro) ---- -->
+        <div style="border:1px solid var(--border); border-radius:14px; overflow:hidden; margin-top:16px;">
+          <div class="cfg-barra">
+            <strong>Controle EXP — localização dos itens separados</strong>
+            <button class="btn" id="expCtrlToggleBtn" style="margin-left:auto;">Colar itens</button>
+          </div>
+
+          <div id="expCtrlColarArea" style="padding:16px; display:none;">
+            <div class="modal-text" style="margin-bottom:8px;">
+              Cole as colunas <b>Item, Nº Pedido, Quantidade, Localização, Lote, Referência</b> — a
+              Descrição e a UM são buscadas sozinhas (catálogo da Requisição ALM, depois o estoque).
+              Linha em branco é ignorada.
+            </div>
+            <textarea id="expCtrlTexto" rows="6" placeholder="Cole aqui as células copiadas do Excel (Ctrl+C na planilha, Ctrl+V aqui)."
+                      style="width:100%; font-family:monospace; font-size:12px;"></textarea>
+            <div class="cfg-barra" style="padding:10px 0 0;">
+              <button class="btn btn-primary" id="expCtrlConferirBtn">Conferir</button>
+              <span class="status-msg" id="expCtrlMsg"></span>
+            </div>
+            <div id="expCtrlPrevia" style="margin-top:10px;"></div>
+          </div>
+
+          <div class="cfg-barra">
+            <input type="text" id="expCtrlBusca" placeholder="Buscar por localização, item ou nº pedido..."
+                   style="flex:1; min-width:200px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+            <button class="btn" id="expCtrlExportarBtn" style="margin-left:auto;">Exportar CSV</button>
+            <button class="btn" id="expCtrlAtualizarBtn">Atualizar</button>
+          </div>
+
+          <div class="scroll-area">
+            <table>
+              <thead>
+                <tr>
+                  <th>Localização</th><th>Item</th><th>Descrição</th><th>UM</th>
+                  <th>Qtd</th><th>Nº Pedido</th><th>Lote</th><th>Referência</th><th>Ação</th>
+                </tr>
+              </thead>
+              <tbody id="expCtrlBody"></tbody>
+            </table>
+          </div>
+          <div class="empty-msg" id="expCtrlVazio" style="display:none;">
+            Nenhum item registrado no Controle EXP ainda.
+          </div>
+        </div>
       </div>
 
       <!-- ---- Aba 3: Carregamento (grade por bloco e horário) ---- -->
