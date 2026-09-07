@@ -85,11 +85,29 @@ function trocarAbaProgramacao(aba) {
   document.getElementById('progSeparacao').style.display = aba === 'separacao' ? 'block' : 'none';
   document.getElementById('progExp').style.display = aba === 'exp' ? 'block' : 'none';
   document.getElementById('progCarregamento').style.display = aba === 'carregamento' ? 'block' : 'none';
-  document.getElementById('progConferencia').style.display = aba === 'conferencia' ? 'block' : 'none';
-  if (aba === 'conferencia') renderConferencia();
 }
 
 document.getElementById('progAtualizarBtn').addEventListener('click', carregarProgramacao);
+
+// ---- Sub-abas do Estoque EXP Acessórios (plataforma própria, entrada/saída) -
+let progExpAbaAtual = 'entrada';
+
+document.getElementById('expAbas').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-exp-aba]');
+  if (b) trocarAbaExpAcessorios(b.dataset.expAba);
+});
+
+function trocarAbaExpAcessorios(aba) {
+  progExpAbaAtual = aba;
+  document.querySelectorAll('#expAbas [data-exp-aba]').forEach(b => {
+    b.className = b.dataset.expAba === aba ? 'btn btn-primary' : 'btn';
+  });
+  document.getElementById('expEntradaAba').style.display = aba === 'entrada' ? 'block' : 'none';
+  document.getElementById('progConferencia').style.display = aba === 'saida' ? 'block' : 'none';
+  if (aba === 'saida') renderConferencia();
+}
+
+document.getElementById('expAtualizarBtn').addEventListener('click', carregarProgramacao);
 
 // ---- Helpers ----------------------------------------------------------------
 // 'separado' e 'reportado' contam os dois como concluído: a planilha A traz o
@@ -1089,7 +1107,74 @@ async function marcarSaidaExpControle(id, conferente, novoStatus) {
 }
 
 document.getElementById('expCtrlBusca').addEventListener('input', () => renderExpControle(null));
-document.getElementById('expCtrlAtualizarBtn').addEventListener('click', carregarProgramacao);
+
+// Digitação manual, item a item -- pra quando o dado nao vem de planilha
+// nenhuma (a pessoa esta com o material na mao e so quer registrar o local).
+// Mesma tabela e mesma busca de descricao do fluxo de colar; localizacao,
+// pedido e lote ficam preenchidos pro proximo item por conveniencia.
+document.getElementById('expManualAdicionarBtn').addEventListener('click', async () => {
+  const msg = document.getElementById('expManualMsg');
+  const campoItem = document.getElementById('expManualItem');
+  const codigo = campoItem.value.trim();
+
+  if (!codigo) {
+    msg.textContent = 'Informe o código do item.';
+    msg.className = 'status-msg status-err';
+    campoItem.focus();
+    return;
+  }
+
+  const btn = document.getElementById('expManualAdicionarBtn');
+  btn.disabled = true;
+  msg.textContent = 'Salvando...';
+  msg.className = 'status-msg';
+
+  const tipo = document.getElementById('expManualTipo').value; // 'entrada' ou 'saida'
+  const quantidadeTexto = document.getElementById('expManualQtd').value.trim();
+  const linha = {
+    unidade: unidadeAtual,
+    numero_pedido: document.getElementById('expManualPedido').value.trim() || null,
+    codigo_item: codigo,
+    quantidade: quantidadeTexto ? parseQtd(quantidadeTexto) : null,
+    localizacao: document.getElementById('expManualLocal').value.trim() || null,
+    lote: document.getElementById('expManualLote').value.trim() || null,
+    referencia: document.getElementById('expManualRef').value.trim() || null,
+    registrado_por: nomeUsuarioAtual
+  };
+  // Tipo de Movimentação decide o status inicial do registro: uma Saída
+  // digitada aqui já nasce retirada (o item já foi embora, não precisa
+  // esperar a Conferência marcar depois) -- mesma coluna que o botão 🚚 usa.
+  if (tipo === 'saida') {
+    linha.status = 'retirado';
+    linha.retirado_por = nomeUsuarioAtual;
+    linha.retirado_em = new Date().toISOString();
+  }
+
+  const { error } = await sb.from('exp_controle_itens').insert([linha]);
+  btn.disabled = false;
+
+  if (error) {
+    msg.textContent = 'NÃO SALVOU: ' + error.message;
+    msg.className = 'status-msg status-err';
+    console.error('Falha ao gravar item manual do Controle EXP:', error.message);
+    return;
+  }
+
+  const semDescricao = !(await buscarDescricoesItens([codigo])).get(codigo);
+  const rotuloTipo = tipo === 'saida' ? 'Saída' : 'Entrada';
+  msg.textContent = `${rotuloTipo} do item ${codigo} salva.` + (semDescricao ? ' ⚠ Descrição não encontrada — confira o código.' : '');
+  msg.className = semDescricao ? 'status-msg status-err' : 'status-msg status-ok';
+
+  document.getElementById('expManualItem').value = '';
+  document.getElementById('expManualQtd').value = '';
+  campoItem.focus();
+  await carregarProgramacao();
+  trocarAbaExpAcessorios(tipo === 'saida' ? 'saida' : 'entrada');
+});
+
+document.getElementById('expManualItem').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('expManualAdicionarBtn').click();
+});
 
 document.getElementById('expCtrlBody').addEventListener('click', async (e) => {
   const btnExcluir = e.target.closest('.expctrl-excluir');

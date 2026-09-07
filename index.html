@@ -372,8 +372,7 @@
         <div id="progAbas" style="display:flex; gap:8px; flex-wrap:wrap;">
           <button class="btn" data-prog-aba="carregamento">Carregamento</button>
           <button class="btn btn-primary" data-prog-aba="separacao">Separação</button>
-          <button class="btn" data-prog-aba="exp">EXP Acessórios</button>
-          <button class="btn" data-prog-aba="conferencia">Conferência EXP</button>
+          <button class="btn" data-prog-aba="exp">Endereçamento</button>
         </div>
         <button class="btn" id="progImportarBtn" style="margin-left:auto;">Importar planilhas</button>
         <button class="btn" id="progAtualizarBtn">Atualizar</button>
@@ -448,51 +447,6 @@
         <div class="empty-msg" id="progExpVazio" style="display:none;">
           Nenhum pedido na grade de carregamento ainda.
         </div>
-
-        <!-- ---- Controle EXP: localizacao por ITEM (nao por pedido inteiro) ---- -->
-        <div style="border:1px solid var(--border); border-radius:14px; overflow:hidden; margin-top:16px;">
-          <div class="cfg-barra">
-            <strong>Controle EXP — localização dos itens separados</strong>
-            <button class="btn" id="expCtrlToggleBtn" style="margin-left:auto;">Colar itens</button>
-          </div>
-
-          <div id="expCtrlColarArea" style="padding:16px; display:none;">
-            <div class="modal-text" style="margin-bottom:8px;">
-              Cole as colunas <b>Item, Nº Pedido, Quantidade, Localização, Lote, Referência</b> — a
-              Descrição e a UM são buscadas sozinhas (catálogo da Requisição ALM, depois o estoque).
-              Linha em branco é ignorada.
-            </div>
-            <textarea id="expCtrlTexto" rows="6" placeholder="Cole aqui as células copiadas do Excel (Ctrl+C na planilha, Ctrl+V aqui)."
-                      style="width:100%; font-family:monospace; font-size:12px;"></textarea>
-            <div class="cfg-barra" style="padding:10px 0 0;">
-              <button class="btn btn-primary" id="expCtrlConferirBtn">Conferir</button>
-              <span class="status-msg" id="expCtrlMsg"></span>
-            </div>
-            <div id="expCtrlPrevia" style="margin-top:10px;"></div>
-          </div>
-
-          <div class="cfg-barra">
-            <input type="text" id="expCtrlBusca" placeholder="Buscar por localização, item ou nº pedido..."
-                   style="flex:1; min-width:200px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
-            <button class="btn" id="expCtrlExportarBtn" style="margin-left:auto;">Exportar CSV</button>
-            <button class="btn" id="expCtrlAtualizarBtn">Atualizar</button>
-          </div>
-
-          <div class="scroll-area">
-            <table>
-              <thead>
-                <tr>
-                  <th>Localização</th><th>Item</th><th>Descrição</th><th>UM</th>
-                  <th>Qtd</th><th>Nº Pedido</th><th>Lote</th><th>Referência</th><th>Ação</th>
-                </tr>
-              </thead>
-              <tbody id="expCtrlBody"></tbody>
-            </table>
-          </div>
-          <div class="empty-msg" id="expCtrlVazio" style="display:none;">
-            Nenhum item registrado no Controle EXP ainda.
-          </div>
-        </div>
       </div>
 
       <!-- ---- Aba 3: Carregamento (grade por bloco e horário) ---- -->
@@ -502,8 +456,97 @@
           Nenhum pedido programado. Importe a planilha de carregamento.
         </div>
       </div>
+    </div>
+  </div>
+  <!-- ================= FIM PROGRAMAÇÃO DE SEPARAÇÃO ================= -->
 
-      <!-- ---- Aba 4: Conferencia EXP (quem retira fisicamente pro carregamento) ---- -->
+  <!-- ================= CONTROLE EXP ACESSÓRIOS ================= -->
+  <!-- Plataforma própria, só de controle de entrada e saída dos itens já
+       separados na expedição -- não depende das planilhas de Programação de
+       Separação (o item pode ir pra lá digitado direto no app). -->
+  <div id="expAcessoriosContent" style="display:none;">
+    <div class="panel">
+      <div class="cfg-barra">
+        <div id="expAbas" style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn btn-primary" data-exp-aba="entrada">Entrada</button>
+          <button class="btn" data-exp-aba="saida">Saída / Conferência</button>
+        </div>
+        <button class="btn" id="expAtualizarBtn" style="margin-left:auto;">Atualizar</button>
+      </div>
+
+      <!-- ---- Registrar movimentação: entrada OU saída, item a item ---- -->
+      <!-- Visível nas duas sub-abas -- é o mesmo registro (exp_controle_itens),
+           só muda o status inicial conforme o Tipo de Movimentação. -->
+      <div style="padding:16px 16px 0;">
+        <div class="modal-text" style="margin-bottom:10px;">
+          Digite um item de cada vez -- é a forma mais rápida quando não veio de planilha
+          nenhuma. Localização, nº do pedido e lote continuam preenchidos pro próximo item.
+        </div>
+        <div class="cfg-barra" style="flex-wrap:wrap;">
+          <select id="expManualTipo" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px; font-weight:600;">
+            <option value="entrada">⬇️ Entrada</option>
+            <option value="saida">⬆️ Saída</option>
+          </select>
+          <input type="text" id="expManualItem" placeholder="Item *"
+                 style="width:110px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <input type="text" id="expManualPedido" placeholder="Nº Pedido"
+                 style="width:110px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <input type="text" id="expManualQtd" placeholder="Quantidade"
+                 style="width:110px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <input type="text" id="expManualLocal" placeholder="Localização"
+                 style="width:130px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <input type="text" id="expManualLote" placeholder="Lote"
+                 style="width:110px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <input type="text" id="expManualRef" placeholder="Referência"
+                 style="width:130px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <button class="btn btn-primary" id="expManualAdicionarBtn">Registrar</button>
+        </div>
+        <div class="status-msg" id="expManualMsg" style="margin-top:6px;"></div>
+      </div>
+
+      <!-- ---- Entrada: localizacao por ITEM (nao por pedido inteiro) ---- -->
+      <div id="expEntradaAba" class="prog-aba">
+        <div style="padding:6px 16px 0;">
+          <button class="btn" id="expCtrlToggleBtn">Colar vários de uma vez (Excel)</button>
+        </div>
+        <div id="expCtrlColarArea" style="padding:16px; display:none;">
+          <div class="modal-text" style="margin-bottom:8px;">
+            Cole as colunas <b>Item, Nº Pedido, Quantidade, Localização, Lote, Referência</b> — a
+            Descrição e a UM são buscadas sozinhas (catálogo da Requisição ALM, depois o estoque).
+            Linha em branco é ignorada.
+          </div>
+          <textarea id="expCtrlTexto" rows="6" placeholder="Cole aqui as células copiadas do Excel (Ctrl+C na planilha, Ctrl+V aqui)."
+                    style="width:100%; font-family:monospace; font-size:12px;"></textarea>
+          <div class="cfg-barra" style="padding:10px 0 0;">
+            <button class="btn btn-primary" id="expCtrlConferirBtn">Conferir</button>
+            <span class="status-msg" id="expCtrlMsg"></span>
+          </div>
+          <div id="expCtrlPrevia" style="margin-top:10px;"></div>
+        </div>
+
+        <div class="cfg-barra">
+          <input type="text" id="expCtrlBusca" placeholder="Buscar por localização, item ou nº pedido..."
+                 style="flex:1; min-width:200px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <button class="btn" id="expCtrlExportarBtn" style="margin-left:auto;">Exportar CSV</button>
+        </div>
+
+        <div class="scroll-area">
+          <table>
+            <thead>
+              <tr>
+                <th>Localização</th><th>Item</th><th>Descrição</th><th>UM</th>
+                <th>Qtd</th><th>Nº Pedido</th><th>Lote</th><th>Referência</th><th>Ação</th>
+              </tr>
+            </thead>
+            <tbody id="expCtrlBody"></tbody>
+          </table>
+        </div>
+        <div class="empty-msg" id="expCtrlVazio" style="display:none;">
+          Nenhum item registrado no Controle EXP ainda.
+        </div>
+      </div>
+
+      <!-- ---- Saida: quem retira fisicamente pro carregamento ---- -->
       <div id="progConferencia" class="prog-aba" style="display:none;">
         <div class="cfg-barra">
           <span class="modal-label" style="margin:0;">Conferente</span>
@@ -544,7 +587,7 @@
       </div>
     </div>
   </div>
-  <!-- ================= FIM PROGRAMAÇÃO DE SEPARAÇÃO ================= -->
+  <!-- ================= FIM CONTROLE EXP ACESSÓRIOS ================= -->
 
   <div id="configContent" style="display:none;">
     <div class="stat-cards">

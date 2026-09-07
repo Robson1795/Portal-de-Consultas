@@ -15,9 +15,9 @@
 // da Requisicao (que e so pedir). Quem faz esse fluxo e o ALM da unidade.
 const PERFIS = {
   consultor:   { rotulo: 'Consultor',   paginas: ['estoque', 'sesmt', 'requisicao'] },
-  estoque_alm: { rotulo: 'Estoque ALM', paginas: ['estoque', 'sesmt', 'requisicao', 'programacao'] },
+  estoque_alm: { rotulo: 'Estoque ALM', paginas: ['estoque', 'sesmt', 'requisicao', 'programacao', 'expacessorios'] },
   estoque_aco: { rotulo: 'Estoque Aço', paginas: ['bobinas', 'requisicao'] },
-  admin:       { rotulo: 'Admin',       paginas: ['estoque', 'sesmt', 'bobinas', 'requisicao', 'programacao', 'config'] }
+  admin:       { rotulo: 'Admin',       paginas: ['estoque', 'sesmt', 'bobinas', 'requisicao', 'programacao', 'expacessorios', 'config'] }
 };
 
 const PAGINAS = {
@@ -30,6 +30,10 @@ const PAGINAS = {
   bobinas: { rotulo: 'Estoque de Aço',    icone: '📦', elemento: 'bobinasContent' },
   requisicao: { rotulo: 'Requisição ALM', icone: '📝', elemento: 'requisicaoContent' },
   programacao: { rotulo: 'Programação de Separação', icone: '🚚', elemento: 'programacaoContent' },
+  // Plataforma própria de entrada/saída dos itens já separados na expedição
+  // -- não depende das planilhas da Programação, o item pode ser digitado
+  // direto no app (ver "Entrada" em js/programacao.js).
+  expacessorios: { rotulo: 'Controle EXP Acessórios', icone: '🔄', elemento: 'expAcessoriosContent' },
   config:  { rotulo: 'Configurações',     icone: '⚙️', elemento: 'configContent' }
 };
 
@@ -105,6 +109,7 @@ function mostrarPagina(id) {
   if (id === 'bobinas') { abrirTelaBobinas(); }
   if (id === 'requisicao') { carregarRequisicao(); }
   if (id === 'programacao') { carregarProgramacao(); }
+  if (id === 'expacessorios') { trocarAbaExpAcessorios('entrada'); carregarProgramacao(); }
   if (id === 'config')  { carregarUsuarios(); carregarConfigUnidades(); }
 }
 
