@@ -1224,14 +1224,18 @@ document.getElementById('expManualItem').addEventListener('keydown', (e) => {
 // ---- Passo-a-passo: um campo grande por tela, "Item" primeiro, na ordem -
 // do formulario completo. So o Item e obrigatorio -- Nº da OP, Lote e
 // Referencia sao itens de producao que nem todo pedido tem.
+// Referência vem ANTES de Lote de propósito: a etiqueta física mostra a
+// Referência inteira, mas o Lote sai cortado/ilegível nela -- então dá pra
+// digitar a Referência e o Lote exato vem sozinho do Catálogo EXP no passo
+// seguinte, em vez de depender do que deu pra ler.
 const EXP_WIZ_PASSOS = [
   { campo: 'codigo_item',   rotulo: 'Item', obrigatorio: true },
   { campo: 'numero_pedido', rotulo: 'Nº do Pedido' },
   { campo: 'quantidade',    rotulo: 'Quantidade' },
   { campo: 'localizacao',   rotulo: 'Localização' },
   { campo: 'numero_os_op',  rotulo: 'Nº da OP', opcional: true },
-  { campo: 'lote',          rotulo: 'Lote', opcional: true },
-  { campo: 'referencia',    rotulo: 'Referência', opcional: true }
+  { campo: 'referencia',    rotulo: 'Referência', opcional: true },
+  { campo: 'lote',          rotulo: 'Lote', opcional: true }
 ];
 
 let expWizPasso = 0;
@@ -1298,7 +1302,19 @@ function salvarPassoAtual() {
       if (!expWizDados.lote && lotes[0].lote) expWizDados.lote = lotes[0].lote;
       expWizDicaCatalogoTexto = 'Referência/Lote preenchidos do Catálogo EXP (edite se precisar).';
     } else if (lotes.length > 1) {
-      expWizDicaCatalogoTexto = `${lotes.length} lotes no Catálogo EXP pra este item — confira qual é: ${textoAjudaLotes(lotes)}`;
+      expWizDicaCatalogoTexto = `${lotes.length} lotes no Catálogo EXP pra este item — digite a Referência (dá pra ler na etiqueta) que o Lote certo vem sozinho: ${textoAjudaLotes(lotes)}`;
+    }
+  }
+
+  // Referência dá pra ler inteira na etiqueta; Lote não. Ao confirmar a
+  // Referência, busca o Lote exato no Catálogo EXP e SUBSTITUI o que
+  // estiver ali -- é justamente pra corrigir um Lote lido errado/
+  // incompleto, não pra preservar o que já tinha.
+  if (passo.campo === 'referencia' && valor) {
+    const lote = loteExatoPorReferencia(expWizDados.codigo_item, valor);
+    if (lote) {
+      expWizDados.lote = lote;
+      expWizDicaCatalogoTexto = `Lote ${lote} encontrado no Catálogo EXP pra essa referência.`;
     }
   }
   return true;
@@ -1754,6 +1770,18 @@ function textoAjudaLotes(lotes) {
   return lotes.map(l => `${l.lote || '—'} (ref ${l.referencia || '—'}, ${l.quantidade != null ? l.quantidade : '?'} ${l.um || ''})`).join('; ');
 }
 
+// A etiqueta física do item mostra Nº da OP e Referência inteiros, mas o
+// Lote sai cortado/ilegível nela -- por isso, quando a pessoa digita a
+// Referência (que ela CONSEGUE ler), busca o Lote exato no Catálogo EXP em
+// vez de depender do que deu pra ler na etiqueta. O Catálogo EXP não tem
+// coluna de OP (a planilha do sistema não traz isso), então a busca é só
+// por Item + Referência -- é o par que já identifica o lote sem ambiguidade.
+function loteExatoPorReferencia(codigo, referencia) {
+  if (!codigo || !referencia) return null;
+  const achou = catalogoExpItens.find(l => l.codigo_item === codigo && l.referencia === referencia);
+  return achou ? achou.lote : null;
+}
+
 // Referência/Lote/Nº da OP ficam escondidos por padrão -- só os itens de
 // produção têm isso, a maioria do almoxarifado não. Botão manual revela;
 // o Catálogo EXP revela sozinho quando confirma que o item tem os dados.
@@ -1796,7 +1824,22 @@ document.getElementById('expManualItem').addEventListener('blur', async () => {
     dica.className = 'status-msg status-ok';
   } else {
     mostrarExtrasManual();
-    dica.textContent = `${lotes.length} lotes no Catálogo EXP pra este item — confira qual é: ${textoAjudaLotes(lotes)}`;
+    dica.textContent = `${lotes.length} lotes no Catálogo EXP pra este item — digite a Referência (dá pra ler na etiqueta) que o Lote certo vem sozinho: ${textoAjudaLotes(lotes)}`;
     dica.className = 'status-msg';
   }
+});
+
+// Referência dá pra ler inteira na etiqueta; Lote não. Digitando a
+// Referência, busca o Lote exato no Catálogo EXP e substitui o que
+// estiver no campo (o objetivo aqui é justamente corrigir um Lote lido
+// errado/incompleto, não preservar o que já tinha).
+document.getElementById('expManualRef').addEventListener('blur', () => {
+  const codigo = document.getElementById('expManualItem').value.trim();
+  const referencia = document.getElementById('expManualRef').value.trim();
+  const lote = loteExatoPorReferencia(codigo, referencia);
+  if (!lote) return;
+  document.getElementById('expManualLote').value = lote;
+  const dica = document.getElementById('expManualCatalogoDica');
+  dica.textContent = `Lote ${lote} encontrado no Catálogo EXP pra essa referência.`;
+  dica.className = 'status-msg status-ok';
 });
