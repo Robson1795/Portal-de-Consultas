@@ -449,7 +449,7 @@ function trocarAbaImport(aba) {
   });
   document.getElementById('progImportFormato').innerHTML = aba === 'A'
     ? 'Colunas, nesta ordem: <b>Nº Pedido, Cliente, Seq, Item, Descrição, UM, Qtde, Nº OS/OP, Observação, Status</b>. Linha em branco entre pedidos é ignorada.'
-    : 'Colunas, nesta ordem: <b>Nº Pedido, Cliente, Cidade, UF, Modalidade, Descrição, Quantidade, Valor, Sim/Não, Observação</b>. As linhas de bloco (CARRETA, 07H) podem vir no meio — elas são reconhecidas e aplicadas às linhas abaixo.';
+    : 'Colunas, nesta ordem: <b>Bloco do veículo, Horário, Nº Pedido, Cliente, Cidade, UF, Modalidade, Descrição, Quantidade, Valor, Sim/Não, Observação, Vendedor</b>. As duas primeiras (bloco e horário) só vêm preenchidas na primeira linha de cada grupo — cole exatamente como está na planilha, sem tirar essas colunas.';
   document.getElementById('progImportTexto').value = '';
   document.getElementById('progImportPrevia').innerHTML = '';
   document.getElementById('progImportMsg').textContent = '';
