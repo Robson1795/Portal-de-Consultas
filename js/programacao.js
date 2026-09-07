@@ -1500,38 +1500,83 @@ document.getElementById('expCtrlBody').addEventListener('keydown', (e) => {
   if (e.target.classList.contains('expctrl-loc-input') && e.key === 'Enter') e.target.blur();
 });
 
-// Exportar CSV pra conferir contra o sistema (a planilha real, ou outra
-// fonte) -- e o motivo do Robson ter pedido este controle: "tiro a relação
-// do sistema e confronto pra ver se as quantidades batem".
-document.getElementById('expCtrlExportarBtn').addEventListener('click', () => {
-  if (!progExpControle.length) { alert('Nenhum item no Controle EXP para exportar.'); return; }
+// Exportar pra conferir contra o sistema (a planilha real, ou outra fonte)
+// -- e o motivo do Robson ter pedido este controle: "tiro a relação do
+// sistema e confronto pra ver se as quantidades batem". Ele também usa a
+// exportação pra montar relatório -- por isso 3 formatos: Excel de
+// verdade (biblioteca xlsx, número fica número, não texto com vírgula),
+// CSV (mais leve, abre em qualquer coisa) e HTML (visual, pronto pra
+// colar num e-mail ou imprimir/"salvar como PDF" do próprio navegador).
+const EXP_EXPORT_CABECALHO = ['Localização', 'Item', 'Descrição', 'UM', 'Nº Pedido', 'Quantidade', 'Nº OP', 'Lote', 'Referência', 'Status', 'Entrada em', 'Saída em'];
 
-  const cabecalho = ['Localização', 'Item', 'Descrição', 'UM', 'Nº Pedido', 'Quantidade', 'Nº OP', 'Lote', 'Referência', 'Status', 'Entrada em', 'Saída em'];
-  const linhasCsv = progExpControle.map(l => {
+function linhasExportacaoExpControle() {
+  return progExpControle.map(l => {
     const desc = expCtrlDescMap.get(l.codigo_item);
     return [
       l.localizacao || '', l.codigo_item, desc && desc.descricao ? desc.descricao : '', desc && desc.um ? desc.um : '',
-      l.numero_pedido || '', l.quantidade != null ? l.quantidade : '', l.numero_os_op || '', l.lote || '', l.referencia || '',
+      l.numero_pedido || '', l.quantidade != null ? l.quantidade : null, l.numero_os_op || '', l.lote || '', l.referencia || '',
       l.status === 'retirado' ? 'Saiu p/ carregamento' : 'Na expedição',
       l.criado_em ? new Date(l.criado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '',
       l.retirado_em ? new Date(l.retirado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : ''
     ];
   });
-  // ; como separador (nao vírgula) porque o numero brasileiro usa vírgula
-  // decimal -- Excel PT-BR abre certo direto com ;.
-  const csv = [cabecalho, ...linhasCsv]
-    .map(linha => linha.map(v => `"${String(v).replace(/"/g, '""')}"`).join(';'))
-    .join('\r\n');
+}
 
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+function baixarArquivo(blob, nomeArquivo) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `controle-exp-${unidadeAtual}-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = nomeArquivo;
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+function exportarExpControleCsv(nomeBase) {
+  // ; como separador (nao vírgula) porque o numero brasileiro usa vírgula
+  // decimal -- Excel PT-BR abre certo direto com ;.
+  const csv = [EXP_EXPORT_CABECALHO, ...linhasExportacaoExpControle()]
+    .map(linha => linha.map(v => `"${String(v != null ? v : '').replace(/"/g, '""')}"`).join(';'))
+    .join('\r\n');
+  baixarArquivo(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' }), nomeBase + '.csv');
+}
+
+function exportarExpControleXlsx(nomeBase) {
+  const planilha = XLSX.utils.aoa_to_sheet([EXP_EXPORT_CABECALHO, ...linhasExportacaoExpControle()]);
+  const livro = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(livro, planilha, 'Controle EXP');
+  XLSX.writeFile(livro, nomeBase + '.xlsx');
+}
+
+function exportarExpControleHtml(nomeBase) {
+  const linhasHtml = linhasExportacaoExpControle().map(linha =>
+    `<tr>${linha.map(v => `<td>${escapeHtml(v != null ? v : '')}</td>`).join('')}</tr>`).join('');
+  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+<title>Controle EXP — ${escapeHtml(rotuloUnidade(unidadeAtual))} — ${new Date().toLocaleDateString('pt-BR')}</title>
+<style>
+  body { font-family: Arial, sans-serif; padding: 16px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
+  th { background: #004894; color: white; }
+  tr:nth-child(even) { background: #f7f9fb; }
+</style></head><body>
+<h2>Controle EXP Acessórios — ${escapeHtml(rotuloUnidade(unidadeAtual))} — ${new Date().toLocaleDateString('pt-BR')}</h2>
+<table><thead><tr>${EXP_EXPORT_CABECALHO.map(c => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead>
+<tbody>${linhasHtml}</tbody></table>
+</body></html>`;
+  baixarArquivo(new Blob([html], { type: 'text/html;charset=utf-8;' }), nomeBase + '.html');
+}
+
+document.getElementById('expCtrlExportarBtn').addEventListener('click', () => {
+  if (!progExpControle.length) { alert('Nenhum item no Controle EXP para exportar.'); return; }
+
+  const formato = document.getElementById('expCtrlExportarFormato').value;
+  const nomeBase = `controle-exp-${unidadeAtual}-${new Date().toISOString().slice(0, 10)}`;
+
+  if (formato === 'xlsx') exportarExpControleXlsx(nomeBase);
+  else if (formato === 'html') exportarExpControleHtml(nomeBase);
+  else exportarExpControleCsv(nomeBase);
 });
 
 // ---- Aba 4: Conferência EXP (quem retira fisicamente pro carregamento) ----

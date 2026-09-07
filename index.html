@@ -6,6 +6,8 @@
 <title>Consulta Estoque Kingspan Araquari</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<!-- Exportar Controle EXP em Excel de verdade (nao so um .csv renomeado). -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -573,7 +575,12 @@
         <div class="cfg-barra">
           <input type="text" id="expCtrlBusca" placeholder="Buscar por localização, item ou nº pedido..."
                  style="flex:1; min-width:200px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
-          <button class="btn" id="expCtrlExportarBtn" style="margin-left:auto;">Exportar CSV</button>
+          <select id="expCtrlExportarFormato" style="margin-left:auto; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+            <option value="xlsx">Excel (.xlsx)</option>
+            <option value="csv">CSV</option>
+            <option value="html">HTML</option>
+          </select>
+          <button class="btn" id="expCtrlExportarBtn">Exportar</button>
         </div>
 
         <div class="scroll-area">
