@@ -43,8 +43,17 @@ async function carregarProgramacao() {
     sb.from('exp_controle_itens').select('*').order('localizacao', { ascending: true })
   ]);
 
-  if (pedidos.error) return falhaProgramacao(pedidos.error.message);
-  if (itens.error)  return falhaProgramacao(itens.error.message);
+  // Programação de Separação e Controle EXP Acessórios são páginas
+  // independentes que só compartilham esta função de carga -- um erro na
+  // Programação (ex.: sql/programacao-01/02 ainda não rodado) NÃO pode
+  // travar o Controle EXP antes de ele renderizar, senão um item recém
+  // gravado em exp_controle_itens ficaria invisível na lista mesmo tendo
+  // salvo certinho. Por isso cada bloco trata o próprio erro, sem "return"
+  // que corte o resto.
+  if (pedidos.error || itens.error) falhaProgramacao((pedidos.error || itens.error).message);
+  progPedidos = pedidos.error ? [] : (pedidos.data || []);
+  progItens = itens.error ? [] : (itens.data || []);
+
   // exp_controle_itens e novo (sql/programacao-03-controle-exp.sql) -- se o
   // script ainda nao rodou, o resto da tela continua funcionando; so essa
   // secao fica vazia, com o erro visivel ali em vez de travar a pagina toda.
@@ -53,9 +62,6 @@ async function carregarProgramacao() {
   // busca de novo em cascata pra exibir a lista ja gravada, mesma logica
   // do preview antes de gravar.
   expCtrlDescMap = await buscarDescricoesItens(progExpControle.map(l => l.codigo_item));
-
-  progPedidos = pedidos.data || [];
-  progItens = itens.data || [];
 
   renderSeparacao();
   renderExp();
