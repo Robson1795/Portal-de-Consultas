@@ -494,31 +494,43 @@
           </div>
         </div>
 
-        <!-- ---- Formulário completo: todos os campos numa tela só ---- -->
+        <!-- ---- Formulário completo: só o essencial visível de cara ---- -->
         <div id="expFormCompleto" style="padding:10px 16px 0;">
           <div class="modal-text" style="margin-bottom:10px;">
             Digite um item de cada vez -- é a forma mais rápida quando não veio de planilha
-            nenhuma. Nº do pedido, localização, OP e lote continuam preenchidos pro próximo
-            item. Nº da OP, lote e referência ficam em branco se o item não tiver.
+            nenhuma. Nº do pedido e localização continuam preenchidos pro próximo item.
           </div>
           <div class="cfg-barra" style="flex-wrap:wrap;">
-            <input type="text" id="expManualItem" placeholder="Item *"
-                   style="width:110px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
             <input type="text" id="expManualPedido" placeholder="Nº Pedido"
+                   style="width:110px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+            <input type="text" id="expManualItem" placeholder="Item *"
                    style="width:110px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
             <input type="text" id="expManualQtd" placeholder="Quantidade"
                    style="width:110px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
             <input type="text" id="expManualLocal" placeholder="Localização"
                    style="width:130px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
-            <input type="text" id="expManualOp" placeholder="Nº da OP"
-                   style="width:110px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
-            <input type="text" id="expManualLote" placeholder="Lote"
-                   style="width:110px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
-            <input type="text" id="expManualRef" placeholder="Referência"
-                   style="width:130px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
             <button class="btn btn-primary" id="expManualAdicionarBtn">Registrar</button>
           </div>
-          <div class="status-msg" id="expManualCatalogoDica" style="margin-top:4px;"></div>
+          <div class="status-msg" id="expManualDescricao" style="margin-top:4px;"></div>
+
+          <div style="margin-top:8px;">
+            <button class="btn" id="expManualExtrasToggleBtn">+ Referência / Lote / Nº da OP</button>
+          </div>
+          <div id="expManualExtras" style="display:none; margin-top:8px;">
+            <div class="modal-text" style="margin-bottom:6px;">
+              Só os itens de produção têm isso -- deixe em branco os que o item não tiver.
+            </div>
+            <div class="cfg-barra" style="flex-wrap:wrap;">
+              <input type="text" id="expManualRef" placeholder="Referência"
+                     style="width:130px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+              <input type="text" id="expManualLote" placeholder="Lote"
+                     style="width:110px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+              <input type="text" id="expManualOp" placeholder="Nº da OP"
+                     style="width:110px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+            </div>
+          </div>
+
+          <div class="status-msg" id="expManualCatalogoDica" style="margin-top:6px;"></div>
           <div class="status-msg" id="expManualMsg" style="margin-top:6px;"></div>
         </div>
 

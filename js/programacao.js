@@ -1201,8 +1201,19 @@ document.getElementById('expManualAdicionarBtn').addEventListener('click', async
   msg.className = resultado.ok ? (resultado.aviso ? 'status-msg status-err' : 'status-msg status-ok') : 'status-msg status-err';
   if (!resultado.ok) { campoItem.focus(); return; }
 
+  // Item, quantidade e os extras (Referência/Lote/OP) mudam a cada item de
+  // verdade -- só Nº Pedido e Localização continuam preenchidos. Os extras
+  // voltam escondidos: se o próximo item tiver dados no Catálogo EXP, o
+  // blur do campo Item já reabre sozinho.
   document.getElementById('expManualItem').value = '';
   document.getElementById('expManualQtd').value = '';
+  document.getElementById('expManualRef').value = '';
+  document.getElementById('expManualLote').value = '';
+  document.getElementById('expManualOp').value = '';
+  document.getElementById('expManualExtras').style.display = 'none';
+  document.getElementById('expManualExtrasToggleBtn').textContent = '+ Referência / Lote / Nº da OP';
+  document.getElementById('expManualDescricao').textContent = '';
+  document.getElementById('expManualCatalogoDica').textContent = '';
   campoItem.focus();
 });
 
@@ -1743,10 +1754,34 @@ function textoAjudaLotes(lotes) {
   return lotes.map(l => `${l.lote || '—'} (ref ${l.referencia || '—'}, ${l.quantidade != null ? l.quantidade : '?'} ${l.um || ''})`).join('; ');
 }
 
-document.getElementById('expManualItem').addEventListener('blur', () => {
+// Referência/Lote/Nº da OP ficam escondidos por padrão -- só os itens de
+// produção têm isso, a maioria do almoxarifado não. Botão manual revela;
+// o Catálogo EXP revela sozinho quando confirma que o item tem os dados.
+function mostrarExtrasManual() {
+  document.getElementById('expManualExtras').style.display = 'block';
+  document.getElementById('expManualExtrasToggleBtn').textContent = '− Referência / Lote / Nº da OP';
+}
+
+document.getElementById('expManualExtrasToggleBtn').addEventListener('click', () => {
+  const extras = document.getElementById('expManualExtras');
+  const abrindo = extras.style.display === 'none';
+  extras.style.display = abrindo ? 'block' : 'none';
+  document.getElementById('expManualExtrasToggleBtn').textContent =
+    abrindo ? '− Referência / Lote / Nº da OP' : '+ Referência / Lote / Nº da OP';
+});
+
+document.getElementById('expManualItem').addEventListener('blur', async () => {
   const codigo = document.getElementById('expManualItem').value.trim();
+  const descricaoEl = document.getElementById('expManualDescricao');
   const dica = document.getElementById('expManualCatalogoDica');
-  if (!codigo) { dica.textContent = ''; return; }
+  if (!codigo) { descricaoEl.textContent = ''; dica.textContent = ''; return; }
+
+  const mapaDescricoes = await buscarDescricoesItens([codigo]);
+  const achou = mapaDescricoes.get(codigo);
+  descricaoEl.textContent = achou && achou.descricao
+    ? `${achou.descricao}${achou.um ? ' — ' + achou.um : ''}`
+    : '⚠ Descrição não encontrada — confira o código.';
+  descricaoEl.className = achou && achou.descricao ? 'status-msg status-ok' : 'status-msg status-err';
 
   const lotes = lotesDoItemNoCatalogo(codigo);
   if (!lotes.length) { dica.textContent = ''; return; }
@@ -1756,9 +1791,11 @@ document.getElementById('expManualItem').addEventListener('blur', () => {
     const campoLote = document.getElementById('expManualLote');
     if (!campoRef.value.trim() && lotes[0].referencia) campoRef.value = lotes[0].referencia;
     if (!campoLote.value.trim() && lotes[0].lote) campoLote.value = lotes[0].lote;
+    mostrarExtrasManual();
     dica.textContent = 'Referência/Lote preenchidos do Catálogo EXP (edite se precisar).';
     dica.className = 'status-msg status-ok';
   } else {
+    mostrarExtrasManual();
     dica.textContent = `${lotes.length} lotes no Catálogo EXP pra este item — confira qual é: ${textoAjudaLotes(lotes)}`;
     dica.className = 'status-msg';
   }
