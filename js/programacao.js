@@ -1563,6 +1563,7 @@ function exportarExpControleXlsx(nomeBase) {
 // abre pra imprimir; no arquivo baixado ninguém quer isso disparando
 // sozinho toda vez que a pessoa só quer abrir o arquivo pra olhar.
 function montarHtmlExpControle(scriptAutoImprimir) {
+  const linhasFiltradas = linhasFiltradasExpControle();
   const linhasHtml = linhasExportacaoExpControle().map(linha =>
     `<tr>${linha.map(v => `<td>${escapeHtml(v != null ? v : '')}</td>`).join('')}</tr>`).join('');
   const busca = document.getElementById('expCtrlBusca').value.trim();
@@ -1570,19 +1571,37 @@ function montarHtmlExpControle(scriptAutoImprimir) {
   // folha coloco no pallet"), precisa deixar claro que é só daquela
   // localização, não a lista inteira.
   const subtitulo = busca ? ` — busca: "${escapeHtml(busca)}"` : '';
+
+  // Se der pra filtrar pra UMA localização só, ela some no fim da folha,
+  // gigante, ocupando o espaço que sobra embaixo da tabela -- é a etiqueta
+  // que vai colada no pallet, precisa dar pra ler de longe. Se a lista
+  // tiver mais de uma localização (busca por item, ou sem busca nenhuma),
+  // não tem uma localização só pra destacar, então essa parte some.
+  const localizacoes = [...new Set(linhasFiltradas.map(l => l.localizacao).filter(Boolean))];
+  const enderecoGrande = localizacoes.length === 1
+    ? `<div class="endereco-grande">${escapeHtml(localizacoes[0])}</div>`
+    : '';
+
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
 <title>Controle EXP — ${escapeHtml(rotuloUnidade(unidadeAtual))} — ${new Date().toLocaleDateString('pt-BR')}</title>
 <style>
-  body { font-family: Arial, sans-serif; padding: 16px; }
+  html, body { height: 100%; }
+  body { font-family: Arial, sans-serif; padding: 16px; box-sizing: border-box; display: flex; flex-direction: column; }
   table { border-collapse: collapse; width: 100%; font-size: 13px; }
   th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
   th { background: #004894; color: white; }
   tr:nth-child(even) { background: #f7f9fb; }
+  .endereco-grande {
+    margin-top: auto; flex-shrink: 0; text-align: center;
+    font-size: 15vw; line-height: 1; font-weight: 900; letter-spacing: 0.05em;
+    padding: 40px 0 10px; word-break: break-word;
+  }
   @media print { body { padding: 0; } }
 </style></head><body>
 <h2>Controle EXP Acessórios — ${escapeHtml(rotuloUnidade(unidadeAtual))} — ${new Date().toLocaleDateString('pt-BR')}${subtitulo}</h2>
 <table><thead><tr>${EXP_EXPORT_CABECALHO.map(c => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead>
 <tbody>${linhasHtml}</tbody></table>
+${enderecoGrande}
 ${scriptAutoImprimir ? '<script>window.onload = () => window.print();<' + '/script>' : ''}
 </body></html>`;
 }
