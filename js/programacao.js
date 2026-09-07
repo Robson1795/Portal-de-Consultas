@@ -119,7 +119,10 @@ function trocarAbaExpAcessorios(aba) {
   if (aba === 'saida') renderConferencia();
 }
 
-document.getElementById('expAtualizarBtn').addEventListener('click', carregarProgramacao);
+// Catálogo antes da Programação, mesmo motivo do carregamento inicial em
+// js/navegacao.js -- senão um "Atualizar" manual clicado antes do catálogo
+// terminar de carregar também deixaria Descrição/UM em branco.
+document.getElementById('expAtualizarBtn').addEventListener('click', () => carregarCatalogoExp().then(carregarProgramacao));
 
 // ---- Helpers ----------------------------------------------------------------
 // 'separado' e 'reportado' contam os dois como concluído: a planilha A traz o
@@ -1101,6 +1104,8 @@ function renderExpControle(erroCarregamento) {
       <td>${retirado
         ? `<span class="cfg-status st-ativo">Saiu p/ carregamento</span>`
         : `<span class="cfg-status st-pendente">Na expedição</span>`}</td>
+      <td class="loc">${l.criado_em ? new Date(l.criado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—'}</td>
+      <td class="loc">${l.retirado_em ? new Date(l.retirado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—'}</td>
       <td class="col-acoes">
         ${retirado ? '' : `<button class="acao-btn expctrl-saida" data-id="${escapeHtml(l.id)}" title="Marcar como retirado para o carregamento">🚚</button>`}
         <button class="acao-btn expctrl-excluir" data-id="${escapeHtml(l.id)}" title="Excluir este registro">🗑</button>
@@ -1452,10 +1457,17 @@ document.getElementById('expCtrlBody').addEventListener('click', async (e) => {
 document.getElementById('expCtrlExportarBtn').addEventListener('click', () => {
   if (!progExpControle.length) { alert('Nenhum item no Controle EXP para exportar.'); return; }
 
-  const cabecalho = ['Localização', 'Item', 'Nº Pedido', 'Quantidade', 'Nº OP', 'Lote', 'Referência'];
-  const linhasCsv = progExpControle.map(l => [
-    l.localizacao || '', l.codigo_item, l.numero_pedido || '', l.quantidade != null ? l.quantidade : '', l.numero_os_op || '', l.lote || '', l.referencia || ''
-  ]);
+  const cabecalho = ['Localização', 'Item', 'Descrição', 'UM', 'Nº Pedido', 'Quantidade', 'Nº OP', 'Lote', 'Referência', 'Status', 'Entrada em', 'Saída em'];
+  const linhasCsv = progExpControle.map(l => {
+    const desc = expCtrlDescMap.get(l.codigo_item);
+    return [
+      l.localizacao || '', l.codigo_item, desc && desc.descricao ? desc.descricao : '', desc && desc.um ? desc.um : '',
+      l.numero_pedido || '', l.quantidade != null ? l.quantidade : '', l.numero_os_op || '', l.lote || '', l.referencia || '',
+      l.status === 'retirado' ? 'Saiu p/ carregamento' : 'Na expedição',
+      l.criado_em ? new Date(l.criado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '',
+      l.retirado_em ? new Date(l.retirado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : ''
+    ];
+  });
   // ; como separador (nao vírgula) porque o numero brasileiro usa vírgula
   // decimal -- Excel PT-BR abre certo direto com ;.
   const csv = [cabecalho, ...linhasCsv]

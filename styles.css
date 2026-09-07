@@ -20,14 +20,20 @@
     color: var(--ink);
     padding: 24px;
   }
-  .wrap { max-width: 1200px; margin: 0 auto; }
+  /* Sem max-width aqui de proposito: o Portal (#portalScreen, dentro do
+     .wrap) precisa da largura toda da tela pra tabelas largas (Controle
+     EXP Acessorios tem 10 colunas) nao precisarem de scroll horizontal
+     à toa. So as telas de login/aguardando aprovação ficam estreitas e
+     centralizadas -- isso mora no .hero, que só existe nelas. */
+  .wrap { width: 100%; }
   img { max-width: 100%; }
 
   .hero {
     position: relative;
+    max-width: 900px;
+    margin: 0 auto 20px;
     border-radius: 16px;
     padding: 22px 26px;
-    margin-bottom: 20px;
     background: linear-gradient(120deg, var(--blue) 0%, var(--blue-dark) 55%, #001c3d 100%);
     overflow: hidden;
     box-shadow: 0 8px 24px rgba(0,50,100,0.18);

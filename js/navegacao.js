@@ -109,7 +109,13 @@ function mostrarPagina(id) {
   if (id === 'bobinas') { abrirTelaBobinas(); }
   if (id === 'requisicao') { carregarRequisicao(); }
   if (id === 'programacao') { carregarProgramacao(); }
-  if (id === 'expacessorios') { trocarAbaExpAcessorios('entrada'); carregarProgramacao(); carregarCatalogoExp(); }
+  // Catálogo EXP primeiro, DEPOIS a Programação -- buscarDescricoesItens()
+  // olha catalogoExpItens em memória (não busca de novo), então se essa
+  // promise ainda não tivesse terminado (o catálogo tem centenas de linhas,
+  // demora mais que o resto), a Descrição/UM saía em branco mesmo pro item
+  // que estava certinho no Catálogo. Ver carregarCatalogoExp() e
+  // buscarDescricoesItens() em js/programacao.js.
+  if (id === 'expacessorios') { trocarAbaExpAcessorios('entrada'); carregarCatalogoExp().then(carregarProgramacao); }
   if (id === 'config')  { carregarUsuarios(); carregarConfigUnidades(); }
 }
 
