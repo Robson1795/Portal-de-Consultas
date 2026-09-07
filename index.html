@@ -752,6 +752,7 @@
               <th>E-mails do ALM</th>
               <th>E-mail do PCP</th>
               <th>Senha de contagem</th>
+              <th>Senha Controle EXP</th>
               <th>PIN de edição</th>
               <th></th>
             </tr>
@@ -768,6 +769,10 @@
       <br><br>
       <b>E-mail do PCP.</b> Destinatário do relatório de saídas do Controle EXP Acessórios (aba
       Saída/Conferência). Unidade sem e-mail cadastrado tem o botão de gerar relatório desabilitado.
+      <br><br>
+      <b>Senha Controle EXP.</b> Pedida ao entrar na página "Controle EXP Acessórios" — cada
+      unidade tem a sua própria, diferente das outras. Unidade sem senha cadastrada fica sem
+      acesso à página.
       <br><br>
       <b>Senha de contagem e PIN de edição.</b> Desde 04/09/2026 estas senhas **não estão mais no
       código do portal**. Elas vivem aqui, e a conferência acontece dentro do banco: o navegador
@@ -927,6 +932,21 @@
       <input type="password" id="contagemPinInput" placeholder="Senha" maxlength="12" style="width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:10px; font-size:14px; text-align:center;">
       <button class="btn btn-primary" id="contagemPinSubmit" style="width:100%;">Liberar</button>
       <div class="status-msg status-err" id="contagemPinMsg" style="margin-top:8px;"></div>
+    </div>
+  </div>
+
+  <!-- Entrada no Controle EXP Acessórios: escolhe a unidade e confere a -->
+  <!-- senha daquela unidade -- cada unidade é responsável só pelo próprio -->
+  <!-- estoque, o Controle EXP não pode misturar unidades diferentes. -->
+  <div class="modal-overlay" id="expGateModal">
+    <div class="modal-box" style="max-width:360px; text-align:center;">
+      <button class="modal-close" id="expGateCloseBtn">✕</button>
+      <h3 style="margin-top:0;">Controle EXP Acessórios</h3>
+      <p style="font-size:13px; color:var(--muted); margin-bottom:14px;">Escolha a unidade para entrar.</p>
+      <select id="expGateUnidade" style="width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:10px; font-size:14px; background:white; color:var(--ink);"></select>
+      <input type="password" id="expGateSenhaInput" placeholder="Senha desta unidade" maxlength="20" style="width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:10px; font-size:14px; text-align:center;">
+      <button class="btn btn-primary" id="expGateEntrarBtn" style="width:100%;">Liberar e entrar</button>
+      <div class="status-msg status-err" id="expGateMsg" style="margin-top:8px;"></div>
     </div>
   </div>
 

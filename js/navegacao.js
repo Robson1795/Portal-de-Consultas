@@ -121,7 +121,108 @@ function mostrarPagina(id) {
 
 document.getElementById('sidebarNav').addEventListener('click', (e) => {
   const item = e.target.closest('.nav-item');
-  if (item) mostrarPagina(item.dataset.pagina);
+  if (!item) return;
+  // Controle EXP Acessórios não abre direto: primeiro escolhe a unidade e
+  // confere a senha dela (abrirGateExp, mais abaixo). Cada unidade só
+  // enxerga o próprio estoque -- nunca mistura com as outras.
+  if (item.dataset.pagina === 'expacessorios') { abrirGateExp(); return; }
+  mostrarPagina(item.dataset.pagina);
+});
+
+// ---- Entrada no Controle EXP Acessórios: unidade + senha --------------------
+// Mesmo padrão da senha de Contagem Física (js/estoque.js,
+// senha_contagem_confere): a senha nunca chega no navegador, o banco só
+// responde sim/não (sql/fase9-senha-exp.sql). Fica desbloqueada só nesta
+// sessão do navegador (sessionStorage), por unidade.
+function unidadeExpDesbloqueada(cod) {
+  try { return sessionStorage.getItem('exp_ok_' + cod) === '1'; } catch (err) { return false; }
+}
+function marcarUnidadeExpDesbloqueada(cod) {
+  try { sessionStorage.setItem('exp_ok_' + cod, '1'); } catch (err) { /* sem sessionStorage, so pede de novo */ }
+}
+
+function abrirGateExp() {
+  const permitidas = (perfilAtual === 'admin')
+    ? Object.keys(UNIDADES)
+    : (unidadeDoUsuario ? [unidadeDoUsuario] : []);
+
+  if (!permitidas.length) {
+    alert('Sua conta ainda não tem unidade definida. Peça ao administrador.');
+    return;
+  }
+
+  const select = document.getElementById('expGateUnidade');
+  select.innerHTML = permitidas.map(c =>
+    `<option value="${c}" ${c === unidadeAtual ? 'selected' : ''}>${escapeHtml(rotuloUnidade(c))}</option>`
+  ).join('');
+  document.getElementById('expGateSenhaInput').value = '';
+  document.getElementById('expGateMsg').textContent = '';
+  atualizarCampoSenhaGateExp();
+  document.getElementById('expGateModal').classList.add('open');
+}
+
+function atualizarCampoSenhaGateExp() {
+  const uni = document.getElementById('expGateUnidade').value;
+  const jaDesbloqueada = unidadeExpDesbloqueada(uni);
+  document.getElementById('expGateSenhaInput').style.display = jaDesbloqueada ? 'none' : 'block';
+  document.getElementById('expGateEntrarBtn').textContent = jaDesbloqueada ? 'Entrar' : 'Liberar e entrar';
+  document.getElementById('expGateMsg').textContent = '';
+}
+
+document.getElementById('expGateUnidade').addEventListener('change', atualizarCampoSenhaGateExp);
+
+async function entrarNoControleExp(uni) {
+  unidadeAtual = uni;
+  document.getElementById('expGateModal').classList.remove('open');
+  const sel = document.getElementById('unitSelect'); // topbar, só existe pra admin (varias unidades)
+  if (sel) sel.value = uni;
+  mostrarPagina('expacessorios');
+}
+
+document.getElementById('expGateEntrarBtn').addEventListener('click', async () => {
+  const uni = document.getElementById('expGateUnidade').value;
+  const msg = document.getElementById('expGateMsg');
+  const btn = document.getElementById('expGateEntrarBtn');
+
+  if (unidadeExpDesbloqueada(uni)) {
+    await entrarNoControleExp(uni);
+    return;
+  }
+
+  const tentativa = document.getElementById('expGateSenhaInput').value;
+  if (!tentativa) {
+    msg.textContent = 'Digite a senha.';
+    return;
+  }
+
+  btn.disabled = true;
+  msg.textContent = 'Conferindo...';
+  const { data, error } = await sb.rpc('senha_exp_confere', { uni, tentativa });
+  btn.disabled = false;
+
+  if (error) {
+    msg.textContent = 'Não foi possível conferir a senha: ' + error.message;
+    console.error('Falha ao conferir a senha do Controle EXP:', error.message);
+    return;
+  }
+  if (data !== true) {
+    msg.textContent = 'Senha incorreta.';
+    return;
+  }
+
+  marcarUnidadeExpDesbloqueada(uni);
+  await entrarNoControleExp(uni);
+});
+
+document.getElementById('expGateSenhaInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('expGateEntrarBtn').click();
+});
+
+document.getElementById('expGateCloseBtn').addEventListener('click', () => {
+  document.getElementById('expGateModal').classList.remove('open');
+});
+document.getElementById('expGateModal').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('expGateModal')) document.getElementById('expGateModal').classList.remove('open');
 });
 
 // ---- Abrir e fechar o menu --------------------------------------------------
@@ -178,6 +279,19 @@ function montarCabecalho() {
       <select id="unitSelect" class="unit-select">${permitidas.map(c =>
         `<option value="${c}" ${c === unidadeAtual ? 'selected' : ''}>${escapeHtml(rotuloUnidade(c))}</option>`
       ).join('')}</select>`;
-    document.getElementById('unitSelect').addEventListener('change', (e) => trocarUnidade(e.target.value));
+    document.getElementById('unitSelect').addEventListener('change', (e) => {
+      // Trocar a unidade pelo seletor do topo enquanto está no Controle EXP
+      // Acessórios não pode pular a senha daquela unidade -- senão bastava
+      // trocar aqui em vez de usar o botão do menu pra escapar da senha.
+      if (paginaAtual === 'expacessorios') {
+        const escolhida = e.target.value;
+        e.target.value = unidadeAtual; // volta o seletor pra unidade atual até confirmar a senha
+        abrirGateExp(); // popula as opções e reseta o modal
+        document.getElementById('expGateUnidade').value = escolhida;
+        atualizarCampoSenhaGateExp();
+        return;
+      }
+      trocarUnidade(e.target.value);
+    });
   }
 }

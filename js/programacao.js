@@ -37,11 +37,25 @@ async function carregarProgramacao() {
     return;
   }
 
-  const [pedidos, itens, expCtrl] = await Promise.all([
-    sb.from('vw_pedidos_prioridade').select('*'),
-    sb.from('pedido_itens').select('*').order('seq', { ascending: true }),
-    sb.from('exp_controle_itens').select('*').order('localizacao', { ascending: true })
+  // Filtra por unidade AQUI, no cliente -- não só confia no RLS. O RLS
+  // (público admin: eh_admin() or minha_unidade() = unidade) deixa o admin
+  // ver TODAS as unidades de propósito (visão geral) -- então sem este
+  // filtro, uma conta admin vendo a tela via o seletor de unidade do topo
+  // via TODOS os pedidos/itens/registros do Controle EXP de TODAS as
+  // unidades misturados, não só da unidade escolhida. Foi exatamente o bug
+  // que o Robson viu: item da unidade 106 aparecendo com a 105 selecionada.
+  // pedido_itens não tem coluna unidade própria (só via pedidos.unidade),
+  // então filtra pelos IDs dos pedidos já filtrados.
+  const [pedidos, expCtrl] = await Promise.all([
+    sb.from('vw_pedidos_prioridade').select('*').eq('unidade', unidadeAtual),
+    sb.from('exp_controle_itens').select('*').eq('unidade', unidadeAtual).order('localizacao', { ascending: true })
   ]);
+
+  let itens = { data: [], error: null };
+  if (!pedidos.error && (pedidos.data || []).length) {
+    itens = await sb.from('pedido_itens')
+      .select('*').in('pedido_id', pedidos.data.map(p => p.id)).order('seq', { ascending: true });
+  }
 
   // Programação de Separação e Controle EXP Acessórios são páginas
   // independentes que só compartilham esta função de carga -- um erro na
@@ -1725,18 +1739,19 @@ document.getElementById('relPcpGerarBtn').addEventListener('click', async () => 
   msg.textContent = 'Buscando e-mail do PCP...';
   msg.className = 'status-msg';
 
-  const { data: config, error: erroConfig } = await sb.from('config_unidade')
-    .select('email_pcp').eq('unidade', unidadeAtual).maybeSingle();
+  // config_unidade só é lida direto por admin (fase7) -- quem não é admin
+  // (estoque_alm, que também acessa esta página) precisa da função.
+  const { data: emailPcp, error: erroConfig } = await sb.rpc('email_pcp_da_unidade', { uni: unidadeAtual });
 
   btn.disabled = false;
 
-  if (erroConfig || !config || !config.email_pcp) {
+  if (erroConfig || !emailPcp) {
     msg.textContent = 'Esta unidade não tem e-mail do PCP cadastrado. Peça pro admin cadastrar em Configurações.';
     msg.className = 'status-msg status-err';
     return;
   }
 
-  const resultado = montarRelatorioPcp(dataEscolhida, config.email_pcp);
+  const resultado = montarRelatorioPcp(dataEscolhida, emailPcp);
   msg.textContent = resultado.mensagem;
   msg.className = resultado.ok ? (resultado.cortado ? 'status-msg status-err' : 'status-msg status-ok') : 'status-msg status-err';
   if (!resultado.ok) return;

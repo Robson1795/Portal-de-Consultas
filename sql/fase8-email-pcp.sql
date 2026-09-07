@@ -13,6 +13,20 @@
 
 alter table config_unidade add column if not exists email_pcp text;
 
+-- Mesmo padrao de emails_alm_da_unidade() (fase7-senhas-na-aba-admin.sql):
+-- desde a fase7, config_unidade só é lida direto por admin ("Admin le
+-- config"). Quem NÃO é admin (estoque_alm, que também acessa o Controle
+-- EXP Acessórios) precisa de uma função própria pra ler só o e-mail do
+-- PCP, sem abrir a tabela inteira nem as senhas.
+create or replace function public.email_pcp_da_unidade(uni text)
+returns text language sql stable security definer set search_path = public as $$
+  select case when public.esta_aprovado()
+    then (select c.email_pcp from public.config_unidade c where c.unidade = uni)
+    else null end;
+$$;
+
+grant execute on function public.email_pcp_da_unidade(text) to authenticated;
+
 -- Verificacao
 select column_name, data_type from information_schema.columns
  where table_name = 'config_unidade' order by ordinal_position;
