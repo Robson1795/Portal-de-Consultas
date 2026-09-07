@@ -78,7 +78,25 @@ function render(rows, intervalo) {
       <td class="item">${escapeHtml(r.item)}</td>
       <td>${escapeHtml(r.descricao)}</td>
       <td>${escapeHtml(r.um)}</td>
-      <td class="loc"><span class="loc-chip">${escapeHtml(r.localizacao)}</span></td>
+      <td class="loc">
+        <span class="loc-chip">${escapeHtml(r.localizacao)}</span>
+        ${(() => {
+          const chave = chaveContagem(r.item, r.localizacao);
+          const localFisico = localizacaoFisicaMap[chave];
+          const divergeLoc = localFisico && localFisico !== r.localizacao;
+          const aviso = divergeLoc
+            ? `<div class="loc-fisica-aviso" title="Contado em local diferente do cadastrado">📍 Físico: ${escapeHtml(localFisico)} — atualizar no sistema</div>`
+            : '';
+          const edicao = modoContagemAtivo
+            ? `<div class="loc-fisica-edit">
+                 <input type="text" class="loc-fisica-input" data-item="${escapeHtml(r.item)}" data-loc="${escapeHtml(r.localizacao)}"
+                        value="${localFisico ? escapeHtml(localFisico) : ''}" placeholder="Local real, se mudou">
+                 <button class="loc-fisica-confirmar" data-item="${escapeHtml(r.item)}" data-loc="${escapeHtml(r.localizacao)}" type="button">Confirmar</button>
+               </div>`
+            : '';
+          return aviso + edicao;
+        })()}
+      </td>
       <td class="col-padrao" style="text-align:center;">${fichaBoxMap.has(r.item)
         ? `<button class="padrao-btn" data-item="${escapeHtml(r.item)}" data-qtd="${escapeHtml(r.quantidade)}" title="Ver padrão de caixas esperado">📦</button>`
         : (podeEditarEmbalagem() ? `<button class="avulso-btn" data-item="${escapeHtml(r.item)}" title="Marcar como item avulso, sem padrão de caixa">AVULSO</button>` : '')}</td>
@@ -226,10 +244,16 @@ function applyFilterAndSort() {
   if (filtros.zerado) rows = rows.filter(r => parseQtd(r.quantidade) === 0);
   if (filtros.comFoto) rows = rows.filter(r => fichaImageMap.has(r.item));
   if (filtros.divergente) {
+    // Conta como divergencia tanto quantidade diferente quanto localizacao
+    // fisica registrada diferente da cadastrada -- as duas sao "precisa
+    // corrigir o sistema", so em campos diferentes.
     rows = rows.filter(r => {
-      const fisico = contagemMap[chaveContagem(r.item, r.localizacao)];
-      if (fisico === undefined || fisico === '') return false;
-      return parseQtd(fisico) !== parseQtd(r.quantidade);
+      const chave = chaveContagem(r.item, r.localizacao);
+      const fisico = contagemMap[chave];
+      const divergeQtd = fisico !== undefined && fisico !== '' && parseQtd(fisico) !== parseQtd(r.quantidade);
+      const localFisico = localizacaoFisicaMap[chave];
+      const divergeLoc = !!localFisico && localFisico !== r.localizacao;
+      return divergeQtd || divergeLoc;
     });
   }
 
@@ -733,8 +757,17 @@ async function limparContagemItem(itemCode, loc) {
   const celula = input.closest('td');
   const diffSlot = celula.querySelector('.diff-slot');
   const clearBtn = celula.querySelector('.contagem-clear-btn');
-  const { error } = await sb.from('contagem_fisica')
-    .delete().eq('item', itemCode).eq('unidade', unidadeAtual).eq('localizacao', loc);
+  const chave = chaveContagem(itemCode, loc);
+  // "Limpar" e so da quantidade. Se ja tem localizacao fisica registrada,
+  // apagar a linha inteira apagaria essa correcao tambem sem a pessoa
+  // perceber -- por isso zera so a quantidade quando ha local pra manter.
+  const temLocalFisico = !!localizacaoFisicaMap[chave];
+  const { error } = temLocalFisico
+    ? await sb.from('contagem_fisica')
+        .update({ quantidade_fisica: null, contado_por: null, contado_em: null })
+        .eq('item', itemCode).eq('unidade', unidadeAtual).eq('localizacao', loc)
+    : await sb.from('contagem_fisica')
+        .delete().eq('item', itemCode).eq('unidade', unidadeAtual).eq('localizacao', loc);
   if (error) return marcarFalhaContagem(input, diffSlot, error.message);
   input.value = '';
   input.classList.remove('contagem-salvo', 'contagem-divergente');
@@ -864,10 +897,12 @@ const contagemPinInput = document.getElementById('contagemPinInput');
 const contagemPinMsg = document.getElementById('contagemPinMsg');
 
 let contagemMap = {};
+let localizacaoFisicaMap = {};
 
 async function carregarContagens() {
   const { data, error } = await sb.from('contagem_fisica').select('*').eq('unidade', unidadeAtual);
   contagemMap = {};
+  localizacaoFisicaMap = {};
   if (error) {
     // Sem isto, falha de leitura fica indistinguível de "ninguém contou ainda",
     // e a pessoa pode recontar por cima do trabalho de outra.
@@ -876,8 +911,60 @@ async function carregarContagens() {
       + ' \u2014 os campos podem aparecer em branco mesmo com contagem feita. Recarregue a página antes de contar.');
     return;
   }
-  (data || []).forEach(r => { contagemMap[chaveContagem(r.item, r.localizacao)] = r.quantidade_fisica; });
+  (data || []).forEach(r => {
+    const chave = chaveContagem(r.item, r.localizacao);
+    contagemMap[chave] = r.quantidade_fisica;
+    if (r.localizacao_fisica) localizacaoFisicaMap[chave] = r.localizacao_fisica;
+  });
 }
+
+// Grava a localizacao onde o item foi encontrado de verdade. NAO mexe em
+// quantidade_fisica -- por isso e um upsert so com estes campos, e nao um
+// delete/insert como a contagem de quantidade faz.
+async function salvarLocalizacaoFisica(itemCode, loc, valorBruto, botao) {
+  const valor = valorBruto.trim();
+  const chave = chaveContagem(itemCode, loc);
+  const msgAntiga = botao.parentElement.querySelector('.loc-fisica-msg');
+  if (msgAntiga) msgAntiga.remove();
+
+  botao.disabled = true;
+  const { error } = await sb.from('contagem_fisica').upsert({
+    item: itemCode, unidade: unidadeAtual, localizacao: loc,
+    localizacao_fisica: valor || null,
+    contado_por: nomeUsuarioAtual
+  }, { onConflict: 'item,unidade,localizacao' });
+  botao.disabled = false;
+
+  const msg = document.createElement('span');
+  msg.className = 'loc-fisica-msg';
+  if (error) {
+    msg.textContent = 'NAO SALVOU: ' + error.message;
+    msg.classList.add('loc-fisica-erro');
+    botao.parentElement.appendChild(msg);
+    console.error('Falha ao gravar localizacao fisica:', error.message);
+    return;
+  }
+
+  if (valor) localizacaoFisicaMap[chave] = valor; else delete localizacaoFisicaMap[chave];
+  msg.textContent = 'Salvo!';
+  botao.parentElement.appendChild(msg);
+  setTimeout(() => msg.remove(), 2000);
+  applyFilterAndSort(); // reflete o aviso de divergencia na celula, sem reload
+}
+
+document.getElementById('tableBody').addEventListener('click', (e) => {
+  const btn = e.target.closest('.loc-fisica-confirmar');
+  if (!btn) return;
+  const input = btn.parentElement.querySelector('.loc-fisica-input');
+  salvarLocalizacaoFisica(btn.dataset.item, btn.dataset.loc, input.value, btn);
+});
+document.getElementById('tableBody').addEventListener('keydown', (e) => {
+  if (e.target.classList.contains('loc-fisica-input') && e.key === 'Enter') {
+    e.preventDefault();
+    const btn = e.target.parentElement.querySelector('.loc-fisica-confirmar');
+    if (btn) btn.click();
+  }
+});
 
 let canalContagem = null;
 

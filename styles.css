@@ -450,6 +450,24 @@
   display: inline-block; background: #e8f0f9; color: var(--blue-dark);
   border-radius: 6px; padding: 2px 8px; font-size: 12.5px; font-weight: 600; white-space: nowrap;
 }
+/* Contagem registrou um local diferente do cadastrado -- aparece sempre
+   que existir, com ou sem o Modo Contagem ativo (e o que o filtro "com
+   divergencia" usa pra sinalizar "atualizar no sistema"). */
+.loc-fisica-aviso {
+  margin-top: 4px; font-size: 11px; font-weight: 600; color: #92400e;
+  background: #fef3c7; border-radius: 6px; padding: 2px 6px; white-space: normal; max-width: 160px;
+}
+.loc-fisica-edit { margin-top: 6px; display: flex; gap: 4px; align-items: center; }
+.loc-fisica-input {
+  width: 90px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px;
+}
+.loc-fisica-confirmar {
+  border: 1px solid var(--blue); background: white; color: var(--blue); border-radius: 6px;
+  cursor: pointer; font-size: 11px; font-weight: 600; padding: 4px 8px; white-space: nowrap;
+}
+.loc-fisica-confirmar:hover { background: var(--blue); color: white; }
+.loc-fisica-msg { display: block; font-size: 10.5px; color: #1d7a45; margin-top: 2px; }
+.loc-fisica-msg.loc-fisica-erro { color: #c62828; }
 td.col-acoes { white-space: nowrap; text-align: center; }
 .acao-btn {
   border: 1px solid var(--border); background: white; border-radius: 7px;
