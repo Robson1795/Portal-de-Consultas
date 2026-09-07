@@ -373,6 +373,7 @@
           <button class="btn" data-prog-aba="carregamento">Carregamento</button>
           <button class="btn btn-primary" data-prog-aba="separacao">Separação</button>
           <button class="btn" data-prog-aba="exp">EXP Acessórios</button>
+          <button class="btn" data-prog-aba="conferencia">Conferência EXP</button>
         </div>
         <button class="btn" id="progImportarBtn" style="margin-left:auto;">Importar planilhas</button>
         <button class="btn" id="progAtualizarBtn">Atualizar</button>
@@ -499,6 +500,46 @@
         <div id="progGrade" style="padding:14px 16px;"></div>
         <div class="empty-msg" id="progGradeVazio" style="display:none;">
           Nenhum pedido programado. Importe a planilha de carregamento.
+        </div>
+      </div>
+
+      <!-- ---- Aba 4: Conferencia EXP (quem retira fisicamente pro carregamento) ---- -->
+      <div id="progConferencia" class="prog-aba" style="display:none;">
+        <div class="cfg-barra">
+          <span class="modal-label" style="margin:0;">Conferente</span>
+          <input type="text" id="confNomeInput" placeholder="Nome de quem está retirando"
+                 style="flex:1; min-width:180px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+        </div>
+        <div class="modal-text" style="padding:0 16px 12px;">
+          Só o que ainda não saiu para o carregamento, agrupado por localização. Confirme item a
+          item, ou tudo de uma localização de uma vez.
+        </div>
+        <div id="confBody" style="padding:0 16px 16px;"></div>
+        <div class="empty-msg" id="confVazio" style="display:none;">
+          Nenhum item pendente de retirada no Controle EXP.
+        </div>
+
+        <!-- ---- Historico de retiradas: "quando saiu o material do pedido X" ---- -->
+        <div style="border-top:1px solid var(--border); margin-top:10px;">
+          <div class="cfg-barra">
+            <strong>Histórico de retiradas</strong>
+            <input type="text" id="confHistBusca" placeholder="Buscar por nº pedido, item ou localização..."
+                   style="flex:1; min-width:200px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          </div>
+          <div class="scroll-area">
+            <table>
+              <thead>
+                <tr>
+                  <th>Nº Pedido</th><th>Item</th><th>Descrição</th><th>Qtd</th>
+                  <th>Localização</th><th>Retirado por</th><th>Retirado em</th>
+                </tr>
+              </thead>
+              <tbody id="confHistBody"></tbody>
+            </table>
+          </div>
+          <div class="empty-msg" id="confHistVazio" style="display:none;">
+            Nenhuma retirada registrada ainda.
+          </div>
         </div>
       </div>
     </div>

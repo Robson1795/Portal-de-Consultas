@@ -60,6 +60,7 @@ async function carregarProgramacao() {
   renderExp();
   renderCarregamento();
   renderExpControle(expCtrl.error ? expCtrl.error.message : null);
+  if (!expCtrl.error) renderConferencia(); // barato (so filtra em memoria); sem isso a Conferencia so atualizava ao trocar de sub-aba
 }
 
 function falhaProgramacao(mensagem) {
@@ -84,6 +85,8 @@ function trocarAbaProgramacao(aba) {
   document.getElementById('progSeparacao').style.display = aba === 'separacao' ? 'block' : 'none';
   document.getElementById('progExp').style.display = aba === 'exp' ? 'block' : 'none';
   document.getElementById('progCarregamento').style.display = aba === 'carregamento' ? 'block' : 'none';
+  document.getElementById('progConferencia').style.display = aba === 'conferencia' ? 'block' : 'none';
+  if (aba === 'conferencia') renderConferencia();
 }
 
 document.getElementById('progAtualizarBtn').addEventListener('click', carregarProgramacao);
@@ -1038,8 +1041,9 @@ function renderExpControle(erroCarregamento) {
 
   corpo.innerHTML = linhas.map(l => {
     const desc = expCtrlDescMap.get(l.codigo_item);
+    const retirado = l.status === 'retirado';
     return `
-    <tr>
+    <tr${retirado ? ' style="opacity:0.6;"' : ''}>
       <td class="loc"><span class="loc-chip">${escapeHtml(l.localizacao || '—')}</span></td>
       <td class="item">${escapeHtml(l.codigo_item)}</td>
       <td>${desc && desc.descricao ? escapeHtml(desc.descricao) : '—'}</td>
@@ -1048,24 +1052,60 @@ function renderExpControle(erroCarregamento) {
       <td class="loc">${escapeHtml(l.numero_pedido || '—')}</td>
       <td class="loc">${escapeHtml(l.lote || '—')}</td>
       <td class="loc">${escapeHtml(l.referencia || '—')}</td>
+      <td>${retirado
+        ? `<span class="cfg-status st-ativo">Saiu p/ carregamento</span>`
+        : `<span class="cfg-status st-pendente">Na expedição</span>`}</td>
       <td class="col-acoes">
+        ${retirado ? '' : `<button class="acao-btn expctrl-saida" data-id="${escapeHtml(l.id)}" title="Marcar como retirado para o carregamento">🚚</button>`}
         <button class="acao-btn expctrl-excluir" data-id="${escapeHtml(l.id)}" title="Excluir este registro">🗑</button>
       </td>
     </tr>`;
   }).join('');
 }
 
+// Marca que o item saiu da localizacao pro carregamento -- nao apaga o
+// registro, so muda o status. E o mesmo registro que fica no historico
+// (retirado_por/retirado_em), pra "quando perguntarem, pesquiso pelo
+// numero do pedido" (pedido do Robson).
+async function marcarSaidaExpControle(id, conferente, novoStatus) {
+  const status = novoStatus || 'retirado';
+  const patch = status === 'retirado'
+    ? { status, retirado_por: conferente, retirado_em: new Date().toISOString() }
+    : { status, retirado_por: null, retirado_em: null }; // "desfazer": volta pra na_expedicao
+  const { error } = await sb.from('exp_controle_itens').update(patch).eq('id', id);
+  if (error) { alert('Não foi possível salvar: ' + error.message); return false; }
+
+  // log_movimentacao.pedido_id e NOT NULL com FK pra pedidos -- exp_controle_itens
+  // so guarda o NUMERO do pedido (texto), entao so loga se achar o pedido de
+  // verdade na grade carregada agora. Log e so rastreabilidade: sem achar,
+  // a acao principal (que ja aconteceu, linha acima) nao e desfeita por isso.
+  const item = progExpControle.find(l => l.id === id);
+  const pedido = item ? pedidoDoNumero(item.numero_pedido) : null;
+  if (item && pedido) {
+    await registrarLogProgramacao(pedido.id, status === 'retirado' ? 'item_saiu_expedicao' : 'item_saida_desfeita',
+      { exp_controle_id: id, codigo_item: item.codigo_item, numero_pedido: item.numero_pedido, conferente });
+  }
+  return true;
+}
+
 document.getElementById('expCtrlBusca').addEventListener('input', () => renderExpControle(null));
 document.getElementById('expCtrlAtualizarBtn').addEventListener('click', carregarProgramacao);
 
 document.getElementById('expCtrlBody').addEventListener('click', async (e) => {
-  const btn = e.target.closest('.expctrl-excluir');
-  if (!btn) return;
-  const confirmado = confirm('Excluir este registro do Controle EXP? Não afeta a separação nem o estoque, só some da lista de localização.');
-  if (!confirmado) return;
-  const { error } = await sb.from('exp_controle_itens').delete().eq('id', btn.dataset.id);
-  if (error) { alert('Não foi possível excluir: ' + error.message); return; }
-  await carregarProgramacao();
+  const btnExcluir = e.target.closest('.expctrl-excluir');
+  if (btnExcluir) {
+    const confirmado = confirm('Excluir este registro do Controle EXP? Não afeta a separação nem o estoque, só some da lista de localização.');
+    if (!confirmado) return;
+    const { error } = await sb.from('exp_controle_itens').delete().eq('id', btnExcluir.dataset.id);
+    if (error) { alert('Não foi possível excluir: ' + error.message); return; }
+    await carregarProgramacao();
+    return;
+  }
+  const btnSaida = e.target.closest('.expctrl-saida');
+  if (btnSaida) {
+    const ok = await marcarSaidaExpControle(btnSaida.dataset.id, nomeUsuarioAtual);
+    if (ok) await carregarProgramacao();
+  }
 });
 
 // Exportar CSV pra conferir contra o sistema (a planilha real, ou outra
@@ -1093,4 +1133,162 @@ document.getElementById('expCtrlExportarBtn').addEventListener('click', () => {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+});
+
+// ---- Aba 4: Conferência EXP (quem retira fisicamente pro carregamento) ----
+// O Controle EXP (acima) e a ENTRADA -- onde o item foi guardado. Aqui e a
+// SAIDA: o conferente vem, confere fisicamente e retira da localizacao pra
+// entregar ao carregamento. Mesma tabela (exp_controle_itens), so muda o
+// status -- nunca apaga, porque vira o historico pesquisavel por pedido.
+
+const CHAVE_CONFERENTE_LS = 'confExpNomeConferente';
+
+function nomeConferenteAtual() {
+  return document.getElementById('confNomeInput').value.trim();
+}
+
+// Lembra o ultimo nome digitado: normalmente e a mesma pessoa conferindo
+// varias vezes ao longo do turno, redigitar toda hora seria atrito a toa.
+// Cada navegador/aparelho guarda o seu -- nao e autenticacao, so conveniencia.
+document.getElementById('confNomeInput').addEventListener('input', (e) => {
+  try { localStorage.setItem(CHAVE_CONFERENTE_LS, e.target.value); } catch (err) { /* localStorage bloqueado -- so nao lembra, nao quebra a tela */ }
+});
+(function restaurarNomeConferente() {
+  try {
+    const salvo = localStorage.getItem(CHAVE_CONFERENTE_LS);
+    if (salvo) document.getElementById('confNomeInput').value = salvo;
+  } catch (err) { /* idem */ }
+})();
+
+function renderConferencia() {
+  const pendentes = progExpControle.filter(l => l.status !== 'retirado');
+  const corpo = document.getElementById('confBody');
+  const vazio = document.getElementById('confVazio');
+
+  vazio.style.display = pendentes.length ? 'none' : 'block';
+  if (!pendentes.length) {
+    corpo.innerHTML = '';
+  } else {
+    // Agrupado por localizacao: e assim que o conferente trabalha -- vai
+    // fisicamente numa localizacao e retira tudo que tem la de uma vez.
+    const porLocal = new Map();
+    pendentes.forEach(l => {
+      const chave = l.localizacao || '(sem localização)';
+      if (!porLocal.has(chave)) porLocal.set(chave, []);
+      porLocal.get(chave).push(l);
+    });
+
+    corpo.innerHTML = [...porLocal.entries()].map(([local, itens]) => `
+      <div style="border:1px solid var(--border); border-radius:10px; margin-top:12px; overflow:hidden;">
+        <div class="cfg-barra">
+          <span class="loc-chip">${escapeHtml(local)}</span>
+          <span style="font-size:12px; color:var(--muted);">${itens.length} item(ns)</span>
+          <button class="btn btn-primary conf-retirar-tudo" data-local="${escapeHtml(local)}" style="margin-left:auto;">
+            Confirmar tudo desta localização
+          </button>
+        </div>
+        <div class="scroll-area">
+          <table>
+            <thead><tr><th>Item</th><th>Descrição</th><th>Qtd</th><th>Nº Pedido</th><th>Ação</th></tr></thead>
+            <tbody>
+              ${itens.map(l => {
+                const desc = expCtrlDescMap.get(l.codigo_item);
+                return `
+                <tr>
+                  <td class="item">${escapeHtml(l.codigo_item)}</td>
+                  <td>${desc && desc.descricao ? escapeHtml(desc.descricao) : '—'}</td>
+                  <td class="num">${l.quantidade != null ? escapeHtml(l.quantidade) : '—'}</td>
+                  <td class="loc">${escapeHtml(l.numero_pedido || '—')}</td>
+                  <td class="col-acoes">
+                    <button class="btn conf-retirar-item" data-id="${escapeHtml(l.id)}">Confirmar retirada</button>
+                  </td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  renderHistoricoRetiradas();
+}
+
+document.getElementById('confBody').addEventListener('click', async (e) => {
+  const nome = nomeConferenteAtual();
+  if (!nome) { alert('Informe o nome de quem está retirando antes de confirmar.'); return; }
+
+  const btnItem = e.target.closest('.conf-retirar-item');
+  if (btnItem) {
+    btnItem.disabled = true;
+    const ok = await marcarSaidaExpControle(btnItem.dataset.id, nome);
+    if (ok) await carregarProgramacao();
+    else btnItem.disabled = false;
+    return;
+  }
+
+  const btnLocal = e.target.closest('.conf-retirar-tudo');
+  if (btnLocal) {
+    const local = btnLocal.dataset.local;
+    const itens = progExpControle.filter(l => (l.localizacao || '(sem localização)') === local && l.status !== 'retirado');
+    if (!confirm(`Confirmar a retirada de ${itens.length} item(ns) de "${local}"?`)) return;
+    btnLocal.disabled = true;
+    for (const item of itens) await marcarSaidaExpControle(item.id, nome);
+    await carregarProgramacao();
+  }
+});
+
+// "Se um dia perguntarem quando carregou os materiais, pesquiso por número
+// do pedido" -- pedido explicito do Robson. Historico nunca apaga o
+// registro, so o marca como retirado; a busca cobre pedido, item e local.
+function renderHistoricoRetiradas() {
+  const busca = document.getElementById('confHistBusca').value.trim().toLowerCase();
+  const corpo = document.getElementById('confHistBody');
+  const vazio = document.getElementById('confHistVazio');
+
+  let retirados = progExpControle.filter(l => l.status === 'retirado');
+  retirados = [...retirados].sort((a, b) => new Date(b.retirado_em || 0) - new Date(a.retirado_em || 0));
+
+  if (busca) {
+    retirados = retirados.filter(l =>
+      String(l.numero_pedido).toLowerCase().includes(busca) ||
+      String(l.codigo_item).toLowerCase().includes(busca) ||
+      String(l.localizacao).toLowerCase().includes(busca));
+  }
+
+  vazio.style.display = retirados.length ? 'none' : 'block';
+  if (!retirados.length) {
+    vazio.textContent = progExpControle.some(l => l.status === 'retirado')
+      ? 'Nenhuma retirada bate com a busca.'
+      : 'Nenhuma retirada registrada ainda.';
+    corpo.innerHTML = '';
+    return;
+  }
+
+  corpo.innerHTML = retirados.map(l => {
+    const desc = expCtrlDescMap.get(l.codigo_item);
+    const quando = l.retirado_em ? new Date(l.retirado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—';
+    return `
+    <tr>
+      <td class="item">${escapeHtml(l.numero_pedido || '—')}</td>
+      <td class="item">${escapeHtml(l.codigo_item)}</td>
+      <td>${desc && desc.descricao ? escapeHtml(desc.descricao) : '—'}</td>
+      <td class="num">${l.quantidade != null ? escapeHtml(l.quantidade) : '—'}</td>
+      <td class="loc"><span class="loc-chip">${escapeHtml(l.localizacao || '—')}</span></td>
+      <td>${escapeHtml(l.retirado_por || '—')}
+        <button class="acao-btn hist-desfazer" data-id="${escapeHtml(l.id)}" title="Desfazer — volta pra &quot;na expedição&quot;">↺</button>
+      </td>
+      <td class="loc">${quando}</td>
+    </tr>`;
+  }).join('');
+}
+
+document.getElementById('confHistBusca').addEventListener('input', () => renderHistoricoRetiradas());
+
+document.getElementById('confHistBody').addEventListener('click', async (e) => {
+  const btn = e.target.closest('.hist-desfazer');
+  if (!btn) return;
+  if (!confirm('Desfazer esta retirada? O item volta para "na expedição" no Controle EXP.')) return;
+  const ok = await marcarSaidaExpControle(btn.dataset.id, null, 'na_expedicao');
+  if (ok) await carregarProgramacao();
 });
