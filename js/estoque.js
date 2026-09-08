@@ -1471,6 +1471,10 @@ async function trocarUnidade(cod) {
   if (modoContagemAtivo) desativarModoContagem();
   await loadData();
   await atualizarBotaoEditar();
+  // Trocar a unidade tem de recarregar a tela ABERTA, nao so o estoque geral.
+  // Sem isto, quem estava no Estoque de Aco trocava de unidade e continuava
+  // vendo as bobinas da anterior (bug de 08/09/2026).
+  if (paginaAtual === 'bobinas') await loadBobinas();
   // Se a contagem estava ativa e a unidade ja foi desbloqueada nesta sessao,
   // mantem ativa sem pedir a senha de novo.
   if (estavaContando && unidadeDesbloqueada(unidadeAtual)) {
