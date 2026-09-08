@@ -1238,9 +1238,12 @@ contagemBtn.addEventListener('click', () => {
   } else {
     contagemPinInput.value = '';
     contagemPinMsg.textContent = '';
-    const u = UNIDADES[unidadeAtual];
+    // rotuloUnidade() é tolerante a unidade fora do mapa (ex.: SESMT, que
+    // fica de fora de UNIDADES de propósito) -- ler UNIDADES[unidadeAtual]
+    // direto quebrava aqui pro SESMT (undefined.cidade), travando o botão
+    // sem erro visível pra quem clicava.
     document.getElementById('contagemHint').textContent =
-      `Digite a senha da Unidade ${unidadeAtual} (${u.cidade}) para liberar a coluna de contagem física.`;
+      `Digite a senha da ${rotuloUnidade(unidadeAtual)} para liberar a coluna de contagem física.`;
     contagemModal.classList.add('open');
   }
 });
