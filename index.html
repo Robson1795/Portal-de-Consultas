@@ -602,6 +602,7 @@
           <button class="btn" id="expCtrlDesmarcarBtn" style="display:none;"
                   title="Tira a marca de impressa da etiqueta dos itens selecionados. Só administrador.">✗ Desmarcar</button>
           <button class="btn" id="expCtrlMarcarCancelarBtn" style="display:none;">Cancelar</button>
+          <button class="btn" id="expCtrlConcluirLocalBtn" title="Digite UMA localização específica na busca acima e clique aqui quando ela estiver com todos os itens colocados.">📍 Concluir localização</button>
           <button class="btn" id="expCtrlImprimirBtn" style="margin-left:auto;" title="Imprime só o que está na busca acima -- digite a localização pra imprimir só ela">🖨️ Imprimir</button>
           <select id="expCtrlExportarFormato" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
             <option value="xlsx">Excel (.xlsx)</option>
@@ -619,7 +620,7 @@
                 <th class="col-sel-exp" id="expCtrlSelTh" style="display:none;"
                     title="Selecionar todos os itens que estão na busca atual">
                   <input type="checkbox" id="expCtrlSelTodos"></th>
-                <th>Localização</th><th>Item</th><th>Descrição</th><th>UM</th>
+                <th>Localização</th><th title="Confirma se essa localização já teve todos os itens colocados">Local concluído?</th><th>Item</th><th>Descrição</th><th>UM</th>
                 <th>Qtd</th><th>Nº Pedido</th><th>Nº OP</th><th>Lote</th><th>Referência</th>
                 <th title="Marcada ao imprimir pelo Controle EXP, ou à mão pelo administrador">Etiqueta</th>
                 <th>Status</th><th>Entrada em</th><th>Saída em</th><th>Ação</th>
