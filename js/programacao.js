@@ -1120,6 +1120,20 @@ function linhasFiltradasExpControle() {
   return linhas;
 }
 
+// Conta pedidos DISTINTOS ainda na expedição (não retirados) -- um pedido
+// vira várias linhas (uma por item), então contar linhas contaria o mesmo
+// pedido várias vezes. Respeita a busca (#expCtrlBusca) igual à tabela,
+// pra bater com o que a pessoa está vendo na tela.
+function contarPedidosNaExpedicao(linhas) {
+  const pedidos = new Set();
+  linhas.forEach(l => {
+    if (l.status === 'retirado') return;
+    const numero = (l.numero_pedido || '').trim();
+    if (numero) pedidos.add(numero);
+  });
+  return pedidos.size;
+}
+
 function renderExpControle(erroCarregamento) {
   const corpo = document.getElementById('expCtrlBody');
   const vazio = document.getElementById('expCtrlVazio');
@@ -1129,10 +1143,14 @@ function renderExpControle(erroCarregamento) {
     vazio.textContent = 'Não foi possível carregar: ' + erroCarregamento
       + ' — se a mensagem falar em tabela inexistente, sql/programacao-03-controle-exp.sql ainda não foi rodado no Supabase.';
     corpo.innerHTML = '';
+    document.getElementById('expCtrlPedidosCount').textContent = '';
     return;
   }
 
   const linhas = linhasFiltradasExpControle();
+  const totalPedidos = contarPedidosNaExpedicao(linhas);
+  document.getElementById('expCtrlPedidosCount').textContent =
+    `${totalPedidos} pedido${totalPedidos === 1 ? '' : 's'} na expedição`;
   vazio.style.display = linhas.length ? 'none' : 'block';
   if (!linhas.length) {
     vazio.textContent = progExpControle.length
