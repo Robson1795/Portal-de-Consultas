@@ -36,13 +36,34 @@ async function abrirTelaBobinas() {
   iniciarTempoRealBobinas();
 }
 
+// Duas correcoes de 08/09/2026, ambas de dado errado na cara do conferente:
+//
+// 1) FILTRO POR UNIDADE. Isto lia `bobinas_aco` inteira e a tela mostrava
+//    bobina de outra unidade -- com 106 no cabecalho aparecia Est 101. A
+//    coluna `est` (estabelecimento) so era usada para exibir; agora filtra.
+//
+// 2) PAGINACAO. O PostgREST corta em 1000 linhas por padrao. Com 3.436
+//    bobinas no banco, o card dizia "Total auditado 0/1000" e dois tercos da
+//    planilha nunca chegavam a tela -- o conferente veria "auditei tudo"
+//    sobre um terco do patio. Le por paginas ate acabar.
 async function loadBobinas() {
-  const { data, error } = await sb.from('bobinas_aco').select('*').order('id', { ascending: true });
-  if (error) {
-    document.getElementById('bobinasLoadingMsg').textContent = 'Erro ao carregar: ' + error.message;
-    return;
+  if (!unidadeAtual) { bobinasData = []; renderBobinas(); return; }
+
+  const PAGINA = 1000;
+  let todas = [];
+  for (let de = 0; ; de += PAGINA) {
+    const { data, error } = await sb.from('bobinas_aco').select('*')
+      .eq('est', unidadeAtual)
+      .order('id', { ascending: true })
+      .range(de, de + PAGINA - 1);
+    if (error) {
+      document.getElementById('bobinasLoadingMsg').textContent = 'Erro ao carregar: ' + error.message;
+      return;
+    }
+    todas = todas.concat(data || []);
+    if (!data || data.length < PAGINA) break;
   }
-  bobinasData = data || [];
+  bobinasData = todas;
   renderBobinas();
 }
 

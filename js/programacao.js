@@ -1158,6 +1158,9 @@ function renderExpControle(erroCarregamento) {
       <td class="loc">${escapeHtml(l.numero_os_op || '—')}</td>
       <td class="loc">${escapeHtml(l.lote || '—')}</td>
       <td class="loc">${escapeHtml(l.referencia || '—')}</td>
+      <td class="loc">${l.etiqueta_emitida_em
+        ? `<span title="Etiqueta emitida em ${escapeHtml(formatarDataHoraBR(l.etiqueta_emitida_em))}${l.etiqueta_emitida_por ? ' por ' + escapeHtml(l.etiqueta_emitida_por) : ''}" style="color:#166534; font-weight:700;">✓</span>`
+        : `<span title="Etiqueta ainda não emitida — sai marcada quando você imprimir esta lista" style="color:var(--muted);">—</span>`}</td>
       <td>${retirado
         ? `<span class="cfg-status st-ativo">Saiu p/ carregamento</span>`
         : `<span class="cfg-status st-pendente">Na expedição</span>`}</td>
@@ -1741,7 +1744,7 @@ document.getElementById('expCtrlExportarBtn').addEventListener('click', async ()
 // Abre a mesma listagem numa aba nova já pronta pra impressora -- a
 // própria caixa de impressão do navegador tem "Salvar como PDF", então
 // cobre o PDF de graça, sem precisar de outra biblioteca.
-document.getElementById('expCtrlImprimirBtn').addEventListener('click', () => {
+document.getElementById('expCtrlImprimirBtn').addEventListener('click', async () => {
   const linhas = linhasFiltradasExpControle();
   if (!linhas.length) {
     alert(progExpControle.length ? 'Nenhum item bate com a busca atual.' : 'Nenhum item no Controle EXP para imprimir.');
@@ -1751,6 +1754,38 @@ document.getElementById('expCtrlImprimirBtn').addEventListener('click', () => {
   if (!aba) { alert('O navegador bloqueou a nova aba. Libere pop-ups pra este site e tente de novo.'); return; }
   aba.document.write(montarHtmlExpControle(true));
   aba.document.close();
+
+  // Imprimir aqui É o ato de emitir a etiqueta, então a marcação sai junto:
+  // marcar num segundo clique seria mais um passo para esquecer, e a lista
+  // passaria a mentir sobre o que já foi etiquetado.
+  //
+  // Só as linhas desta impressão (respeita a busca) e só as que ainda não
+  // tinham etiqueta -- reimprimir não reescreve a data da primeira emissão,
+  // que é a que responde "desde quando este item está etiquetado?".
+  const semEtiqueta = linhas.filter(l => !l.etiqueta_emitida_em);
+  if (!semEtiqueta.length) return;
+
+  const msg = document.getElementById('expEtiquetaMsg');
+  const agora = new Date().toISOString();
+  const { error } = await sb.from('exp_controle_itens')
+    .update({ etiqueta_emitida_em: agora, etiqueta_emitida_por: nomeUsuarioAtual })
+    .in('id', semEtiqueta.map(l => l.id));
+
+  if (error) {
+    // A impressão já saiu -- dizer isso importa, senão a pessoa acha que nada
+    // aconteceu e imprime de novo.
+    msg.textContent = 'A impressão saiu, mas NÃO foi possível marcar a etiqueta como emitida: '
+      + error.message + ' — se a mensagem falar em coluna inexistente, '
+      + 'sql/fase16-etiqueta-emitida.sql ainda não foi rodado no Supabase.';
+    msg.className = 'status-msg status-err';
+    console.error('Falha ao marcar etiqueta emitida:', error.message);
+    return;
+  }
+
+  semEtiqueta.forEach(l => { l.etiqueta_emitida_em = agora; l.etiqueta_emitida_por = nomeUsuarioAtual; });
+  renderExpControle();
+  msg.textContent = semEtiqueta.length + ' etiqueta(s) marcada(s) como emitida(s).';
+  msg.className = 'status-msg status-ok';
 });
 
 // ---- Aba 4: Conferência EXP (quem retira fisicamente pro carregamento) ----

@@ -279,7 +279,8 @@ const LOTE_FORMATOS = {
   sesmt: 'Com cabeçalho ou sem. Colunas: Item, Descrição, UM, Localização, Quantidade. '
        + 'Tudo vai para o estoque SESMT — não precisa de coluna de unidade.',
   aco: 'As oito colunas da planilha de bobinas, nesta ordem: Item, Descrição Item, Est, Dep, '
-     + 'Localizacao, Lote, Un, Qtd Liquida. Substitui a planilha inteira, não é por unidade.'
+     + 'Localizacao, Lote, Un, Qtd Liquida. A coluna Est diz a unidade de cada bobina, e '
+     + 'só as unidades que aparecerem na planilha são substituídas.'
 };
 
 // Nomes que cada coluna pode ter na planilha real. A UM é resolvida ANTES da
@@ -362,11 +363,17 @@ function prepararLote(texto) {
   if (loteAba === 'aco') {
     const registros = [];
     let ignoradas = 0;
+    let semEst = 0;
     linhas.forEach((c, i) => {
       if (i === 0 && pareceCabecalho(c)) return;
       if (c.length < 8 || !c[0]) { ignoradas++; return; }
+      // Sem Est não há como saber de qual unidade é a bobina, e o banco
+      // recusa a planilha inteira se uma linha vier assim. Melhor tirar aqui
+      // e dizer quantas, do que a pessoa levar um erro seco na gravação.
+      const est = (c[2] || '').trim();
+      if (!est) { semEst++; return; }
       registros.push({
-        item: c[0], descricao: c[1] || null, est: c[2] || null, dep: c[3] || null,
+        item: c[0], descricao: c[1] || null, est, dep: c[3] || null,
         localizacao: c[4] || null, lote: c[5] || null, um: c[6] || null,
         qtd_liquida: parseNum(c[7])
       });
@@ -377,7 +384,22 @@ function prepararLote(texto) {
     if (ignoradas) {
       avisos.push(ignoradas + ' linha(s) ignorada(s) por não ter as oito colunas ou estar sem item.');
     }
-    return { tipo: 'aco', registros, avisos, mapa: null };
+    if (semEst) {
+      avisos.push(semEst + ' linha(s) IGNORADA(S) por estar sem a coluna Est — sem ela não se sabe a unidade da bobina.');
+    }
+
+    // Quantas bobinas por unidade: é o que a prévia mostra, e é a informação
+    // que diz quais unidades vão ser substituídas e quais nem serão tocadas.
+    const porEst = new Map();
+    registros.forEach(r => porEst.set(r.est, (porEst.get(r.est) || 0) + 1));
+    const naoConhecidas = [...porEst.keys()].filter(u => !UNIDADES[u]);
+    if (naoConhecidas.length) {
+      avisos.push('Est não reconhecido pelo portal: ' + naoConhecidas.join(', ')
+                  + '. As linhas vão ser gravadas assim mesmo, mas não aparecem em nenhuma tela.');
+    }
+
+    return { tipo: 'aco', registros, avisos, mapa: null,
+             porEst: [...porEst.entries()].sort((a, b) => a[0].localeCompare(b[0])) };
   }
 
   // ---------------------------------------- Estoque: ALM e SESMT
@@ -476,9 +498,17 @@ function renderPreviaLote(pronto) {
 
   let corpoHtml;
   if (pronto.tipo === 'aco') {
-    corpoHtml = '<div style="font-size:14px; margin-bottom:10px;">Vai substituir a planilha de '
-              + 'bobinas inteira por <b>' + pronto.registros.length.toLocaleString('pt-BR')
-              + '</b> linha(s).</div>';
+    corpoHtml =
+      '<table class="cfg-tabela" style="margin-bottom:10px;"><thead><tr>'
+      + '<th>Unidade (Est)</th><th>Bobinas que entram</th></tr></thead><tbody>'
+      + (pronto.porEst || []).map(([est, n]) =>
+          '<tr><td><b>' + escapeHtml(UNIDADES[est] ? rotuloUnidade(est) : 'Est ' + est)
+          + '</b></td><td>' + n.toLocaleString('pt-BR') + '</td></tr>').join('')
+      + '</tbody></table>'
+      + '<div style="font-size:13px; color:var(--muted); margin-bottom:10px;">'
+      + (pronto.porEst || []).length + ' unidade(s), '
+      + pronto.registros.length.toLocaleString('pt-BR')
+      + ' bobina(s) no total. As unidades que não aparecem acima <b>não são tocadas</b>.</div>';
   } else {
     const total = pronto.blocos.reduce((s, b) => s + b.itens.length, 0);
     corpoHtml =
@@ -513,7 +543,8 @@ function renderPreviaLote(pronto) {
 // suprimida, funciona no celular, e fica mais visível que um diálogo.
 function resumoDoLote(pronto) {
   return (pronto.tipo === 'aco')
-    ? pronto.registros.length.toLocaleString('pt-BR') + ' linha(s) da planilha de bobinas'
+    ? (pronto.porEst || []).map(([est, n]) => est + ' (' + n + ')').join(', ')
+      + ' — bobinas'
     : pronto.blocos.map(b => b.unidade + ' (' + b.itens.length + ')').join(', ');
 }
 
@@ -578,7 +609,9 @@ async function aplicarLote() {
   }
 
   msg.textContent = (lotePreparado.tipo === 'aco')
-    ? 'Planilha de bobinas substituída: ' + ((data && data.bobinas) || 0) + ' linha(s).'
+    ? 'Bobinas substituídas em '
+      + ((data && data.unidades) ? data.unidades.length : '?') + ' unidade(s): '
+      + ((data && data.bobinas) || 0) + ' linha(s).'
     : 'Estoque substituído em '
       + ((data && data.unidades) ? data.unidades.length : '?') + ' unidade(s).';
   msg.className = 'status-msg status-ok';
