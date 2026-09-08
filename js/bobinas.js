@@ -302,18 +302,23 @@ document.getElementById('saveBobinasBtn').addEventListener('click', async () => 
   }
   msg.textContent = 'Salvando...';
   msg.className = 'status-msg';
-  try {
-    const { error: delErr } = await sb.from('bobinas_aco').delete().neq('id', 0);
-    if (delErr) throw delErr;
-    const { error: insErr } = await sb.from('bobinas_aco').insert(registros);
-    if (insErr) throw insErr;
+
+  // Mesma correcao do estoque (AUDITORIA.md, item A2): o apaga-tudo e o
+  // insere-tudo agora vivem numa transacao dentro de substituir_bobinas().
+  // Antes, uma falha no insert deixava a tabela de bobinas VAZIA.
+  const { error } = await sb.rpc('substituir_bobinas',
+    { linhas: registros, quem: nomeUsuarioAtual });
+
+  if (error) {
+    msg.textContent = 'NÃO SALVOU: ' + error.message
+      + ' — nada foi alterado, a planilha anterior continua no lugar.';
+    msg.className = 'status-msg status-err';
+    console.error('Falha ao substituir a planilha de bobinas:', error.message);
+  } else {
     msg.textContent = `Atualizado! ${registros.length} bobinas publicadas.`;
     msg.className = 'status-msg status-ok';
     document.getElementById('bobinasEditPanel').classList.remove('open');
     await loadBobinas();
-  } catch (err) {
-    msg.textContent = 'Erro ao salvar: ' + err.message;
-    msg.className = 'status-msg status-err';
   }
 });
 

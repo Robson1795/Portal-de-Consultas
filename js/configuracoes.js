@@ -242,3 +242,377 @@ document.getElementById('cfgUniCorpo').addEventListener('click', async (e) => {
 });
 
 document.getElementById('cfgUniRecarregar').addEventListener('click', carregarConfigUnidades);
+
+
+// ===========================================================================
+// ATUALIZAR ESTOQUES EM LOTE — uma planilha, todas as unidades
+//
+// A pessoa cola a planilha inteira, com o estoque de todas as unidades juntas,
+// e o portal separa por unidade sozinho, lendo a coluna de unidade do cabeçalho.
+//
+// Três coisas fazem isto ser seguro, e nenhuma é opcional:
+//
+//   1) A gravação é UMA chamada a substituir_estoque() no banco, que roda
+//      inteira numa transação. Falha qualquer linha, nada é gravado. Antes o
+//      portal fazia delete e insert em duas chamadas separadas, e uma falha no
+//      meio deixava a unidade sem estoque, sem volta (AUDITORIA.md, item A2).
+//
+//   2) Nada é gravado sem a pessoa ver a prévia: quantas linhas caíram em cada
+//      unidade, e o que foi ignorado e por quê. Substituir estoque não se faz
+//      às cegas.
+//
+//   3) Unidade que não aparece na planilha não é tocada, e unidade que aparece
+//      com zero itens é recusada pelo banco -- "atualizar com nada" é
+//      indistinguível de "apagar tudo".
+//
+// A seção só aparece para admin. Isso é cortesia: a função no banco confere a
+// permissão de novo, unidade por unidade, com pode_atualizar_estoque().
+// Ver sql/fase12-substituir-estoque-em-lote.sql.
+// ===========================================================================
+
+let loteAba = 'alm';          // 'alm' | 'sesmt' | 'aco'
+let lotePreparado = null;     // resultado do Conferir, aguardando confirmação
+
+const LOTE_FORMATOS = {
+  alm: 'Precisa de cabeçalho, e uma das colunas tem de ser a unidade. Colunas lidas: '
+     + 'Unidade (ou Estab), Item, Descrição, UM, Localização, Quantidade — em qualquer ordem.',
+  sesmt: 'Com cabeçalho ou sem. Colunas: Item, Descrição, UM, Localização, Quantidade. '
+       + 'Tudo vai para o estoque SESMT — não precisa de coluna de unidade.',
+  aco: 'As oito colunas da planilha de bobinas, nesta ordem: Item, Descrição Item, Est, Dep, '
+     + 'Localizacao, Lote, Un, Qtd Liquida. Substitui a planilha inteira, não é por unidade.'
+};
+
+// Nomes que cada coluna pode ter na planilha real. A UM é resolvida ANTES da
+// unidade de propósito: em português "unidade" é ambíguo, e sem essa ordem uma
+// coluna "Un" de unidade de medida seria lida como estabelecimento.
+const LOTE_SINONIMOS = {
+  um:          ['um', 'un', 'unid', 'u m', 'unidade de medida', 'unid medida', 'medida'],
+  unidade:     ['unidade', 'estab', 'estabelecimento', 'est', 'filial', 'cod estab',
+                'codigo estab', 'cod filial', 'unid negocio'],
+  item:        ['item', 'codigo', 'cod', 'cod item', 'codigo item', 'produto', 'sku'],
+  descricao:   ['descricao', 'desc', 'descricao item', 'descricao do item', 'nome',
+                'nome do item'],
+  localizacao: ['localizacao', 'local', 'endereco', 'end', 'localizacao item', 'posicao'],
+  quantidade:  ['quantidade', 'qtd', 'qtde', 'qtd atual', 'saldo', 'saldo atual',
+                'quantidade atual', 'qtd liquida', 'estoque']
+};
+
+function normalizaCabecalho(s) {
+  return String(s || '').toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+// Aceita tabulação (colado do Excel), ponto e vírgula (CSV brasileiro) e
+// vírgula. Escolhe o separador que aparece mais na primeira linha com dados.
+function separadorDaPlanilha(texto) {
+  const primeira = texto.split(/\r?\n/).find(l => l.trim()) || '';
+  const conta = { '\t': (primeira.match(/\t/g) || []).length,
+                  ';':  (primeira.match(/;/g)  || []).length,
+                  ',':  (primeira.match(/,/g)  || []).length };
+  return Object.keys(conta).reduce((a, b) => conta[b] > conta[a] ? b : a, '\t');
+}
+
+// Não se apara a linha inteira antes de separar: uma linha que começa com o
+// separador perderia o campo vazio da frente e todas as colunas andariam uma
+// casa. Separa primeiro, apara depois.
+function celulasDaPlanilha(texto) {
+  const sep = separadorDaPlanilha(texto);
+  const linhas = texto.split(/\r?\n/).filter(l => l.trim());
+  return {
+    sep,
+    linhas: linhas.map(l => l.split(sep).map(c => c.trim().replace(/^"|"$/g, '')))
+  };
+}
+
+// Casa o cabeçalho com os nomes conhecidos. Devolve { campo: indice }.
+// A ordem de `campos` importa: o primeiro a achar fica com a coluna.
+function mapearColunas(cabecalho, campos) {
+  const nomes = cabecalho.map(normalizaCabecalho);
+  const mapa = {};
+  const usados = new Set();
+  for (const campo of campos) {
+    const aceitos = LOTE_SINONIMOS[campo] || [];
+    let achou = -1;
+    for (const aceito of aceitos) {
+      const i = nomes.findIndex((n, idx) => n === aceito && !usados.has(idx));
+      if (i !== -1) { achou = i; break; }
+    }
+    if (achou !== -1) { mapa[campo] = achou; usados.add(achou); }
+  }
+  return mapa;
+}
+
+function pareceCabecalho(celulas) {
+  const nomes = celulas.map(normalizaCabecalho);
+  return nomes.some(n => LOTE_SINONIMOS.item.includes(n))
+      || nomes.some(n => LOTE_SINONIMOS.descricao.includes(n));
+}
+
+// ---- Conferir: transforma o texto colado em blocos por unidade ------------
+function prepararLote(texto) {
+  const avisos = [];
+  if (!texto || !texto.trim()) {
+    return { erro: 'Cole a planilha ou escolha um arquivo CSV primeiro.' };
+  }
+  const { linhas } = celulasDaPlanilha(texto);
+  if (!linhas.length) return { erro: 'Nada foi encontrado no texto colado.' };
+
+  // ---------------------------------------- Aço: posicional, oito colunas
+  if (loteAba === 'aco') {
+    const registros = [];
+    let ignoradas = 0;
+    linhas.forEach((c, i) => {
+      if (i === 0 && pareceCabecalho(c)) return;
+      if (c.length < 8 || !c[0]) { ignoradas++; return; }
+      registros.push({
+        item: c[0], descricao: c[1] || null, est: c[2] || null, dep: c[3] || null,
+        localizacao: c[4] || null, lote: c[5] || null, um: c[6] || null,
+        qtd_liquida: parseNum(c[7])
+      });
+    });
+    if (!registros.length) {
+      return { erro: 'Nenhuma linha com as oito colunas da planilha de bobinas.' };
+    }
+    if (ignoradas) {
+      avisos.push(ignoradas + ' linha(s) ignorada(s) por não ter as oito colunas ou estar sem item.');
+    }
+    return { tipo: 'aco', registros, avisos, mapa: null };
+  }
+
+  // ---------------------------------------- Estoque: ALM e SESMT
+  const precisaUnidade = (loteAba === 'alm');
+  const campos = precisaUnidade
+    ? ['um', 'unidade', 'item', 'descricao', 'localizacao', 'quantidade']
+    : ['um', 'item', 'descricao', 'localizacao', 'quantidade'];
+
+  let mapa = null;
+  let corpo = linhas;
+  let cabecalho = null;
+
+  if (pareceCabecalho(linhas[0])) {
+    cabecalho = linhas[0];
+    mapa = mapearColunas(cabecalho, campos);
+    corpo = linhas.slice(1);
+  } else if (precisaUnidade) {
+    return { erro: 'Esta planilha precisa de cabeçalho: é nele que eu encontro a coluna da '
+                 + 'unidade. Cole incluindo a primeira linha, com os nomes das colunas.' };
+  } else {
+    // SESMT sem cabeçalho: a mesma ordem que o portal já usava.
+    mapa = { item: 0, descricao: 1, um: 2, localizacao: 3, quantidade: 4 };
+  }
+
+  if (mapa.item === undefined) {
+    return { erro: 'Não encontrei a coluna do item. Cabeçalho lido: ' + linhas[0].join(' · ') };
+  }
+  if (precisaUnidade && mapa.unidade === undefined) {
+    return { erro: 'Não encontrei a coluna da unidade. Ela pode se chamar Unidade, Estab, '
+                 + 'Estabelecimento, Est ou Filial. Cabeçalho lido: ' + linhas[0].join(' · ') };
+  }
+
+  const conhecidas = new Set(Object.keys(UNIDADES).concat([UNIDADE_SESMT]));
+  const porUnidade = new Map();
+  const desconhecidas = new Map();
+  let semItem = 0;
+
+  corpo.forEach(c => {
+    const pega = (campo) => (mapa[campo] !== undefined ? (c[mapa[campo]] || '') : '');
+    const item = pega('item').trim();
+    const uni = precisaUnidade ? pega('unidade').trim() : UNIDADE_SESMT;
+
+    if (!item || !uni) { semItem++; return; }
+
+    if (!conhecidas.has(uni)) {
+      desconhecidas.set(uni, (desconhecidas.get(uni) || 0) + 1);
+      return;
+    }
+    if (!porUnidade.has(uni)) porUnidade.set(uni, []);
+    porUnidade.get(uni).push({
+      item,
+      descricao: pega('descricao').trim() || null,
+      um: pega('um').trim() || null,
+      localizacao: pega('localizacao').trim() || null,
+      quantidade: pega('quantidade').trim()
+    });
+  });
+
+  if (semItem) {
+    avisos.push(semItem + ' linha(s) ignorada(s) por estar sem código de item ou sem unidade.');
+  }
+  for (const [uni, n] of desconhecidas) {
+    avisos.push('Unidade "' + uni + '" não é reconhecida pelo portal: ' + n
+                + ' linha(s) IGNORADA(S). Confira o código na planilha.');
+  }
+  if (!porUnidade.size) {
+    return { erro: 'Nenhuma linha caiu em uma unidade conhecida. Nada seria atualizado.' };
+  }
+
+  const blocos = [...porUnidade.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([unidade, itens]) => ({ unidade, itens, atualizado_por: nomeUsuarioAtual }));
+
+  return { tipo: 'estoque', blocos, avisos, mapa, cabecalho };
+}
+
+// ---- Prévia ---------------------------------------------------------------
+function renderPreviaLote(pronto) {
+  const alvo = document.getElementById('lotePrevia');
+
+  const avisosHtml = (pronto.avisos && pronto.avisos.length)
+    ? '<div class="cfg-nota" style="margin:0 0 10px; color:#92400e;">'
+      + pronto.avisos.map(a => '⚠️ ' + escapeHtml(a)).join('<br>') + '</div>'
+    : '';
+
+  // Mostrar o mapeamento é o que permite pegar coluna trocada ANTES de gravar:
+  // "unidade" em português serve tanto para estabelecimento quanto para unidade
+  // de medida, e é aqui que um erro desses aparece.
+  let mapaHtml = '';
+  if (pronto.mapa && pronto.cabecalho) {
+    const partes = Object.keys(pronto.mapa).map(campo =>
+      '<b>' + escapeHtml(campo) + '</b> ← ' + escapeHtml(pronto.cabecalho[pronto.mapa[campo]]));
+    mapaHtml = '<div class="cfg-email" style="margin-bottom:10px;">Colunas reconhecidas: '
+             + partes.join(' · ') + '</div>';
+  }
+
+  let corpoHtml;
+  if (pronto.tipo === 'aco') {
+    corpoHtml = '<div style="font-size:14px; margin-bottom:10px;">Vai substituir a planilha de '
+              + 'bobinas inteira por <b>' + pronto.registros.length.toLocaleString('pt-BR')
+              + '</b> linha(s).</div>';
+  } else {
+    const total = pronto.blocos.reduce((s, b) => s + b.itens.length, 0);
+    corpoHtml =
+      '<table class="cfg-tabela" style="margin-bottom:10px;"><thead><tr>'
+      + '<th>Unidade</th><th>Itens que entram</th></tr></thead><tbody>'
+      + pronto.blocos.map(b =>
+          '<tr><td><b>' + escapeHtml(rotuloUnidade(b.unidade)) + '</b></td><td>'
+          + b.itens.length.toLocaleString('pt-BR') + '</td></tr>').join('')
+      + '</tbody></table>'
+      + '<div style="font-size:13px; color:var(--muted); margin-bottom:10px;">'
+      + pronto.blocos.length + ' unidade(s), ' + total.toLocaleString('pt-BR')
+      + ' item(ns) no total. As unidades que não aparecem acima <b>não são tocadas</b>.</div>';
+  }
+
+  alvo.innerHTML = avisosHtml + mapaHtml + corpoHtml
+    + '<button class="btn btn-primary" id="loteAplicarBtn">Substituir agora</button>';
+}
+
+// ---- Gravar ---------------------------------------------------------------
+async function aplicarLote() {
+  const msg = document.getElementById('loteMsg');
+  const botao = document.getElementById('loteAplicarBtn');
+  if (!lotePreparado) return;
+
+  const resumo = (lotePreparado.tipo === 'aco')
+    ? lotePreparado.registros.length + ' linha(s) da planilha de bobinas'
+    : lotePreparado.blocos.map(b => b.unidade + ' (' + b.itens.length + ')').join(', ');
+
+  if (!confirm('Isso substitui o estoque de: ' + resumo + '.\n\n'
+             + 'O estoque anterior dessas unidades é apagado e trocado pelo que veio na '
+             + 'planilha. Não dá para desfazer. Confirma?')) return;
+
+  botao.disabled = true;
+  msg.textContent = 'Substituindo...';
+  msg.className = 'status-msg';
+
+  const { data, error } = (lotePreparado.tipo === 'aco')
+    ? await sb.rpc('substituir_bobinas', { linhas: lotePreparado.registros, quem: nomeUsuarioAtual })
+    : await sb.rpc('substituir_estoque', { payload: lotePreparado.blocos });
+
+  botao.disabled = false;
+  if (error) {
+    // A função é transacional: erro aqui significa que NADA foi gravado, e vale
+    // dizer isso -- senão a pessoa fica sem saber se ficou pela metade e vai
+    // conferir unidade por unidade.
+    msg.textContent = 'NÃO GRAVOU: ' + error.message
+                    + ' — nada foi alterado, o estoque anterior continua no lugar.';
+    msg.className = 'status-msg status-err';
+    console.error('Falha ao substituir estoque em lote:', error.message);
+    return;
+  }
+
+  msg.textContent = (lotePreparado.tipo === 'aco')
+    ? 'Planilha de bobinas substituída: ' + ((data && data.bobinas) || 0) + ' linha(s).'
+    : 'Estoque substituído em '
+      + ((data && data.unidades) ? data.unidades.length : '?') + ' unidade(s).';
+  msg.className = 'status-msg status-ok';
+
+  lotePreparado = null;
+  document.getElementById('lotePrevia').innerHTML = '';
+  document.getElementById('loteTexto').value = '';
+  document.getElementById('loteArquivoNome').textContent = '';
+}
+
+// ---- Abas, arquivo, botões ------------------------------------------------
+function trocarAbaLote(aba) {
+  loteAba = aba;
+  document.querySelectorAll('#loteAbas [data-lote-aba]').forEach(b => {
+    b.classList.toggle('btn-primary', b.dataset.loteAba === aba);
+  });
+  document.getElementById('loteFormato').textContent = LOTE_FORMATOS[aba] || '';
+  document.getElementById('loteTexto').value = '';
+  document.getElementById('loteArquivoNome').textContent = '';
+  document.getElementById('lotePrevia').innerHTML = '';
+  document.getElementById('loteMsg').textContent = '';
+  lotePreparado = null;
+}
+
+document.getElementById('loteAbas').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-lote-aba]');
+  if (b) trocarAbaLote(b.dataset.loteAba);
+});
+
+document.getElementById('loteConferirBtn').addEventListener('click', () => {
+  const msg = document.getElementById('loteMsg');
+  const pronto = prepararLote(document.getElementById('loteTexto').value);
+  if (pronto.erro) {
+    lotePreparado = null;
+    document.getElementById('lotePrevia').innerHTML = '';
+    msg.textContent = pronto.erro;
+    msg.className = 'status-msg status-err';
+    return;
+  }
+  lotePreparado = pronto;
+  msg.textContent = 'Confira a prévia antes de substituir.';
+  msg.className = 'status-msg';
+  renderPreviaLote(pronto);
+});
+
+document.getElementById('lotePrevia').addEventListener('click', (e) => {
+  if (e.target.closest('#loteAplicarBtn')) aplicarLote();
+});
+
+document.getElementById('loteLimparBtn').addEventListener('click', () => trocarAbaLote(loteAba));
+
+// O arquivo é lido no navegador e cai na mesma caixa de texto, para a pessoa
+// conferir antes de qualquer coisa. Nada é enviado a servidor nenhum.
+document.getElementById('loteArquivo').addEventListener('change', (e) => {
+  const arquivo = e.target.files[0];
+  if (!arquivo) return;
+  const msg = document.getElementById('loteMsg');
+  const leitor = new FileReader();
+  leitor.onload = () => {
+    document.getElementById('loteTexto').value = String(leitor.result || '');
+    document.getElementById('loteArquivoNome').textContent = arquivo.name;
+    document.getElementById('lotePrevia').innerHTML = '';
+    lotePreparado = null;
+    msg.textContent = 'Arquivo carregado. Clique em Conferir.';
+    msg.className = 'status-msg';
+  };
+  leitor.onerror = () => {
+    msg.textContent = 'Não foi possível ler o arquivo.';
+    msg.className = 'status-msg status-err';
+  };
+  leitor.readAsText(arquivo, 'UTF-8');
+  e.target.value = '';
+});
+
+// Chamada ao abrir a aba Configurações (js/navegacao.js).
+function carregarLote() {
+  const mostrar = !!isAdminAtual;
+  ['loteSecaoTitulo', 'loteSecao', 'loteNota'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = mostrar ? '' : 'none';
+  });
+  if (mostrar) trocarAbaLote(loteAba);
+}

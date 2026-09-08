@@ -116,7 +116,7 @@ function mostrarPagina(id) {
   // que estava certinho no Catálogo. Ver carregarCatalogoExp() e
   // buscarDescricoesItens() em js/programacao.js.
   if (id === 'expacessorios') { trocarAbaExpAcessorios('entrada'); carregarCatalogoExp().then(carregarProgramacao); }
-  if (id === 'config')  { carregarUsuarios(); carregarConfigUnidades(); }
+  if (id === 'config')  { carregarUsuarios(); carregarConfigUnidades(); carregarLote(); }
 }
 
 document.getElementById('sidebarNav').addEventListener('click', (e) => {
