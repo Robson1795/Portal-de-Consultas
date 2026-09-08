@@ -537,8 +537,16 @@ function podeEditarEmbalagem() {
 // Mínimo/Estoque baixo) -- diferente de podeEditarEmbalagem() acima, aqui
 // é só o e-mail dele mesmo, sem "ou admin", de propósito: é pessoal, não
 // um cargo.
+//
+// O Portal usa e-mails de LOGIN (SUPER_ADMINS em js/config.js), que não
+// são o e-mail corporativo da pessoa -- primeira versão disto checava
+// "robson.alves@kingspanisoeste.com.br" (o e-mail real dele), mas quem
+// loga no Portal é "r.alves1@portal.kingspanisoeste.local" (domínio
+// interno só do sistema de autenticação). Por isso a tela nunca aparecia.
 function podeVerEstoqueMinimo() {
-  return emailUsuarioAtual === 'robson.alves@kingspanisoeste.com.br';
+  return emailUsuarioAtual === 'r.alves1@portal.kingspanisoeste.local'
+      || emailUsuarioAtual === 'robson_alves1995@live.com'
+      || emailUsuarioAtual === 'j.lisboa@kingspanisoeste.com.br';
 }
 
 async function salvarEstoqueMinimo(id, valorBruto, input) {
