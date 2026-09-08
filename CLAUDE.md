@@ -332,7 +332,7 @@ bobinas saiu na Fase 2b e quem controla o acesso é o perfil (`estoque_aco` ou `
   tela mostrava as primeiras mil de 3.436 e parecia completa. Não simplifique para uma
   consulta só.
 - Ao colar a planilha, a **substituição é por unidade**: `substituir_bobinas()`
-  (`sql/fase13-bobinas-por-unidade.sql`) apaga e repõe apenas as unidades presentes na planilha,
+  (`sql/fase15-bobinas-por-unidade.sql`) apaga e repõe apenas as unidades presentes na planilha,
   numa transação. **Unidade que não aparecer não é tocada** — antes o `delete` levava a tabela
   inteira, então colar a planilha de uma unidade apagava as bobinas de todas as outras, e isso
   só apareceria no inventário. Linha sem a coluna `Est` faz a função **recusar a planilha
@@ -542,7 +542,7 @@ esquecer, e a lista passaria a mentir.
   etiquetado?".
 - `etiqueta_emitida_em` é `timestamptz`, não `boolean`: a data também responde
   "desde quando" e "quem", que é o que se pergunta quando há divergência no
-  inventário. Ver `sql/fase14-etiqueta-emitida.sql`.
+  inventário. Ver `sql/fase16-etiqueta-emitida.sql`.
 - Se a gravação falhar, a tela diz que **a impressão saiu mas a marcação não** —
   senão a pessoa acha que nada aconteceu e imprime de novo.
 

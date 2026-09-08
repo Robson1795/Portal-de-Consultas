@@ -1776,7 +1776,7 @@ document.getElementById('expCtrlImprimirBtn').addEventListener('click', async ()
     // aconteceu e imprime de novo.
     msg.textContent = 'A impressão saiu, mas NÃO foi possível marcar a etiqueta como emitida: '
       + error.message + ' — se a mensagem falar em coluna inexistente, '
-      + 'sql/fase14-etiqueta-emitida.sql ainda não foi rodado no Supabase.';
+      + 'sql/fase16-etiqueta-emitida.sql ainda não foi rodado no Supabase.';
     msg.className = 'status-msg status-err';
     console.error('Falha ao marcar etiqueta emitida:', error.message);
     return;

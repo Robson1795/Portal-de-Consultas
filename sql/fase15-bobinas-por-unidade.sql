@@ -5,6 +5,11 @@
 --             NUNCA na interface web do GitHub (ver sql/README.md).
 --
 -- Rode DEPOIS do sql/fase12-substituir-estoque-em-lote.sql.
+--
+-- Renomeado de fase13 para fase15 em 08/09/2026: o main do Robson ja tinha
+-- um fase13 (estoque seguro) e um fase14 (repor itens zerados). Se voce ja
+-- rodou o fase13-bobinas-por-unidade, este e o mesmo script -- nao precisa
+-- rodar de novo.
 -- =====================================================================
 --
 -- O QUE MUDA E POR QUE
