@@ -24,6 +24,15 @@ let progItens = [];         // pedido_itens dos pedidos carregados
 let progExpControle = [];   // exp_controle_itens -- localizacao por item, pro inventario
 let expCtrlDescMap = new Map(); // codigo_item -> {descricao, um}, resolvido em cascata pra exibir a lista
 let catalogoExpItens = []; // catalogo_exp_itens -- planilha do sistema, carregada só ao entrar na página
+let expLocalizacaoStatusMap = new Map(); // localizacao (normalizada) -> {concluido_por, concluido_em}
+
+// Normaliza pra comparar/indexar localização sem se importar com espaço a
+// mais ou maiúscula/minúscula ("EXP A-03" == "exp a-03 ") -- mesma
+// localização digitada diferente por pessoas diferentes não pode virar
+// duas entradas separadas no mapa de conclusão.
+function normalizaLocalizacao(texto) {
+  return String(texto || '').trim().toLowerCase();
+}
 
 // ---- Carga da tela ---------------------------------------------------------
 async function carregarProgramacao() {
@@ -46,9 +55,10 @@ async function carregarProgramacao() {
   // que o Robson viu: item da unidade 106 aparecendo com a 105 selecionada.
   // pedido_itens não tem coluna unidade própria (só via pedidos.unidade),
   // então filtra pelos IDs dos pedidos já filtrados.
-  const [pedidos, expCtrl] = await Promise.all([
+  const [pedidos, expCtrl, locStatus] = await Promise.all([
     sb.from('vw_pedidos_prioridade').select('*').eq('unidade', unidadeAtual),
-    sb.from('exp_controle_itens').select('*').eq('unidade', unidadeAtual).order('localizacao', { ascending: true })
+    sb.from('exp_controle_itens').select('*').eq('unidade', unidadeAtual).order('localizacao', { ascending: true }),
+    sb.from('exp_localizacao_status').select('*').eq('unidade', unidadeAtual)
   ]);
 
   let itens = { data: [], error: null };
@@ -76,6 +86,14 @@ async function carregarProgramacao() {
   // busca de novo em cascata pra exibir a lista ja gravada, mesma logica
   // do preview antes de gravar.
   expCtrlDescMap = await buscarDescricoesItens(progExpControle.map(l => l.codigo_item));
+
+  // exp_localizacao_status e mais novo ainda (fase17) -- mesmo tratamento:
+  // se o script nao rodou, o mapa fica vazio (tudo aparece como pendente),
+  // sem travar a pagina.
+  expLocalizacaoStatusMap = new Map(
+    (locStatus.error ? [] : (locStatus.data || []))
+      .map(l => [normalizaLocalizacao(l.localizacao), l])
+  );
 
   renderSeparacao();
   renderExp();
@@ -1134,6 +1152,19 @@ function contarPedidosNaExpedicao(linhas) {
   return pedidos.size;
 }
 
+// Selo por linha: essa localização já foi marcada como concluída (todos os
+// itens dela já foram colocados)? Sem localização (linha ainda sem local
+// definido) não tem o que concluir -- fica em branco, não "pendente", pra
+// não confundir com uma localização que já tem itens mas não foi marcada.
+function statusLocalizacaoBadge(localizacao) {
+  if (!localizacao || !localizacao.trim()) return '';
+  const status = expLocalizacaoStatusMap.get(normalizaLocalizacao(localizacao));
+  if (status) {
+    return `<span title="Localização concluída em ${escapeHtml(formatarDataHoraBR(status.concluido_em))}${status.concluido_por ? ' por ' + escapeHtml(status.concluido_por) : ''}" style="color:#166534; font-weight:700;">✓ concluída</span>`;
+  }
+  return `<span title="Ainda não marcada como concluída -- confirme com quem está alimentando antes de imprimir" style="color:#b45309; font-weight:600;">⏳ em andamento</span>`;
+}
+
 function renderExpControle(erroCarregamento) {
   const corpo = document.getElementById('expCtrlBody');
   const vazio = document.getElementById('expCtrlVazio');
@@ -1168,6 +1199,7 @@ function renderExpControle(erroCarregamento) {
       <td class="loc"><input type="text" class="expctrl-loc-input" data-id="${escapeHtml(l.id)}"
              value="${escapeHtml(l.localizacao || '')}" placeholder="—"
              style="width:90px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px;"></td>
+      <td class="loc">${statusLocalizacaoBadge(l.localizacao)}</td>
       <td class="item">${escapeHtml(l.codigo_item)}</td>
       <td>${desc && desc.descricao ? escapeHtml(desc.descricao) : '—'}</td>
       <td class="loc">${desc && desc.um ? escapeHtml(desc.um) : '—'}</td>
@@ -1818,6 +1850,13 @@ async function marcarEtiquetaEmitidaEmLote(linhas, msgEl) {
   return true;
 }
 
+// Localizações distintas nas linhas dadas que AINDA NÃO foram marcadas como
+// concluídas (ignora linha sem localização -- não tem o que confirmar).
+function localizacoesPendentes(linhas) {
+  const distintas = new Set(linhas.map(l => (l.localizacao || '').trim()).filter(Boolean));
+  return [...distintas].filter(loc => !expLocalizacaoStatusMap.has(normalizaLocalizacao(loc)));
+}
+
 // Abre a mesma listagem numa aba nova já pronta pra impressora -- a
 // própria caixa de impressão do navegador tem "Salvar como PDF", então
 // cobre o PDF de graça, sem precisar de outra biblioteca.
@@ -1827,6 +1866,25 @@ document.getElementById('expCtrlImprimirBtn').addEventListener('click', async ()
     alert(progExpControle.length ? 'Nenhum item bate com a busca atual.' : 'Nenhum item no Controle EXP para imprimir.');
     return;
   }
+
+  // A certeza que o Robson pediu (2026-09-08): antes de imprimir, avisa se
+  // alguma localização desta impressão ainda não foi confirmada como
+  // concluída por quem está alimentando a planilha. Não bloqueia (ele pode
+  // ter motivo pra imprimir mesmo assim) -- só exige um segundo clique
+  // consciente em vez de imprimir por engano com a lista pela metade.
+  const pendentes = localizacoesPendentes(linhas);
+  if (pendentes.length) {
+    const confirmado = confirm(
+      (pendentes.length === 1
+        ? `Atenção: esta localização ainda não foi marcada como concluída`
+        : `Atenção: estas localizações ainda não foram marcadas como concluídas`) +
+      ` por quem está alimentando o Controle EXP:\n\n` +
+      pendentes.join(', ') +
+      `\n\nPode ser que ainda faltem itens pra colocar. Imprimir mesmo assim?`
+    );
+    if (!confirmado) return;
+  }
+
   const aba = window.open('', '_blank');
   if (!aba) { alert('O navegador bloqueou a nova aba. Libere pop-ups pra este site e tente de novo.'); return; }
   aba.document.write(montarHtmlExpControle(true));
@@ -1859,6 +1917,57 @@ document.getElementById('expCtrlMarcarEtiquetaBtn').addEventListener('click', as
   if (!confirmado) return;
 
   await marcarEtiquetaEmitidaEmLote(linhas, document.getElementById('expEtiquetaMsg'));
+});
+
+// Quem alimenta a planilha (item por item ou colando de uma vez) clica aqui
+// quando termina de colocar TODOS os itens de uma localização -- é o que dá
+// ao Robson a certeza de que pode imprimir sem faltar item (o aviso do botão
+// Imprimir olha pra esse mesmo registro). Exige achar exatamente UMA
+// localização na busca de propósito: marcar "A-0" (que bate com A-01, A-02,
+// A-03...) de uma vez só daria falsa certeza sobre localizações que ninguém
+// olhou de verdade.
+document.getElementById('expCtrlConcluirLocalBtn').addEventListener('click', async () => {
+  const linhas = linhasFiltradasExpControle();
+  const distintas = [...new Set(linhas.map(l => (l.localizacao || '').trim()).filter(Boolean))];
+  const msg = document.getElementById('expEtiquetaMsg');
+
+  if (!distintas.length) {
+    alert('Digite uma localização específica na busca acima antes de clicar (ex.: "EXP A-03").');
+    return;
+  }
+  if (distintas.length > 1) {
+    alert('A busca encontrou mais de uma localização: ' + distintas.join(', ') + '.\n\nDigite uma localização específica pra confirmar só ela.');
+    return;
+  }
+
+  const localizacao = distintas[0];
+  const itensDaLocal = linhas.filter(l => (l.localizacao || '').trim() === localizacao);
+  const jaConcluida = expLocalizacaoStatusMap.get(normalizaLocalizacao(localizacao));
+
+  const confirmado = confirm(
+    (jaConcluida
+      ? `A localização "${localizacao}" já estava concluída (por ${jaConcluida.concluido_por || '—'}). Atualizar a confirmação mesmo assim`
+      : `Confirmar que TODOS os itens da localização "${localizacao}" já foram colocados`) +
+    ` (${itensDaLocal.length} item(ns) cadastrado(s) nela agora)?`
+  );
+  if (!confirmado) return;
+
+  const { error } = await sb.from('exp_localizacao_status').upsert({
+    unidade: unidadeAtual, localizacao, concluido_por: nomeUsuarioAtual, concluido_em: new Date().toISOString()
+  }, { onConflict: 'unidade,localizacao' });
+
+  if (error) {
+    msg.textContent = 'Não foi possível marcar a localização como concluída: ' + error.message
+      + ' — se a mensagem falar em tabela inexistente, sql/fase17-localizacao-concluida.sql ainda não foi rodado no Supabase.';
+    msg.className = 'status-msg status-err';
+    console.error('Falha ao marcar localização concluída:', error.message);
+    return;
+  }
+
+  expLocalizacaoStatusMap.set(normalizaLocalizacao(localizacao), { concluido_por: nomeUsuarioAtual, concluido_em: new Date().toISOString() });
+  renderExpControle();
+  msg.textContent = `Localização "${localizacao}" marcada como concluída.`;
+  msg.className = 'status-msg status-ok';
 });
 
 // ---- Aba 4: Conferência EXP (quem retira fisicamente pro carregamento) ----
