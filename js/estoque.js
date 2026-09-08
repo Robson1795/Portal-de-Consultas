@@ -352,22 +352,61 @@ function updateStats() {
 // Aviso chamativo, só na carga da tela (loadData()) -- não em toda
 // atualização de estoque mínimo/filtro, senão ficaria aparecendo/
 // desaparecendo à toa a cada edição. "quando eu abrir o app" (Robson).
-function avisarEstoqueBaixoSeNecessario() {
+//
+// Além de avisar, indica em quais outras unidades cada item tem saldo --
+// pedido do Robson pra já saber de onde puxar reposição sem precisar
+// abrir o comparativo item a item. A leitura de `estoque` não é
+// restrita por unidade no RLS (só exige estar aprovado -- ver
+// fase1c-rls.sql), então uma única consulta com `.in('item', ...)` já
+// traz os dados de todas as unidades pros itens em aviso.
+async function avisarEstoqueBaixoSeNecessario() {
   const aviso = document.getElementById('avisoEstoqueSeguro');
   if (!podeVerEstoqueMinimo()) { aviso.style.display = 'none'; return; }
 
   const baixo = currentData.filter(r => r.estoque_minimo != null && parseQtd(r.quantidade) < parseQtd(r.estoque_minimo));
   if (!baixo.length) { aviso.style.display = 'none'; return; }
 
-  const exemplos = baixo.slice(0, 3).map(r => r.item).join(', ');
-  const resto = baixo.length > 3 ? ` e mais ${baixo.length - 3}` : '';
-  document.getElementById('avisoEstoqueSeguroTexto').textContent =
-    `⚠️ ${baixo.length} item(ns) abaixo do estoque seguro nesta unidade: ${exemplos}${resto}.`;
+  const exemplos = baixo.slice(0, 3);
+  const resto = baixo.length > 3 ? baixo.length - 3 : 0;
+
+  let outrasPorItem = {};
+  try {
+    const { data, error } = await sb.from('estoque')
+      .select('item, unidade, quantidade')
+      .in('item', exemplos.map(r => r.item))
+      .neq('unidade', unidadeAtual);
+    if (error) throw error;
+    (data || []).forEach(r => {
+      const qtd = parseQtd(r.quantidade);
+      if (qtd <= 0) return; // "tem no estoque" -- unidade zerada não ajuda a repor
+      if (!outrasPorItem[r.item]) outrasPorItem[r.item] = [];
+      outrasPorItem[r.item].push({ unidade: r.unidade, quantidade: qtd });
+    });
+  } catch (e) {
+    console.warn('Não foi possível checar outras unidades para o aviso de estoque seguro:', e.message);
+  }
+
+  const linhas = exemplos.map(r => {
+    const outras = (outrasPorItem[r.item] || []).sort((a, b) => b.quantidade - a.quantidade);
+    const detalhe = outras.length
+      ? `tem em ${escapeHtml(rotuloUnidade(outras[0].unidade))}: ${outras[0].quantidade.toLocaleString('pt-BR')}${outras.length > 1 ? ` (+${outras.length - 1} unidade${outras.length > 2 ? 's' : ''})` : ''}`
+      : 'nenhuma outra unidade tem esse item';
+    return `<button type="button" class="aviso-item-btn" data-item="${escapeHtml(r.item)}" title="Ver comparativo entre unidades">${escapeHtml(r.item)}</button> — ${detalhe}`;
+  }).join('<br>');
+
+  const restoTexto = resto ? `<br>e mais ${resto} item(ns) abaixo do estoque seguro nesta unidade.` : '';
+
+  document.getElementById('avisoEstoqueSeguroTexto').innerHTML =
+    `⚠️ ${baixo.length} item(ns) abaixo do estoque seguro nesta unidade:<br>${linhas}${restoTexto}`;
   aviso.style.display = 'flex';
 }
 
 document.getElementById('avisoEstoqueSeguroFechar').addEventListener('click', () => {
   document.getElementById('avisoEstoqueSeguro').style.display = 'none';
+});
+document.getElementById('avisoEstoqueSeguroTexto').addEventListener('click', (e) => {
+  const btn = e.target.closest('.aviso-item-btn');
+  if (btn) openCompareModal(btn.dataset.item);
 });
 
 async function loadFichaImageMap() {
