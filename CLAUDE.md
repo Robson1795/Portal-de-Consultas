@@ -316,15 +316,28 @@ própria tela de Requisição.
 
 ## 9. Módulo "Bobinas de Aço"
 
-Aba separada, por um link acima da tabela principal, protegida por senha de sessão.
+Aba separada, por um link acima da tabela principal. **Não há senha aqui** — a de
+bobinas saiu na Fase 2b e quem controla o acesso é o perfil (`estoque_aco` ou `admin`).
 
 - **Planilha de entrada:** TSV com 8 colunas nesta ordem — Item, Descrição Item, Est, Dep,
   Localizacao, Lote, Un, Qtd Liquida. Cola direto da planilha da empresa.
 - **Tabela:** todas as colunas + Saldo Físico (editável) + Divergência + Saldo Ajustado.
 - **Cards:** total auditado, com divergência, OK.
 - **Tempo real** igual à contagem geral.
-- Ao colar a planilha, o código **apaga todas as linhas de `bobinas_aco` e insere as novas** —
-  é substituição total, não atualização incremental.
+- **A tela mostra só a unidade selecionada** (`.eq('est', unidadeAtual)` em `loadBobinas()`), e
+  trocar a unidade no cabeçalho recarrega a lista. Até 08/09/2026 mostrava as bobinas de todas
+  as unidades juntas, com o endereço de outra fábrica no meio da contagem.
+- ⚠️ **A carga é paginada de mil em mil, e a paginação não é enfeite:** o PostgREST devolve no
+  máximo 1.000 linhas por requisição e **não avisa** que cortou. Sem o laço de `.range()` a
+  tela mostrava as primeiras mil de 3.436 e parecia completa. Não simplifique para uma
+  consulta só.
+- Ao colar a planilha, a **substituição é por unidade**: `substituir_bobinas()`
+  (`sql/fase13-bobinas-por-unidade.sql`) apaga e repõe apenas as unidades presentes na planilha,
+  numa transação. **Unidade que não aparecer não é tocada** — antes o `delete` levava a tabela
+  inteira, então colar a planilha de uma unidade apagava as bobinas de todas as outras, e isso
+  só apareceria no inventário. Linha sem a coluna `Est` faz a função **recusar a planilha
+  inteira**: sem ela não há como saber de qual unidade é a bobina, e adivinhar manda a linha
+  para a tela de quem não tem nada com ela.
 
 ---
 
@@ -470,7 +483,7 @@ Hoje ele cria só estrutura, e o RLS é assunto dos scripts da Fase 1.
 ## 13. Programação de Separação e Controle EXP Acessórios
 
 Entraram em 08/09/2026, vivem em `js/programacao.js` e não estavam neste
-documento até 09/09. **Só `estoque_alm` e `admin` veem essas duas páginas**: elas
+documento até 08/09. **Só `estoque_alm` e `admin` veem essas duas páginas**: elas
 movem material de verdade, diferente da Requisição, que é só pedir.
 
 ### Programação de Separação (três sub-abas)
@@ -513,7 +526,7 @@ sozinho em tela pequena, e a escolha fica salva.
 Imprimir e exportar (Excel, CSV, HTML) **respeitam a busca**: para tirar só uma
 localização, digite ela na busca antes de clicar.
 
-### Indicador de etiqueta emitida (09/09/2026)
+### Indicador de etiqueta emitida (08/09/2026)
 
 Coluna **Etiqueta** na aba Entrada: ✓ verde para o item cuja etiqueta já saiu,
 com a data e quem emitiu no tooltip. Sem isso, quem chega no meio do turno não
