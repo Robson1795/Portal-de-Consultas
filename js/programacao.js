@@ -1070,6 +1070,16 @@ async function gravarExpControle() {
   await carregarProgramacao();
 }
 
+// Formata um timestamp ISO pro formato que <input type="datetime-local">
+// aceita (AAAA-MM-DDTHH:mm, em horário local -- sem isso o campo edita
+// mostraria vazio). Volta pra ISO na hora de salvar em salvarDataExpControle().
+function paraDatetimeLocal(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 // Mesmo filtro da busca (#expCtrlBusca) usado tanto pra desenhar a lista
 // quanto pra exportar/imprimir -- assim, pra imprimir só o que tem numa
 // localização, é só digitar ela na busca antes de clicar em Imprimir ou
@@ -1128,8 +1138,14 @@ function renderExpControle(erroCarregamento) {
       <td>${retirado
         ? `<span class="cfg-status st-ativo">Saiu p/ carregamento</span>`
         : `<span class="cfg-status st-pendente">Na expedição</span>`}</td>
-      <td class="loc">${l.criado_em ? new Date(l.criado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—'}</td>
-      <td class="loc">${l.retirado_em ? new Date(l.retirado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—'}</td>
+      <td class="loc"><input type="datetime-local" class="expctrl-criado-input" data-id="${escapeHtml(l.id)}"
+             value="${paraDatetimeLocal(l.criado_em)}"
+             style="width:150px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px;"></td>
+      <td class="loc">${retirado
+        ? `<input type="datetime-local" class="expctrl-retirado-input" data-id="${escapeHtml(l.id)}"
+             value="${paraDatetimeLocal(l.retirado_em)}"
+             style="width:150px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px;">`
+        : '—'}</td>
       <td class="col-acoes">
         ${retirado ? '' : `<button class="acao-btn expctrl-saida" data-id="${escapeHtml(l.id)}" title="Marcar como retirado para o carregamento">🚚</button>`}
         <button class="acao-btn expctrl-excluir" data-id="${escapeHtml(l.id)}" title="Excluir este registro">🗑</button>
@@ -1504,8 +1520,49 @@ document.getElementById('expCtrlBody').addEventListener('focusout', async (e) =>
   setTimeout(() => { input.style.borderColor = ''; }, 1200);
 });
 
+// Data de Entrada/Saída editáveis -- pra quando o registro é digitado
+// depois (ex.: no dia seguinte), a pessoa põe o dia que separou/retirou
+// de verdade, não o dia que digitou no app. Mesmo padrão da Localização
+// (focusout salva, só se mudou, feedback de borda azul).
+async function salvarDataExpControle(input, campo, obrigatorio) {
+  const item = progExpControle.find(l => l.id === input.dataset.id);
+  if (!item) return;
+
+  if (!input.value) {
+    // criado_em não aceita nulo no banco (not null); retirado_em até
+    // aceitaria, mas apagar aqui deixaria "Saiu p/ carregamento" sem data
+    // de saída -- pra desfazer de vez, tem o botão ↺ no Histórico.
+    input.value = paraDatetimeLocal(item[campo]);
+    if (obrigatorio) alert('Essa data não pode ficar em branco.');
+    return;
+  }
+
+  const novaData = new Date(input.value).toISOString();
+  if (novaData === item[campo]) return; // nada mudou (compara ISO com ISO)
+
+  input.disabled = true;
+  const { error } = await sb.from('exp_controle_itens').update({ [campo]: novaData }).eq('id', item.id);
+  input.disabled = false;
+
+  if (error) {
+    alert('Não foi possível salvar a data: ' + error.message);
+    input.value = paraDatetimeLocal(item[campo]);
+    return;
+  }
+  item[campo] = novaData;
+  input.style.borderColor = 'var(--blue)';
+  setTimeout(() => { input.style.borderColor = ''; }, 1200);
+}
+
+document.getElementById('expCtrlBody').addEventListener('focusout', (e) => {
+  const criadoInput = e.target.closest('.expctrl-criado-input');
+  if (criadoInput) { salvarDataExpControle(criadoInput, 'criado_em', true); return; }
+  const retiradoInput = e.target.closest('.expctrl-retirado-input');
+  if (retiradoInput) salvarDataExpControle(retiradoInput, 'retirado_em', false);
+});
+
 document.getElementById('expCtrlBody').addEventListener('keydown', (e) => {
-  if (e.target.classList.contains('expctrl-loc-input') && e.key === 'Enter') e.target.blur();
+  if (e.target.tagName === 'INPUT' && e.key === 'Enter') e.target.blur();
 });
 
 // Exportar pra conferir contra o sistema (a planilha real, ou outra fonte)
