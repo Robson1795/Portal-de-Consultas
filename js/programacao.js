@@ -1787,6 +1787,37 @@ document.getElementById('expCtrlExportarBtn').addEventListener('click', async ()
   else exportarExpControleCsv(nomeBase);
 });
 
+// Marca em lote etiqueta_emitida_em/_por pras linhas passadas (só as que
+// ainda não tinham -- reimprimir/remarcar não reescreve a data da primeira
+// emissão). Compartilhada entre o clique de Imprimir (marca sozinho, junto
+// com a impressão) e o botão "Marcar como já emitida" (retroativo, pra
+// etiqueta impressa fisicamente ANTES de existir esse controle no
+// sistema -- pedido do Robson em 2026-09-08).
+async function marcarEtiquetaEmitidaEmLote(linhas, msgEl) {
+  const semEtiqueta = linhas.filter(l => !l.etiqueta_emitida_em);
+  if (!semEtiqueta.length) return true;
+
+  const agora = new Date().toISOString();
+  const { error } = await sb.from('exp_controle_itens')
+    .update({ etiqueta_emitida_em: agora, etiqueta_emitida_por: nomeUsuarioAtual })
+    .in('id', semEtiqueta.map(l => l.id));
+
+  if (error) {
+    msgEl.textContent = 'Não foi possível marcar a etiqueta como emitida: '
+      + error.message + ' — se a mensagem falar em coluna inexistente, '
+      + 'sql/fase16-etiqueta-emitida.sql ainda não foi rodado no Supabase.';
+    msgEl.className = 'status-msg status-err';
+    console.error('Falha ao marcar etiqueta emitida:', error.message);
+    return false;
+  }
+
+  semEtiqueta.forEach(l => { l.etiqueta_emitida_em = agora; l.etiqueta_emitida_por = nomeUsuarioAtual; });
+  renderExpControle();
+  msgEl.textContent = semEtiqueta.length + ' etiqueta(s) marcada(s) como emitida(s).';
+  msgEl.className = 'status-msg status-ok';
+  return true;
+}
+
 // Abre a mesma listagem numa aba nova já pronta pra impressora -- a
 // própria caixa de impressão do navegador tem "Salvar como PDF", então
 // cobre o PDF de graça, sem precisar de outra biblioteca.
@@ -1803,35 +1834,31 @@ document.getElementById('expCtrlImprimirBtn').addEventListener('click', async ()
 
   // Imprimir aqui É o ato de emitir a etiqueta, então a marcação sai junto:
   // marcar num segundo clique seria mais um passo para esquecer, e a lista
-  // passaria a mentir sobre o que já foi etiquetado.
-  //
-  // Só as linhas desta impressão (respeita a busca) e só as que ainda não
-  // tinham etiqueta -- reimprimir não reescreve a data da primeira emissão,
-  // que é a que responde "desde quando este item está etiquetado?".
+  // passaria a mentir sobre o que já foi etiquetado. Só as linhas desta
+  // impressão (respeita a busca).
+  await marcarEtiquetaEmitidaEmLote(linhas, document.getElementById('expEtiquetaMsg'));
+});
+
+// Retroativo: etiqueta impressa fisicamente ANTES de existir esse controle
+// (fase16), então o sistema nunca marcou etiqueta_emitida_em. Pedido do
+// Robson em 2026-09-08: "todos esses já imprimi, foi antes de mandarmos o
+// comando de ser automático, pode deixar com o certo em verde". Respeita a
+// busca (mesmo escopo do Imprimir/Exportar) -- pra marcar só uma localização
+// ou pedido, digita na busca antes de clicar.
+document.getElementById('expCtrlMarcarEtiquetaBtn').addEventListener('click', async () => {
+  const linhas = linhasFiltradasExpControle();
   const semEtiqueta = linhas.filter(l => !l.etiqueta_emitida_em);
-  if (!semEtiqueta.length) return;
-
-  const msg = document.getElementById('expEtiquetaMsg');
-  const agora = new Date().toISOString();
-  const { error } = await sb.from('exp_controle_itens')
-    .update({ etiqueta_emitida_em: agora, etiqueta_emitida_por: nomeUsuarioAtual })
-    .in('id', semEtiqueta.map(l => l.id));
-
-  if (error) {
-    // A impressão já saiu -- dizer isso importa, senão a pessoa acha que nada
-    // aconteceu e imprime de novo.
-    msg.textContent = 'A impressão saiu, mas NÃO foi possível marcar a etiqueta como emitida: '
-      + error.message + ' — se a mensagem falar em coluna inexistente, '
-      + 'sql/fase16-etiqueta-emitida.sql ainda não foi rodado no Supabase.';
-    msg.className = 'status-msg status-err';
-    console.error('Falha ao marcar etiqueta emitida:', error.message);
+  if (!semEtiqueta.length) {
+    alert('Nenhum item sem etiqueta na lista atual (ou a busca não bateu com nada).');
     return;
   }
+  const confirmado = confirm(
+    `Marcar ${semEtiqueta.length} item(ns) como etiqueta já emitida, sem imprimir nada agora?\n\n` +
+    `Use só quando a etiqueta física já foi impressa antes (por fora do sistema).`
+  );
+  if (!confirmado) return;
 
-  semEtiqueta.forEach(l => { l.etiqueta_emitida_em = agora; l.etiqueta_emitida_por = nomeUsuarioAtual; });
-  renderExpControle();
-  msg.textContent = semEtiqueta.length + ' etiqueta(s) marcada(s) como emitida(s).';
-  msg.className = 'status-msg status-ok';
+  await marcarEtiquetaEmitidaEmLote(linhas, document.getElementById('expEtiquetaMsg'));
 });
 
 // ---- Aba 4: Conferência EXP (quem retira fisicamente pro carregamento) ----
