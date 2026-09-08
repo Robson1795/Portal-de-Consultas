@@ -139,7 +139,16 @@ begin
     raise exception 'A planilha de bobinas veio vazia: nada a atualizar.';
   end if;
 
-  delete from bobinas_aco;
+  -- O `where` parece inútil e NÃO É: este banco tem a trava que recusa
+  -- `delete` sem cláusula WHERE ("DELETE requires a WHERE clause"), e ela vale
+  -- também dentro de função. O código antigo do portal fazia
+  -- `.delete().neq('id', 0)` pelo mesmo motivo; ao trazer o delete para cá eu
+  -- deixei sem WHERE e reintroduzi o erro. Não "limpe" esta linha.
+  --
+  -- `id >= 0` em vez de `id is not null`: o id é a chave primária, então o
+  -- planejador provaria que `is not null` é sempre verdade e removeria a
+  -- cláusula — voltando a cair na trava.
+  delete from bobinas_aco where id >= 0;
 
   insert into bobinas_aco (item, descricao, est, dep, localizacao, lote, um,
                            qtd_liquida, atualizado_em, atualizado_por)
