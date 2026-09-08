@@ -349,6 +349,27 @@ function updateStats() {
   }
 }
 
+// Aviso chamativo, só na carga da tela (loadData()) -- não em toda
+// atualização de estoque mínimo/filtro, senão ficaria aparecendo/
+// desaparecendo à toa a cada edição. "quando eu abrir o app" (Robson).
+function avisarEstoqueBaixoSeNecessario() {
+  const aviso = document.getElementById('avisoEstoqueSeguro');
+  if (!podeVerEstoqueMinimo()) { aviso.style.display = 'none'; return; }
+
+  const baixo = currentData.filter(r => r.estoque_minimo != null && parseQtd(r.quantidade) < parseQtd(r.estoque_minimo));
+  if (!baixo.length) { aviso.style.display = 'none'; return; }
+
+  const exemplos = baixo.slice(0, 3).map(r => r.item).join(', ');
+  const resto = baixo.length > 3 ? ` e mais ${baixo.length - 3}` : '';
+  document.getElementById('avisoEstoqueSeguroTexto').textContent =
+    `⚠️ ${baixo.length} item(ns) abaixo do estoque seguro nesta unidade: ${exemplos}${resto}.`;
+  aviso.style.display = 'flex';
+}
+
+document.getElementById('avisoEstoqueSeguroFechar').addEventListener('click', () => {
+  document.getElementById('avisoEstoqueSeguro').style.display = 'none';
+});
+
 async function loadFichaImageMap() {
   try {
     const { data, error } = await sb.from('fichas_tecnicas')
@@ -499,9 +520,10 @@ async function loadData() {
   // ressuscitar dados congelados por cima do estoque real. Carga inicial e
   // tarefa de script SQL, rodado uma vez no Supabase.
   currentData = data || [];
-  await loadFichaImageMap();
+  await Promise.all([loadFichaImageMap(), atualizarPermissaoEstoqueMinimo()]);
   updateStats();
   applyFilterAndSort();
+  avisarEstoqueBaixoSeNecessario();
 }
 
 
@@ -533,20 +555,29 @@ function podeEditarEmbalagem() {
   return isAdminAtual || emailUsuarioAtual === 'j.lisboa@kingspanisoeste.com.br';
 }
 
-// "quero que essa tela só apareça pra mim" (Robson, sobre o Estoque
-// Mínimo/Estoque baixo) -- diferente de podeEditarEmbalagem() acima, aqui
-// é só o e-mail dele mesmo, sem "ou admin", de propósito: é pessoal, não
-// um cargo.
+// "e isso por unidade, cada responsavel pela sua unidade coloca o que
+// quiser" (Robson) -- não é mais uma lista fixa de e-mail: reusa
+// pode_atualizar_estoque(uni), a MESMA função que já decide quem pode
+// carregar a planilha de estoque daquela unidade (RLS, sql/fase1a-
+// colunas-e-funcoes.sql) -- admin sempre, e quem está cadastrado em
+// `gerentes_unidade` para aquela unidade especificamente. Assim, cada
+// unidade tem seu próprio responsável pelo Estoque Seguro, sem precisar
+// mexer em código pra trocar quem vê o quê -- só a tabela gerentes_unidade.
 //
-// O Portal usa e-mails de LOGIN (SUPER_ADMINS em js/config.js), que não
-// são o e-mail corporativo da pessoa -- primeira versão disto checava
-// "robson.alves@kingspanisoeste.com.br" (o e-mail real dele), mas quem
-// loga no Portal é "r.alves1@portal.kingspanisoeste.local" (domínio
-// interno só do sistema de autenticação). Por isso a tela nunca aparecia.
+// É assíncrona (chama o banco) -- por isso fica em cache
+// (_podeVerEstoqueMinimoCache), atualizado em loadData() sempre que a
+// unidade muda. O resto do código (render(), updateStats()) continua
+// chamando podeVerEstoqueMinimo() de forma síncrona, só lendo o cache.
+let _podeVerEstoqueMinimoCache = false;
+
+async function atualizarPermissaoEstoqueMinimo() {
+  if (!unidadeAtual) { _podeVerEstoqueMinimoCache = false; return; }
+  const { data, error } = await sb.rpc('pode_atualizar_estoque', { uni: unidadeAtual });
+  _podeVerEstoqueMinimoCache = !error && data === true;
+}
+
 function podeVerEstoqueMinimo() {
-  return emailUsuarioAtual === 'r.alves1@portal.kingspanisoeste.local'
-      || emailUsuarioAtual === 'robson_alves1995@live.com'
-      || emailUsuarioAtual === 'j.lisboa@kingspanisoeste.com.br';
+  return _podeVerEstoqueMinimoCache;
 }
 
 async function salvarEstoqueMinimo(id, valorBruto, input) {
