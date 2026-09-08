@@ -1,13 +1,26 @@
 -- =====================================================================
--- PREENCHE ESTOQUE SEGURO EM 25% DA QUANTIDADE, ARREDONDADO PRA CIMA
--- PRO MÚLTIPLO DE 500 -- SÓ UNIDADE 106
+-- PREENCHE ESTOQUE SEGURO EM 25% DA QUANTIDADE, ARREDONDADO PRA CIMA --
+-- SÓ UNIDADE 106
 --
 -- O Robson pediu pra preencher o estoque_minimo ("Estoque Seguro" na
--- tela) de todo item com 25% do saldo atual dele, mas arredondado pra um
+-- tela) de todo item com 25% do saldo atual dele, arredondado pra um
 -- número redondo: 9931,25 -> 10000; 3439,25 -> 3500. Ou seja, arredonda
 -- pra CIMA pro múltiplo de 500 mais próximo (ceil(x/500)*500) -- faz
 -- sentido pra um número de segurança: melhor sobrar um pouco de margem
 -- do que arredondar pra baixo.
+--
+-- CORREÇÃO: item pequeno quebrava a regra acima
+--
+-- O item 124051 (STRIKE), quantidade 15, deu estoque_minimo = 500 --
+-- 33x o próprio estoque, porque ceil(x/500)*500 nunca devolve menos que
+-- 500 pra nenhum valor positivo, não importa quão pequeno. Faz sentido
+-- pros itens de estoque grande (é onde vieram os exemplos originais),
+-- mas é um absurdo pra item pequeno.
+--
+-- Por isso: só usa múltiplo de 500 quando os 25% já derem >= 500
+-- (ou seja, quantidade >= 2000); abaixo disso, arredonda pro múltiplo de
+-- 10 mais próximo -- 15 * 25% = 3,75 -> vira 10, numa escala compatível
+-- com o tamanho do item.
 --
 -- Por enquanto, SÓ na unidade 106 (as outras ficam de fora por agora;
 -- isso já exclui o SESMT também, que usa o código de unidade 'SESMT').
@@ -31,14 +44,24 @@
 -- =====================================================================
 
 update estoque
-   set estoque_minimo = ceil(
-     (case
-        when quantidade::text ~ ','
-          then replace(replace(quantidade::text, '.', ''), ',', '.')::numeric
-        else quantidade::text::numeric
-      end) * 0.25 / 500
-   ) * 500
- where unidade = '106';
+   set estoque_minimo = (
+     case
+       when bruto.pct25 >= 500 then ceil(bruto.pct25 / 500) * 500
+       else ceil(bruto.pct25 / 10) * 10
+     end
+   )
+  from (
+    select id,
+           (case
+              when quantidade::text ~ ','
+                then replace(replace(quantidade::text, '.', ''), ',', '.')::numeric
+              else quantidade::text::numeric
+            end) * 0.25 as pct25
+      from estoque
+     where unidade = '106'
+  ) as bruto
+ where estoque.id = bruto.id
+   and estoque.unidade = '106';
 
 -- Verificacao: amostra de 15 itens da 106 com o resultado
 select unidade, item, quantidade, estoque_minimo
@@ -46,3 +69,9 @@ select unidade, item, quantidade, estoque_minimo
  where unidade = '106'
  order by item
  limit 15;
+
+-- Verificacao especifica do item que revelou o problema (STRIKE)
+select unidade, item, descricao, quantidade, estoque_minimo
+  from estoque
+ where unidade = '106'
+   and item = '124051';
