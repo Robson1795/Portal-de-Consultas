@@ -493,25 +493,71 @@ function renderPreviaLote(pronto) {
       + ' item(ns) no total. As unidades que não aparecem acima <b>não são tocadas</b>.</div>';
   }
 
+  // A ação fica num container próprio para a confirmação trocar só ela,
+  // sem remontar a prévia (e sem tirar os avisos da frente da pessoa).
   alvo.innerHTML = avisosHtml + mapaHtml + corpoHtml
-    + '<button class="btn btn-primary" id="loteAplicarBtn">Substituir agora</button>';
+    + '<div id="loteAcao">'
+    + '<button class="btn btn-primary" id="loteAplicarBtn">Substituir agora</button>'
+    + '</div>';
+}
+
+// ---- Confirmação DENTRO da página, não no confirm() do navegador -------
+//
+// O confirm() do navegador é frágil para a ação mais destrutiva do portal:
+// o Chrome oferece "impedir que esta página crie novos diálogos" depois de
+// alguns avisos e, marcado isso, confirm() devolve false na hora -- o
+// clique em "Substituir agora" não faz nada e NÃO aparece mensagem
+// nenhuma. Silêncio é o pior modo de falhar. Aconteceu em 08/09/2026.
+//
+// Aqui a confirmação é um segundo clique na própria tela: não pode ser
+// suprimida, funciona no celular, e fica mais visível que um diálogo.
+function resumoDoLote(pronto) {
+  return (pronto.tipo === 'aco')
+    ? pronto.registros.length.toLocaleString('pt-BR') + ' linha(s) da planilha de bobinas'
+    : pronto.blocos.map(b => b.unidade + ' (' + b.itens.length + ')').join(', ');
+}
+
+function pedirConfirmacaoLote() {
+  const msg = document.getElementById('loteMsg');
+  if (!lotePreparado) {
+    msg.textContent = 'A prévia expirou. Clique em Conferir de novo.';
+    msg.className = 'status-msg status-err';
+    return;
+  }
+  document.getElementById('loteAcao').innerHTML =
+      '<div class="cfg-nota" style="margin:0 0 10px; background:#fee2e2;'
+    + ' border:1px solid #b91c1c; color:#991b1b;">'
+    + '<b>Confirmar substituição.</b> Vai substituir: '
+    + escapeHtml(resumoDoLote(lotePreparado)) + '. O estoque anterior dessas '
+    + 'unidades é apagado e trocado pelo que veio na planilha. '
+    + '<b>Não dá para desfazer.</b></div>'
+    + '<button class="btn btn-primary" id="loteConfirmarBtn">Sim, substituir</button>&nbsp;'
+    + '<button class="btn" id="loteCancelarBtn">Cancelar</button>';
+  msg.textContent = 'Leia o aviso e confirme.';
+  msg.className = 'status-msg';
+}
+
+function cancelarConfirmacaoLote() {
+  const msg = document.getElementById('loteMsg');
+  if (lotePreparado) renderPreviaLote(lotePreparado);
+  msg.textContent = 'Cancelado. Nada foi alterado.';
+  msg.className = 'status-msg';
 }
 
 // ---- Gravar ---------------------------------------------------------------
 async function aplicarLote() {
   const msg = document.getElementById('loteMsg');
-  const botao = document.getElementById('loteAplicarBtn');
-  if (!lotePreparado) return;
+  const botao = document.getElementById('loteConfirmarBtn');
 
-  const resumo = (lotePreparado.tipo === 'aco')
-    ? lotePreparado.registros.length + ' linha(s) da planilha de bobinas'
-    : lotePreparado.blocos.map(b => b.unidade + ' (' + b.itens.length + ')').join(', ');
+  // Não usa confirm(): a confirmação já aconteceu na própria tela, em
+  // pedirConfirmacaoLote(). Ver o comentário lá.
+  if (!lotePreparado) {
+    msg.textContent = 'A prévia expirou. Clique em Conferir de novo.';
+    msg.className = 'status-msg status-err';
+    return;
+  }
 
-  if (!confirm('Isso substitui o estoque de: ' + resumo + '.\n\n'
-             + 'O estoque anterior dessas unidades é apagado e trocado pelo que veio na '
-             + 'planilha. Não dá para desfazer. Confirma?')) return;
-
-  botao.disabled = true;
+  if (botao) botao.disabled = true;
   msg.textContent = 'Substituindo...';
   msg.className = 'status-msg';
 
@@ -519,7 +565,7 @@ async function aplicarLote() {
     ? await sb.rpc('substituir_bobinas', { linhas: lotePreparado.registros, quem: nomeUsuarioAtual })
     : await sb.rpc('substituir_estoque', { payload: lotePreparado.blocos });
 
-  botao.disabled = false;
+  if (botao) botao.disabled = false;
   if (error) {
     // A função é transacional: erro aqui significa que NADA foi gravado, e vale
     // dizer isso -- senão a pessoa fica sem saber se ficou pela metade e vai
@@ -579,7 +625,9 @@ document.getElementById('loteConferirBtn').addEventListener('click', () => {
 });
 
 document.getElementById('lotePrevia').addEventListener('click', (e) => {
-  if (e.target.closest('#loteAplicarBtn')) aplicarLote();
+  if (e.target.closest('#loteAplicarBtn')) pedirConfirmacaoLote();
+  else if (e.target.closest('#loteConfirmarBtn')) aplicarLote();
+  else if (e.target.closest('#loteCancelarBtn')) cancelarConfirmacaoLote();
 });
 
 document.getElementById('loteLimparBtn').addEventListener('click', () => trocarAbaLote(loteAba));

@@ -257,6 +257,11 @@ Onze tabelas. Os scripts que as criam estão em `sql/` — mas confira a seção
   Nada é gravado sem a prévia — quantos itens caem em cada unidade, quais colunas foram
   reconhecidas, e o que foi ignorado e por quê. Unidade que não aparece na planilha **não é
   tocada**; unidade com zero itens é **recusada** (seria o mesmo que apagar).
+  ⚠️ A confirmação é um segundo clique na própria tela e **não é o confirm() do navegador**.
+  O Chrome oferece "impedir que esta página crie novos diálogos" depois de alguns avisos e,
+  marcado isso, `confirm()` devolve `false` na hora: o clique não faz nada e nenhuma mensagem
+  aparece — indistinguível de botão quebrado. Aconteceu em 08/09/2026. Ver
+  `pedirConfirmacaoLote()` em `js/configuracoes.js`. **Não troque de volta por `confirm()`.**
   ⚠️ A gravação é uma chamada a `substituir_estoque()`/`substituir_bobinas()`
   (`sql/fase12-substituir-estoque-em-lote.sql`), que rodam **numa transação**: falha qualquer
   linha, nada muda. Foi o que fechou o item A2 da auditoria — antes o `delete` e o `insert`
