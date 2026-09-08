@@ -1135,6 +1135,20 @@ function linhasFiltradasExpControle() {
   return linhas;
 }
 
+// Conta pedidos DISTINTOS ainda na expedição (não retirados) -- um pedido
+// vira várias linhas (uma por item), então contar linhas contaria o mesmo
+// pedido várias vezes. Respeita a busca (#expCtrlBusca) igual à tabela,
+// pra bater com o que a pessoa está vendo na tela.
+function contarPedidosNaExpedicao(linhas) {
+  const pedidos = new Set();
+  linhas.forEach(l => {
+    if (l.status === 'retirado') return;
+    const numero = (l.numero_pedido || '').trim();
+    if (numero) pedidos.add(numero);
+  });
+  return pedidos.size;
+}
+
 function renderExpControle(erroCarregamento) {
   const corpo = document.getElementById('expCtrlBody');
   const vazio = document.getElementById('expCtrlVazio');
@@ -1146,10 +1160,14 @@ function renderExpControle(erroCarregamento) {
     corpo.innerHTML = '';
     expCtrlSelecionados.clear();
     atualizarAcaoMarcarExpControle();
+    document.getElementById('expCtrlPedidosCount').textContent = '';
     return;
   }
 
   const linhas = linhasFiltradasExpControle();
+  const totalPedidos = contarPedidosNaExpedicao(linhas);
+  document.getElementById('expCtrlPedidosCount').textContent =
+    `${totalPedidos} pedido${totalPedidos === 1 ? '' : 's'} na expedição`;
   vazio.style.display = linhas.length ? 'none' : 'block';
   if (!linhas.length) {
     vazio.textContent = progExpControle.length
@@ -1187,7 +1205,9 @@ function renderExpControle(erroCarregamento) {
       <td class="item">${escapeHtml(l.codigo_item)}</td>
       <td>${desc && desc.descricao ? escapeHtml(desc.descricao) : '—'}</td>
       <td class="loc">${desc && desc.um ? escapeHtml(desc.um) : '—'}</td>
-      <td class="num">${l.quantidade != null ? escapeHtml(l.quantidade) : '—'}</td>
+      <td class="num"><input type="text" class="expctrl-qtd-input" data-id="${escapeHtml(l.id)}"
+             value="${l.quantidade != null ? escapeHtml(l.quantidade) : ''}" placeholder="—"
+             style="width:70px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px; text-align:right;"></td>
       <td class="loc">${escapeHtml(l.numero_pedido || '—')}</td>
       <td class="loc">${escapeHtml(l.numero_os_op || '—')}</td>
       <td class="loc">${escapeHtml(l.lote || '—')}</td>
@@ -1772,6 +1792,32 @@ document.getElementById('expCtrlBody').addEventListener('focusout', async (e) =>
   setTimeout(() => { input.style.borderColor = ''; }, 1200);
 });
 
+// Quantidade editável direto na lista -- pra corrigir sem excluir e
+// digitar tudo de novo (mesmo padrão da Localização acima).
+document.getElementById('expCtrlBody').addEventListener('focusout', async (e) => {
+  const input = e.target.closest('.expctrl-qtd-input');
+  if (!input) return;
+
+  const item = progExpControle.find(l => l.id === input.dataset.id);
+  if (!item) return;
+
+  const novaQtd = input.value.trim() ? parseQtd(input.value.trim()) : null;
+  if (novaQtd === (item.quantidade != null ? parseQtd(item.quantidade) : null)) return; // nada mudou
+
+  input.disabled = true;
+  const { error } = await sb.from('exp_controle_itens').update({ quantidade: novaQtd }).eq('id', item.id);
+  input.disabled = false;
+
+  if (error) {
+    alert('Não foi possível salvar a quantidade: ' + error.message);
+    input.value = item.quantidade != null ? item.quantidade : '';
+    return;
+  }
+  item.quantidade = novaQtd;
+  input.style.borderColor = 'var(--blue)';
+  setTimeout(() => { input.style.borderColor = ''; }, 1200);
+});
+
 // Data de Entrada/Saída editáveis -- pra quando o registro é digitado
 // depois (ex.: no dia seguinte), a pessoa põe o dia que separou/retirou
 // de verdade, não o dia que digitou no app. Mesmo padrão da Localização
@@ -2005,7 +2051,6 @@ document.getElementById('expCtrlImprimirBtn').addEventListener('click', async ()
     renderExpControle();
     return;
   }
-
   renderExpControle();
   msg.textContent = naoGravados
     ? 'A impressão saiu e ' + marcados + ' etiqueta(s) foram marcadas, mas o banco recusou '
