@@ -113,6 +113,18 @@
         <div class="stat-nota">última alteração</div>
       </div>
     </div>
+    <!-- Só aparece pra quem podeVerEstoqueMinimo() (ver js/estoque.js) --
+         "quero que essa tela só apareça pra mim" (Robson). Clica pra
+         filtrar só os itens abaixo do estoque mínimo cadastrado. -->
+    <div class="stat-card" id="statEstoqueBaixoCard" style="display:none; cursor:pointer;"
+         title="Clique para filtrar só os itens com estoque abaixo do mínimo">
+      <div class="stat-icone" style="background:#fee2e2;">⚠️</div>
+      <div class="stat-texto">
+        <div class="stat-rotulo">Estoque baixo</div>
+        <div class="stat-valor" id="stat-estoque-baixo">-</div>
+        <div class="stat-nota">itens abaixo do mínimo</div>
+      </div>
+    </div>
   </div>
 
   <div class="edit-toggle-row" id="editToggleRow" style="display:none;">
@@ -199,6 +211,7 @@
             <th data-key="loc">Localização <span class="arrow"></span></th>
             <th class="col-padrao">Padrão</th>
             <th data-key="qtd">Quantidade <span class="arrow"></span></th>
+            <th class="col-estmin" style="display:none;">Estoque Mínimo</th>
             <th class="col-acoes">Ações</th>
             <th class="col-contagem" style="display:none;">
               <div>Estoque Físico</div>

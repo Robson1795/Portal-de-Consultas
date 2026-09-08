@@ -47,6 +47,11 @@ function render(rows, intervalo) {
   const emptyMsg = document.getElementById('emptyMsg');
   document.getElementById('loadingMsg').style.display = 'none';
 
+  // Coluna e card do Estoque Mínimo são só do Robson -- ver
+  // podeVerEstoqueMinimo(). Sincroniza o cabeçalho da coluna aqui (a
+  // célula de cada linha já se ajusta sozinha no template abaixo).
+  document.querySelector('.col-estmin').style.display = podeVerEstoqueMinimo() ? 'table-cell' : 'none';
+
   // O card e a paginacao mostram o total FILTRADO, nao o da unidade toda.
   const total = rows.length;
   document.getElementById('stat-count').textContent = total.toLocaleString('pt-BR');
@@ -101,6 +106,11 @@ function render(rows, intervalo) {
         ? `<button class="padrao-btn" data-item="${escapeHtml(r.item)}" data-qtd="${escapeHtml(r.quantidade)}" title="Ver padrão de caixas esperado">📦</button>`
         : (podeEditarEmbalagem() ? `<button class="avulso-btn" data-item="${escapeHtml(r.item)}" title="Marcar como item avulso, sem padrão de caixa">AVULSO</button>` : '')}</td>
       <td class="num">${escapeHtml(r.quantidade)}</td>
+      <td class="col-estmin" style="display:${podeVerEstoqueMinimo() ? 'table-cell' : 'none'};">
+        <input type="text" inputmode="decimal" class="estmin-input" data-id="${escapeHtml(r.id)}"
+               value="${r.estoque_minimo != null ? escapeHtml(r.estoque_minimo) : ''}" placeholder="—"
+               style="width:70px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px; text-align:right;">
+      </td>
       <td class="col-acoes" style="display:${modoContagemAtivo ? 'none' : 'table-cell'};">
         <button class="acao-btn ficha-btn${fichaFeitoSet.has(r.item) ? '' : ' pendente'}" data-item="${escapeHtml(r.item)}"
                 title="${fichaFeitoSet.has(r.item) ? 'Ver foto e ficha técnica' : 'Ainda não cadastrado — clique para preencher'}">👁</button>
@@ -171,7 +181,7 @@ document.getElementById('pgPorPagina').addEventListener('change', (e) => {
   applyFilterAndSort();
 });
 
-let filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false };
+let filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false, estoqueBaixo: false };
 
 // Paginacao (Fase 3). `imprimindoTudo` existe porque a impressao precisa sair
 // com TODAS as linhas filtradas, nao so a pagina na tela.
@@ -242,6 +252,7 @@ function applyFilterAndSort() {
   if (filtros.padrao === 'avulso') rows = rows.filter(r => { const i = fichaBoxMap.get(r.item); return !!(i && i.semPadrao); });
   if (filtros.padrao === 'pendente') rows = rows.filter(r => !fichaBoxMap.has(r.item));
   if (filtros.zerado) rows = rows.filter(r => parseQtd(r.quantidade) === 0);
+  if (filtros.estoqueBaixo) rows = rows.filter(r => r.estoque_minimo != null && parseQtd(r.quantidade) < parseQtd(r.estoque_minimo));
   if (filtros.comFoto) rows = rows.filter(r => fichaImageMap.has(r.item));
   if (filtros.divergente) {
     // Conta como divergencia tanto quantidade diferente quanto localizacao
@@ -327,6 +338,15 @@ function updateStats() {
     : '-';
   document.getElementById('stat-updated-nota').textContent = latest ? tempoRelativo(latest) : '\u00a0';
   document.getElementById('stat-updated-by').textContent = latestPor || '-';
+
+  const cardBaixo = document.getElementById('statEstoqueBaixoCard');
+  if (podeVerEstoqueMinimo()) {
+    const baixo = currentData.filter(r => r.estoque_minimo != null && parseQtd(r.quantidade) < parseQtd(r.estoque_minimo));
+    document.getElementById('stat-estoque-baixo').textContent = baixo.length.toLocaleString('pt-BR');
+    cardBaixo.style.display = 'flex';
+  } else {
+    cardBaixo.style.display = 'none';
+  }
 }
 
 async function loadFichaImageMap() {
@@ -449,6 +469,24 @@ function atualizarSubtituloUnidade() {
     `Unidade ${unidadeAtual}, em ${u.cidade} (${u.uf}). Consulta de itens, quantidades e localizações do almoxarifado.`;
 }
 
+document.getElementById('statEstoqueBaixoCard').addEventListener('click', () => {
+  filtros.estoqueBaixo = !filtros.estoqueBaixo;
+  document.getElementById('statEstoqueBaixoCard').classList.toggle('stat-card-ativo', filtros.estoqueBaixo);
+  pagina = 1;
+  applyFilterAndSort();
+});
+
+// Estoque Mínimo editável (só visível pra quem podeVerEstoqueMinimo()) --
+// mesmo padrão de salvar-ao-sair já usado no Controle EXP Acessórios.
+document.getElementById('tableBody').addEventListener('focusout', (e) => {
+  const input = e.target.closest('.estmin-input');
+  if (!input) return;
+  salvarEstoqueMinimo(input.dataset.id, input.value, input);
+});
+document.getElementById('tableBody').addEventListener('keydown', (e) => {
+  if (e.target.classList.contains('estmin-input') && e.key === 'Enter') e.target.blur();
+});
+
 async function loadData() {
   const { data, error } = await sb.from('estoque').select('*').eq('unidade', unidadeAtual).order('id', { ascending: true });
   if (error) {
@@ -493,6 +531,37 @@ function closeFichaModal() {
 
 function podeEditarEmbalagem() {
   return isAdminAtual || emailUsuarioAtual === 'j.lisboa@kingspanisoeste.com.br';
+}
+
+// "quero que essa tela só apareça pra mim" (Robson, sobre o Estoque
+// Mínimo/Estoque baixo) -- diferente de podeEditarEmbalagem() acima, aqui
+// é só o e-mail dele mesmo, sem "ou admin", de propósito: é pessoal, não
+// um cargo.
+function podeVerEstoqueMinimo() {
+  return emailUsuarioAtual === 'robson.alves@kingspanisoeste.com.br';
+}
+
+async function salvarEstoqueMinimo(id, valorBruto, input) {
+  const novoValor = valorBruto.trim() ? parseQtd(valorBruto.trim()) : null;
+  // String(): data-id no HTML sempre vem string, mas r.id pode ser number
+  // (id serial) -- comparar direto com === nunca bateria.
+  const item = currentData.find(r => String(r.id) === String(id));
+  if (!item) return;
+  if (novoValor === (item.estoque_minimo != null ? parseQtd(item.estoque_minimo) : null)) return;
+
+  input.disabled = true;
+  const { error } = await sb.from('estoque').update({ estoque_minimo: novoValor }).eq('id', id);
+  input.disabled = false;
+
+  if (error) {
+    alert('Não foi possível salvar o estoque mínimo: ' + error.message);
+    input.value = item.estoque_minimo != null ? item.estoque_minimo : '';
+    return;
+  }
+  item.estoque_minimo = novoValor;
+  input.style.borderColor = 'var(--blue)';
+  setTimeout(() => { input.style.borderColor = ''; }, 1200);
+  updateStats(); // o card de "Estoque baixo" pode ter mudado de numero
 }
 
 function campoEmbalagem(data, itemCode) {
@@ -1316,7 +1385,8 @@ contagemModal.addEventListener('click', (e) => {
 document.getElementById('searchBox').addEventListener('input', () => { pagina = 1; applyFilterAndSort(); });
 document.getElementById('clearBtn').addEventListener('click', () => {
   document.getElementById('searchBox').value = '';
-  filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false };
+  filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false, estoqueBaixo: false };
+  document.getElementById('statEstoqueBaixoCard').classList.remove('stat-card-ativo');
   pagina = 1;
   const sel = document.getElementById('filterPadrao'); if (sel) sel.value = '';
   document.getElementById('filterZerado').checked = false;
@@ -1364,7 +1434,8 @@ document.getElementById('filterApplyBtn').addEventListener('click', () => {
 });
 
 document.getElementById('filterClearAllBtn').addEventListener('click', () => {
-  filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false };
+  filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false, estoqueBaixo: false };
+  document.getElementById('statEstoqueBaixoCard').classList.remove('stat-card-ativo');
   pagina = 1;
   document.getElementById('filterLocalizacao').value = '';
   document.getElementById('filterUm').value = '';
@@ -1459,7 +1530,9 @@ async function trocarUnidade(cod) {
   atualizarSubtituloUnidade();
   document.getElementById('searchBox').value = '';
   sortKey = null;
-  filtros = { localizacao: '', um: '', zerado: false, comFoto: false, divergente: false };
+  filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false, estoqueBaixo: false };
+  const cardBaixo = document.getElementById('statEstoqueBaixoCard');
+  if (cardBaixo) cardBaixo.classList.remove('stat-card-ativo');
   atualizarBadgeFiltros();
   if (modoContagemAtivo) desativarModoContagem();
   await loadData();
