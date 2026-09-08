@@ -1070,14 +1070,37 @@ async function gravarExpControle() {
   await carregarProgramacao();
 }
 
-// Formata um timestamp ISO pro formato que <input type="datetime-local">
-// aceita (AAAA-MM-DDTHH:mm, em horário local -- sem isso o campo edita
-// mostraria vazio). Volta pra ISO na hora de salvar em salvarDataExpControle().
-function paraDatetimeLocal(iso) {
+// Entrada/Saída em texto puro (não <input type="datetime-local">) porque
+// o Robson quer poder digitar direto, sem lutar com os campinhos
+// separados do seletor nativo do navegador. Mesmo formato que já
+// aparecia na tela antes de virar editável (toLocaleString pt-BR).
+function formatarDataHoraBR(iso) {
   if (!iso) return '';
-  const d = new Date(iso);
-  const pad = n => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+// Aceita "DD/MM/AAAA" ou "DD/MM/AAAA, HH:mm" (a hora é opcional -- sem
+// ela, mantém a hora que já estava, `dataAtualFallback`). Monta a data com
+// new Date(ano, mes-1, dia, ...) em vez de jogar a string direto pro
+// construtor do Date: "07/09/2026" sem isso é ambíguo (DD/MM ou MM/DD
+// depende do navegador) e podia trocar dia com mês sem avisar.
+function parseDataHoraBR(texto, dataAtualFallback) {
+  const m = texto.trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(?:[,\s]+(\d{1,2}):(\d{2}))?$/);
+  if (!m) return null;
+  const dia = parseInt(m[1], 10), mes = parseInt(m[2], 10), ano = parseInt(m[3], 10);
+  if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return null;
+
+  const fallback = dataAtualFallback ? new Date(dataAtualFallback) : new Date();
+  const hora = m[4] != null ? parseInt(m[4], 10) : fallback.getHours();
+  const minuto = m[5] != null ? parseInt(m[5], 10) : fallback.getMinutes();
+  if (hora > 23 || minuto > 59) return null;
+
+  const data = new Date(ano, mes - 1, dia, hora, minuto);
+  // new Date "conserta" data invalida em vez de recusar (31/02 vira
+  // 03/03) -- se o resultado nao bate com o que foi digitado, rejeita em
+  // vez de aceitar uma data diferente da que a pessoa quis.
+  if (data.getFullYear() !== ano || data.getMonth() !== mes - 1 || data.getDate() !== dia) return null;
+  return data;
 }
 
 // Mesmo filtro da busca (#expCtrlBusca) usado tanto pra desenhar a lista
@@ -1138,13 +1161,13 @@ function renderExpControle(erroCarregamento) {
       <td>${retirado
         ? `<span class="cfg-status st-ativo">Saiu p/ carregamento</span>`
         : `<span class="cfg-status st-pendente">Na expedição</span>`}</td>
-      <td class="loc"><input type="datetime-local" class="expctrl-criado-input" data-id="${escapeHtml(l.id)}"
-             value="${paraDatetimeLocal(l.criado_em)}"
-             style="width:150px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px;"></td>
+      <td class="loc"><input type="text" class="expctrl-criado-input" data-id="${escapeHtml(l.id)}"
+             value="${escapeHtml(formatarDataHoraBR(l.criado_em))}" placeholder="DD/MM/AAAA, HH:mm"
+             style="width:140px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px;"></td>
       <td class="loc">${retirado
-        ? `<input type="datetime-local" class="expctrl-retirado-input" data-id="${escapeHtml(l.id)}"
-             value="${paraDatetimeLocal(l.retirado_em)}"
-             style="width:150px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px;">`
+        ? `<input type="text" class="expctrl-retirado-input" data-id="${escapeHtml(l.id)}"
+             value="${escapeHtml(formatarDataHoraBR(l.retirado_em))}" placeholder="DD/MM/AAAA, HH:mm"
+             style="width:140px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px;">`
         : '—'}</td>
       <td class="col-acoes">
         ${retirado ? '' : `<button class="acao-btn expctrl-saida" data-id="${escapeHtml(l.id)}" title="Marcar como retirado para o carregamento">🚚</button>`}
@@ -1528,17 +1551,25 @@ async function salvarDataExpControle(input, campo, obrigatorio) {
   const item = progExpControle.find(l => l.id === input.dataset.id);
   if (!item) return;
 
-  if (!input.value) {
+  const textoDigitado = input.value.trim();
+  if (!textoDigitado) {
     // criado_em não aceita nulo no banco (not null); retirado_em até
     // aceitaria, mas apagar aqui deixaria "Saiu p/ carregamento" sem data
     // de saída -- pra desfazer de vez, tem o botão ↺ no Histórico.
-    input.value = paraDatetimeLocal(item[campo]);
+    input.value = formatarDataHoraBR(item[campo]);
     if (obrigatorio) alert('Essa data não pode ficar em branco.');
     return;
   }
 
-  const novaData = new Date(input.value).toISOString();
-  if (novaData === item[campo]) return; // nada mudou (compara ISO com ISO)
+  const dataDigitada = parseDataHoraBR(textoDigitado, item[campo]);
+  if (!dataDigitada) {
+    alert('Data inválida. Use o formato DD/MM/AAAA ou DD/MM/AAAA, HH:mm (ex.: 07/09/2026, 13:44).');
+    input.value = formatarDataHoraBR(item[campo]);
+    return;
+  }
+
+  const novaData = dataDigitada.toISOString();
+  if (novaData === item[campo]) { input.value = formatarDataHoraBR(item[campo]); return; } // nada mudou
 
   input.disabled = true;
   const { error } = await sb.from('exp_controle_itens').update({ [campo]: novaData }).eq('id', item.id);
@@ -1546,10 +1577,11 @@ async function salvarDataExpControle(input, campo, obrigatorio) {
 
   if (error) {
     alert('Não foi possível salvar a data: ' + error.message);
-    input.value = paraDatetimeLocal(item[campo]);
+    input.value = formatarDataHoraBR(item[campo]);
     return;
   }
   item[campo] = novaData;
+  input.value = formatarDataHoraBR(novaData);
   input.style.borderColor = 'var(--blue)';
   setTimeout(() => { input.style.borderColor = ''; }, 1200);
 }
