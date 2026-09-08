@@ -1607,7 +1607,11 @@ function exportarExpControleCsv(nomeBase) {
   baixarArquivo(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' }), nomeBase + '.csv');
 }
 
-function exportarExpControleXlsx(nomeBase) {
+// O xlsx.full.min.js tem 861 KB e so esta funcao o usa: e buscado aqui, na
+// primeira exportacao da sessao. Ver carregarBiblioteca() no config.js.
+async function exportarExpControleXlsx(nomeBase) {
+  await carregarBiblioteca('o Exportar Excel', CDN_XLSX,
+                           () => typeof XLSX !== 'undefined');
   const planilha = XLSX.utils.aoa_to_sheet([EXP_EXPORT_CABECALHO, ...linhasExportacaoExpControle()]);
   const livro = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(livro, planilha, 'Controle EXP');
@@ -1670,7 +1674,7 @@ function exportarExpControleHtml(nomeBase) {
 // Exportar/Imprimir respeitam a busca (#expCtrlBusca) -- pra pegar só o
 // que tem numa localização, é só digitar ela na busca antes de clicar
 // (mesmo filtro que já estreita a lista na tela).
-document.getElementById('expCtrlExportarBtn').addEventListener('click', () => {
+document.getElementById('expCtrlExportarBtn').addEventListener('click', async () => {
   const linhas = linhasFiltradasExpControle();
   if (!linhas.length) {
     alert(progExpControle.length ? 'Nenhum item bate com a busca atual.' : 'Nenhum item no Controle EXP para exportar.');
@@ -1682,7 +1686,22 @@ document.getElementById('expCtrlExportarBtn').addEventListener('click', () => {
   const sufixoBusca = busca ? '-' + busca.replace(/[^a-z0-9]+/gi, '') : '';
   const nomeBase = `controle-exp-${unidadeAtual}${sufixoBusca}-${new Date().toISOString().slice(0, 10)}`;
 
-  if (formato === 'xlsx') exportarExpControleXlsx(nomeBase);
+  if (formato === 'xlsx') {
+    const botao = document.getElementById('expCtrlExportarBtn');
+    const rotulo = botao.textContent;
+    botao.disabled = true;
+    botao.textContent = 'Preparando...';
+    try {
+      await exportarExpControleXlsx(nomeBase);
+    } catch (err) {
+      // Sem isto a pessoa clica, nada baixa e nada explica o porque.
+      alert(err.message);
+      console.error('Falha ao exportar em Excel:', err.message);
+    } finally {
+      botao.disabled = false;
+      botao.textContent = rotulo;
+    }
+  }
   else if (formato === 'html') exportarExpControleHtml(nomeBase);
   else exportarExpControleCsv(nomeBase);
 });

@@ -52,6 +52,21 @@ function abrirValidacaoBobina() {
 async function lerEtiquetaComOcr(file) {
   const msg = document.getElementById('validacaoMsg');
   msg.className = 'status-msg';
+
+  // O Tesseract (65 KB) nao vem mais no carregamento da pagina: e buscado
+  // aqui, na primeira foto da sessao. Ver carregarBiblioteca() no config.js.
+  msg.textContent = 'Preparando a leitura...';
+  try {
+    await carregarBiblioteca('a leitura por foto', CDN_TESSERACT,
+                             () => typeof Tesseract !== 'undefined');
+  } catch (err) {
+    msg.textContent = err.message + ' Digite os dados manualmente.';
+    msg.className = 'status-msg status-err';
+    esconderVeredito();
+    document.getElementById('valBobinaId').focus();
+    return;
+  }
+
   msg.textContent = 'Lendo etiqueta... 0%';
 
   try {
