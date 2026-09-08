@@ -548,3 +548,46 @@ esquecer, e a lista passaria a mentir.
 
 **Exportar não marca**, só Imprimir. Se a etiqueta passar a sair também do
 Excel, isto precisa mudar junto.
+
+### Marcar como impresso à mão (08/09/2026)
+
+Primeira coluna da aba Entrada: **caixa de seleção**, e o botão **✓ Marcar como
+impresso** ao lado da busca. Serve para o caso que a marcação automática não
+cobre — etiqueta que saiu por fora do portal, ou lista impressa antes de a
+coluna existir.
+
+**Só administrador vê a coluna e o botão.** ⚠️ E isso é trava de **tela, não de
+segurança**: o RLS de `exp_controle_itens` deixa qualquer conta aprovada da
+unidade escrever, e o próprio Imprimir marca etiqueta para quem não é admin.
+O que esconder o botão evita é marcação em massa por engano — não invasão.
+Quem quisesse burlar usaria o inspetor, ou simplesmente imprimiria. Se um dia
+isso precisar ser trava de verdade, o lugar é uma função `security definer` no
+banco, como `definir_acesso()`.
+
+- **"Vale o que está na tela":** a seleção acompanha a busca. Item que sai da
+  lista sai da seleção, e a caixa do cabeçalho marca só o que a busca mostra —
+  mesmo critério do Imprimir e do Exportar. O contrário seria pior: filtrar,
+  ver 3 caixas marcadas e o botão dizer 40.
+- **O número do botão é o que ele vai mudar**, não quantas caixas estão
+  marcadas. Item já marcado não conta (a data da primeira emissão não é
+  reescrita), então 3 selecionados com 1 já marcado mostram `(2)`; a diferença
+  aparece no tooltip, senão pareceria caixa que não registrou o clique.
+- **Confirmação é um segundo clique no próprio botão**, e não `confirm()` —
+  mesmo motivo da aba de lote (seção 7). Mudar a seleção cancela a
+  confirmação: o "Confirmar" na tela era sobre outro conjunto.
+- ⚠️ **O `update` pede recibo (`.select('id')`), e isso não é enfeite:**
+  `update ... in (ids)` volta **sem erro** mesmo quando o RLS filtra tudo —
+  PostgREST não avisa que atualizou zero linha. Sem o recibo, a tela mostrava
+  o ✓ verde, dizia "marcado", e um F5 desmentia. É o item A1 da auditoria em
+  roupa nova. Hoje só ganha ✓ a linha que o banco confirmou, e a mensagem sabe
+  a diferença entre "marquei 12" e "pedi 12, o banco aceitou 9".
+- **A gravação vai em blocos de 100:** o `in` do PostgREST viaja na URL e cada
+  `id` é um uuid de 36 caracteres. Sem os blocos, "selecionar tudo" numa
+  unidade cheia estouraria o limite de tamanho da URL, e o sintoma seria
+  "marcar 5 funciona, marcar 300 falha".
+- O Imprimir e o botão usam **a mesma** `marcarEtiquetasEmitidas()`. Duplicar
+  faria as duas regras saírem de sincronia, e a data passaria a significar
+  coisas diferentes conforme o caminho.
+
+**Não existe desmarcar pela tela.** Marcou errado, hoje se resolve por `update`
+no painel do Supabase. Se isso acontecer mais de uma vez, vira botão.

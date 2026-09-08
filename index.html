@@ -596,6 +596,9 @@
         <div class="cfg-barra">
           <input type="text" id="expCtrlBusca" placeholder="Buscar por localização, item ou nº pedido..."
                  style="flex:1; min-width:200px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <button class="btn" id="expCtrlMarcarBtn" style="display:none;"
+                  title="Marca a etiqueta dos itens selecionados como já impressa. Só administrador.">✓ Marcar como impresso</button>
+          <button class="btn" id="expCtrlMarcarCancelarBtn" style="display:none;">Cancelar</button>
           <button class="btn" id="expCtrlImprimirBtn" style="margin-left:auto;" title="Imprime só o que está na busca acima -- digite a localização pra imprimir só ela">🖨️ Imprimir</button>
           <select id="expCtrlExportarFormato" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
             <option value="xlsx">Excel (.xlsx)</option>
@@ -610,9 +613,12 @@
           <table>
             <thead>
               <tr>
+                <th class="col-sel-exp" id="expCtrlSelTh" style="display:none;"
+                    title="Selecionar todos os itens que estão na busca atual">
+                  <input type="checkbox" id="expCtrlSelTodos"></th>
                 <th>Localização</th><th>Item</th><th>Descrição</th><th>UM</th>
                 <th>Qtd</th><th>Nº Pedido</th><th>Nº OP</th><th>Lote</th><th>Referência</th>
-                <th title="Marcada ao imprimir pelo Controle EXP">Etiqueta</th>
+                <th title="Marcada ao imprimir pelo Controle EXP, ou à mão pelo administrador">Etiqueta</th>
                 <th>Status</th><th>Entrada em</th><th>Saída em</th><th>Ação</th>
               </tr>
             </thead>
