@@ -406,7 +406,7 @@ Hoje ele cria só estrutura, e o RLS é assunto dos scripts da Fase 1.
 
 **De painel — destrava o resto, e não é código:**
 
-1. **Rodar `sql/fase8-limpar-contagem-restrito.sql`** no Supabase. Sem ele, "Limpar tudo" está
+1. **Rodar `sql/fase11-limpar-contagem-restrito.sql`** no Supabase. Sem ele, "Limpar tudo" está
    travado só na tela, e um inspetor de navegador contorna. O script **substitui** a política
    `for all` de `contagem_fisica` por três (insert, update, delete) — tem de ser substituição,
    porque política permissiva se soma e a aberta anularia a restrita.

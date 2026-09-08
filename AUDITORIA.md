@@ -273,7 +273,7 @@ meio de um inventário.
 - **Tela** (`js/estoque.js`): `podeLimparContagem()` pergunta ao banco por
   `pode_atualizar_estoque(unidade)` antes de qualquer coisa, e falha fechado se a consulta der
   erro. O botão fica escondido para quem não pode — cortesia, não trava.
-- **Banco** (`sql/fase8-limpar-contagem-restrito.sql`): a política `for all` é **removida** e
+- **Banco** (`sql/fase11-limpar-contagem-restrito.sql`): a política `for all` é **removida** e
   reconstruída em três (insert, update, delete). Só o DELETE muda de dono, para admin ou gerente
   da unidade. Tinha de ser substituição: acrescentar uma política restritiva ao lado da
   permissiva não tiraria nada, porque as permissivas se somam — foi esse o furo do C2.
@@ -506,7 +506,7 @@ de cima a baixo — então sobraram políticas antigas em cima das novas, e res�
 
 | # | Item | Por quê nesta ordem |
 |---|---|---|
-| 1 | **Rodar `sql/fase8-limpar-contagem-restrito.sql`** | O A4 só está corrigido na tela até isso acontecer |
+| 1 | **Rodar `sql/fase11-limpar-contagem-restrito.sql`** | O A4 só está corrigido na tela até isso acontecer |
 | 2 | **Criar o bucket `fotos-bobinas`** (O5) | Uma tela no painel do Supabase, e a prova da conferência para de ser perdida |
 | 3 | **A2** — transação no `delete` + `insert` | O item mais grave que resta: a unidade pode ficar sem estoque, sem rollback. Pede função no Postgres |
 | 4 | **O3 completo** — lote no modal e na tabela do OCR | Mudança de desenho: hoje o veredito é suprimido em vez de errado |
