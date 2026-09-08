@@ -1,11 +1,12 @@
 -- =====================================================================
--- PREENCHE ESTOQUE SEGURO EM 25% DA QUANTIDADE ATUAL, TODOS OS ITENS
+-- PREENCHE ESTOQUE SEGURO EM 25% DA QUANTIDADE ATUAL -- SÓ UNIDADE 106
 --
 -- O Robson pediu pra preencher o estoque_minimo ("Estoque Seguro" na
--- tela) de todo item com 25% do saldo atual dele. Roda em TODAS as
--- unidades e SOBRESCREVE qualquer valor já cadastrado manualmente
--- (confirmado -- ex.: um item que já estava em 15000 vira 25% da
--- quantidade dele também).
+-- tela) de todo item com 25% do saldo atual dele. Por enquanto, SÓ na
+-- unidade 106 (ele confirmou: as outras ficam de fora por agora). E
+-- SOBRESCREVE qualquer valor já cadastrado manualmente (confirmado --
+-- ex.: um item que já estava em 15000 vira 25% da quantidade dele
+-- também).
 --
 -- Onde rodar: painel do Supabase -> SQL Editor -> New query -> Run.
 --
@@ -31,10 +32,12 @@ update estoque
           then replace(replace(quantidade::text, '.', ''), ',', '.')::numeric
         else quantidade::text::numeric
       end) * 0.25
-   , 2);
+   , 2)
+ where unidade = '106';
 
--- Verificacao: amostra de 15 itens com o antes/depois do calculo
+-- Verificacao: amostra de 15 itens da 106 com o resultado
 select unidade, item, quantidade, estoque_minimo
   from estoque
- order by unidade, item
+ where unidade = '106'
+ order by item
  limit 15;
