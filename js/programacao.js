@@ -1116,7 +1116,11 @@ function parseDataHoraBR(texto, dataAtualFallback) {
 // da selecao. O contrario seria pior -- a pessoa filtra, ve 3 caixas marcadas
 // e o botao diz 40, e confirma sem saber no que esta clicando.
 let expCtrlSelecionados = new Set();
-let expCtrlConfirmandoMarcacao = false;
+// Qual acao esta esperando o segundo clique: null, 'marcar' ou
+// 'desmarcar'. Era um booleano quando so existia marcar; com dois botoes,
+// booleano deixaria "confirmar" ambiguo -- e o clique errado aqui muda
+// dado.
+let expCtrlAcaoConfirmando = null;
 
 function linhasFiltradasExpControle() {
   const busca = document.getElementById('expCtrlBusca').value.trim().toLowerCase();
@@ -1214,44 +1218,68 @@ function renderExpControle(erroCarregamento) {
 
 // Quantos dos selecionados a acao vai realmente mudar. Item ja marcado nao
 // conta: a data da primeira emissao nao e reescrita, entao marcar de novo nao
-// faz nada.
-function contarAMarcarExpControle() {
-  return progExpControle.filter(l => expCtrlSelecionados.has(l.id) && !l.etiqueta_emitida_em).length;
+// faz nada. Vale ao contrario tambem -- desmarcar quem nao esta marcado e
+// operacao vazia.
+function contarEtiquetaExpControle(marcar) {
+  return progExpControle.filter(l =>
+    expCtrlSelecionados.has(l.id) && (marcar ? !l.etiqueta_emitida_em : !!l.etiqueta_emitida_em)).length;
 }
 
-// Estado do botao de marcar: quem pode ver, quantos vao mudar, e se o proximo
-// clique confirma ou pede confirmacao.
+// Estado dos botoes de etiqueta: quem pode ver, quantos itens cada um vai
+// mudar, e qual deles esta esperando confirmacao.
+//
+// Enquanto um espera confirmacao, o outro fica escondido: dois botoes que
+// mudam dado, um deles escrito "Confirmar", e a chance de clicar no errado.
 function atualizarAcaoMarcarExpControle() {
-  const botao = document.getElementById('expCtrlMarcarBtn');
+  const marcarBtn = document.getElementById('expCtrlMarcarBtn');
+  const desmarcarBtn = document.getElementById('expCtrlDesmarcarBtn');
   const cancelar = document.getElementById('expCtrlMarcarCancelarBtn');
-  if (!botao || !cancelar) return;
+  if (!marcarBtn || !desmarcarBtn || !cancelar) return;
 
   const podeMarcar = !!isAdminAtual;
-  botao.style.display = podeMarcar ? 'inline-block' : 'none';
-  cancelar.style.display = podeMarcar && expCtrlConfirmandoMarcacao ? 'inline-block' : 'none';
+  const confirmando = expCtrlAcaoConfirmando;
+  marcarBtn.style.display = podeMarcar && confirmando !== 'desmarcar' ? 'inline-block' : 'none';
+  desmarcarBtn.style.display = podeMarcar && confirmando !== 'marcar' ? 'inline-block' : 'none';
+  cancelar.style.display = podeMarcar && confirmando ? 'inline-block' : 'none';
   if (!podeMarcar) return;
 
   const n = expCtrlSelecionados.size;
-  const aMarcar = contarAMarcarExpControle();
-  const jaMarcados = n - aMarcar;
+  const aMarcar = contarEtiquetaExpControle(true);
+  const aDesmarcar = contarEtiquetaExpControle(false);
 
   // O numero do botao e o numero de itens que ele vai mudar, nao o de caixas
   // marcadas. Eram dois numeros diferentes na mesma tela, e o do botao era o
   // que enganava.
-  botao.disabled = aMarcar === 0;
-  if (expCtrlConfirmandoMarcacao) {
-    botao.textContent = 'Confirmar: marcar ' + aMarcar + ' como impresso';
-    botao.classList.add('btn-primary');
+  marcarBtn.disabled = aMarcar === 0;
+  desmarcarBtn.disabled = aDesmarcar === 0;
+
+  if (confirmando === 'marcar') {
+    marcarBtn.textContent = 'Confirmar: marcar ' + aMarcar + ' como impresso';
+    marcarBtn.classList.add('btn-primary');
   } else {
-    botao.textContent = aMarcar ? '✓ Marcar como impresso (' + aMarcar + ')' : '✓ Marcar como impresso';
-    botao.classList.remove('btn-primary');
+    marcarBtn.textContent = aMarcar ? '✓ Marcar como impresso (' + aMarcar + ')' : '✓ Marcar como impresso';
+    marcarBtn.classList.remove('btn-primary');
   }
+  if (confirmando === 'desmarcar') {
+    desmarcarBtn.textContent = 'Confirmar: desmarcar ' + aDesmarcar;
+    desmarcarBtn.classList.add('btn-primary');
+  } else {
+    desmarcarBtn.textContent = aDesmarcar ? '✗ Desmarcar (' + aDesmarcar + ')' : '✗ Desmarcar';
+    desmarcarBtn.classList.remove('btn-primary');
+  }
+
   // Sem isto, marcar 3 caixas e ver "(2)" parece caixa que nao registrou.
-  botao.title = !n
+  marcarBtn.title = !n
     ? 'Marque os itens na primeira coluna para habilitar.'
-    : (jaMarcados
-        ? n + ' selecionado(s), ' + jaMarcados + ' já marcado(s) como impresso(s) — esses não são tocados.'
+    : (n - aMarcar
+        ? n + ' selecionado(s), ' + (n - aMarcar) + ' já marcado(s) como impresso(s) — esses não são tocados.'
         : 'Marca a etiqueta destes ' + aMarcar + ' itens como já impressa. Só administrador.');
+  desmarcarBtn.title = !n
+    ? 'Marque os itens na primeira coluna para habilitar.'
+    : (aDesmarcar
+        ? 'Apaga a data e o nome de quem emitiu a etiqueta destes ' + aDesmarcar
+          + ' itens. A data original não volta depois.'
+        : 'Nenhum dos ' + n + ' selecionado(s) está marcado como impresso.');
 
   // A caixa do cabecalho reflete a lista visivel, nao a tabela toda.
   const todos = document.getElementById('expCtrlSelTodos');
@@ -1261,23 +1289,31 @@ function atualizarAcaoMarcarExpControle() {
   }
 }
 
-// Marca etiqueta como emitida em lote. Usada pelos DOIS caminhos: o Imprimir
-// (automatico, pra quem imprime) e o botao "Marcar como impresso" (manual, so
-// admin). Uma funcao para os dois porque a regra de "nao reescrever a data da
-// primeira emissao" tem de valer igual nos dois -- duplicada, um dia sairiam
-// de sincronia e a data passaria a significar coisas diferentes.
+// Grava etiqueta em lote, nos dois sentidos: `marcar = true` marca como
+// emitida, `false` tira a marca. Usada pelos TRES caminhos -- o Imprimir
+// (automatico, pra quem imprime), o "Marcar como impresso" e o "Desmarcar"
+// (manuais, so admin).
+//
+// Uma funcao para todos de proposito: a paginacao, o recibo do banco e a regra
+// de nao reescrever a data da primeira emissao tem de valer igual nos tres.
+// Duplicadas, uma seria corrigida e a outra esquecida -- foi exatamente isso
+// que aconteceu com o item A1 da auditoria pelo projeto inteiro.
 //
 // Vai em blocos de 100: o `in` do PostgREST viaja na URL e cada id e um uuid
 // de 36 caracteres. Selecionar tudo numa unidade cheia estouraria o limite de
 // tamanho da URL, e o sintoma seria "marcar 5 funciona, marcar 300 falha" --
 // dificil de ligar a causa depois.
-async function marcarEtiquetasEmitidas(linhas) {
-  // Reimprimir nao reescreve a data da primeira emissao: e ela que responde
-  // "desde quando este item esta etiquetado?".
-  const alvo = linhas.filter(l => !l.etiqueta_emitida_em);
-  if (!alvo.length) return { marcados: 0, error: null };
+async function gravarEtiquetaEmLote(linhas, marcar) {
+  // Marcar so alcanca quem nao tem etiqueta: reimprimir nao reescreve a data
+  // da primeira emissao, que e a que responde "desde quando este item esta
+  // etiquetado?". Desmarcar, ao contrario, so alcanca quem tem.
+  const alvo = linhas.filter(l => (marcar ? !l.etiqueta_emitida_em : !!l.etiqueta_emitida_em));
+  if (!alvo.length) return { marcados: 0, naoGravados: 0, error: null };
 
   const agora = new Date().toISOString();
+  const patch = marcar
+    ? { etiqueta_emitida_em: agora, etiqueta_emitida_por: nomeUsuarioAtual }
+    : { etiqueta_emitida_em: null,  etiqueta_emitida_por: null };
   const BLOCO = 100;
   let marcados = 0;
   let naoGravados = 0;
@@ -1290,7 +1326,7 @@ async function marcarEtiquetasEmitidas(linhas) {
     // Com o recibo, sabemos a diferenca entre "marquei 12" e "pedi 12, o banco
     // aceitou 9".
     const { data, error } = await sb.from('exp_controle_itens')
-      .update({ etiqueta_emitida_em: agora, etiqueta_emitida_por: nomeUsuarioAtual })
+      .update(patch)
       .in('id', pedaco.map(l => l.id))
       .select('id');
     // Devolve quantos ja foram: depois de gravar 200 linhas, dizer so
@@ -1298,11 +1334,11 @@ async function marcarEtiquetasEmitidas(linhas) {
     if (error) return { marcados, naoGravados, error };
 
     const gravados = new Set((data || []).map(r => r.id));
-    // So a linha que o banco confirmou fica com o certinho na tela.
+    // So a linha que o banco confirmou muda na tela.
     pedaco.forEach(l => {
       if (!gravados.has(l.id)) return;
-      l.etiqueta_emitida_em = agora;
-      l.etiqueta_emitida_por = nomeUsuarioAtual;
+      l.etiqueta_emitida_em = patch.etiqueta_emitida_em;
+      l.etiqueta_emitida_por = patch.etiqueta_emitida_por;
     });
     marcados += gravados.size;
     naoGravados += pedaco.length - gravados.size;
@@ -1310,35 +1346,38 @@ async function marcarEtiquetasEmitidas(linhas) {
   return { marcados, naoGravados, error: null };
 }
 
-async function marcarComoImpressoSelecionados() {
+async function aplicarEtiquetaSelecionados(marcar) {
   const msg = document.getElementById('expEtiquetaMsg');
+  const verbo = marcar ? 'marcado' : 'desmarcado';
 
   // Trava de TELA, nao de seguranca -- e importante nao confundir as duas. O
   // RLS de exp_controle_itens deixa qualquer conta aprovada da unidade
   // escrever, e o proprio Imprimir marca etiqueta pra quem nao e admin. O que
-  // esconder o botao evita e marcacao em massa por engano, nao invasao: quem
-  // quisesse burlar usaria o inspetor, ou simplesmente imprimiria.
+  // esconder os botoes evita e mexida em massa por engano, nao invasao: quem
+  // quisesse burlar usaria o inspetor, ou simplesmente imprimiria. Decisao de
+  // 08/09/2026, com o Victor: travar de verdade exigiria tirar a marcacao
+  // automatica do Imprimir de quem nao e admin, e o indicador vive dela.
   if (!isAdminAtual) {
-    msg.textContent = 'Só administrador marca etiqueta como impressa por aqui.';
+    msg.textContent = 'Só administrador mexe na marca de etiqueta por aqui.';
     msg.className = 'status-msg status-err';
     return;
   }
 
   const selecionados = progExpControle.filter(l => expCtrlSelecionados.has(l.id));
-  const jaTinham = selecionados.filter(l => l.etiqueta_emitida_em).length;
-  const { marcados, naoGravados, error } = await marcarEtiquetasEmitidas(selecionados);
-  expCtrlConfirmandoMarcacao = false;
+  const foraDoAlvo = selecionados.length - contarEtiquetaExpControle(marcar);
+  const { marcados, naoGravados, error } = await gravarEtiquetaEmLote(selecionados, marcar);
+  expCtrlAcaoConfirmando = null;
 
   if (error) {
     msg.textContent = (marcados
-        ? 'Marcou ' + marcados + ' e parou no resto: '
-        : 'NÃO MARCOU: ')
+        ? (marcar ? 'Marcou ' : 'Desmarcou ') + marcados + ' e parou no resto: '
+        : (marcar ? 'NÃO MARCOU: ' : 'NÃO DESMARCOU: '))
       + error.message
       + (marcados ? '' : ' — nada foi alterado.')
       + ' Se a mensagem falar em coluna inexistente, sql/fase16-etiqueta-emitida.sql'
       + ' ainda não foi rodado no Supabase.';
     msg.className = 'status-msg status-err';
-    console.error('Falha ao marcar como impresso:', error.message);
+    console.error('Falha ao gravar etiqueta:', error.message);
     renderExpControle();
     return;
   }
@@ -1347,7 +1386,7 @@ async function marcarComoImpressoSelecionados() {
     msg.textContent = naoGravados
       ? 'NÃO GRAVOU: o banco recusou os ' + naoGravados + ' item(ns) — permissão da unidade,'
         + ' ou a linha foi apagada por outra pessoa. Recarregue a página.'
-      : 'Os ' + jaTinham + ' item(ns) selecionado(s) já estavam marcados: nada mudou.';
+      : 'Nenhum dos ' + selecionados.length + ' selecionado(s) precisava ser ' + verbo + ': nada mudou.';
     msg.className = naoGravados ? 'status-msg status-err' : 'status-msg';
     atualizarAcaoMarcarExpControle();
     return;
@@ -1355,8 +1394,13 @@ async function marcarComoImpressoSelecionados() {
 
   expCtrlSelecionados.clear();
   renderExpControle();
-  msg.textContent = marcados + ' item(ns) marcado(s) como impresso(s)'
-    + (jaTinham ? ' (' + jaTinham + ' já estavam marcados e ficaram com a data original)' : '')
+  msg.textContent = marcados + ' item(ns) ' + verbo + '(s)'
+    + (marcar ? ' como impresso(s)' : '')
+    + (foraDoAlvo
+        ? (marcar
+            ? ' (' + foraDoAlvo + ' já estava(m) marcado(s) e ficou com a data original)'
+            : ' (' + foraDoAlvo + ' já não estava(m) marcado(s))')
+        : '')
     + (naoGravados ? '. ATENÇÃO: ' + naoGravados + ' o banco recusou — recarregue para ver o que valeu' : '')
     + '.';
   msg.className = naoGravados ? 'status-msg status-err' : 'status-msg status-ok';
@@ -1945,7 +1989,7 @@ document.getElementById('expCtrlImprimirBtn').addEventListener('click', async ()
   // tinham etiqueta -- reimprimir não reescreve a data da primeira emissão,
   // que é a que responde "desde quando este item está etiquetado?".
   const msg = document.getElementById('expEtiquetaMsg');
-  const { marcados, naoGravados, error } = await marcarEtiquetasEmitidas(linhas);
+  const { marcados, naoGravados, error } = await gravarEtiquetaEmLote(linhas, true);
   if (!marcados && !naoGravados && !error) return;
 
   if (error) {
@@ -1980,7 +2024,7 @@ document.getElementById('expCtrlBody').addEventListener('change', (e) => {
   // Mudou a selecao: o "Confirmar" que estava na tela era sobre outro
   // conjunto, entao volta ao normal em vez de confirmar algo que a pessoa
   // nao leu.
-  expCtrlConfirmandoMarcacao = false;
+  expCtrlAcaoConfirmando = null;
   atualizarAcaoMarcarExpControle();
 });
 
@@ -1990,36 +2034,48 @@ document.getElementById('expCtrlSelTodos').addEventListener('change', (e) => {
   const marcar = e.target.checked;
   expCtrlSelecionados.clear();
   if (marcar) linhasFiltradasExpControle().forEach(l => expCtrlSelecionados.add(l.id));
-  expCtrlConfirmandoMarcacao = false;
+  expCtrlAcaoConfirmando = null;
   renderExpControle();
 });
 
-document.getElementById('expCtrlMarcarBtn').addEventListener('click', async () => {
+// Os dois botoes seguem o mesmo rito: primeiro clique pede confirmacao,
+// segundo aplica. Um so tratador para nao haver um caminho conferido e outro
+// nao -- os dois mudam dado.
+async function cliqueEtiquetaExpControle(marcar) {
   if (!isAdminAtual || !expCtrlSelecionados.size) return;
   const msg = document.getElementById('expEtiquetaMsg');
+  const acao = marcar ? 'marcar' : 'desmarcar';
 
-  if (!expCtrlConfirmandoMarcacao) {
+  if (expCtrlAcaoConfirmando !== acao) {
     // Segundo clique na propria tela em vez de confirm(): o Chrome oferece
     // "impedir que esta pagina crie novos dialogos" depois de alguns avisos
     // e, marcado isso, confirm() devolve false na hora -- o clique nao faz
     // nada e nenhuma mensagem aparece. Ver o CLAUDE.md, secao 7.
-    expCtrlConfirmandoMarcacao = true;
-    const aMarcar = contarAMarcarExpControle();
-    msg.textContent = aMarcar
-      ? 'Vai marcar ' + aMarcar + ' item(ns) como impresso(s). A tela não desfaz isso. Clique em Confirmar.'
-      : 'Os ' + expCtrlSelecionados.size + ' selecionado(s) já estão marcados: nada a fazer.';
+    expCtrlAcaoConfirmando = acao;
+    const quantos = contarEtiquetaExpControle(marcar);
+    msg.textContent = quantos
+      ? (marcar
+          ? 'Vai marcar ' + quantos + ' item(ns) como impresso(s). Clique em Confirmar.'
+          : 'Vai desmarcar ' + quantos + ' item(ns). A data e o nome de quem emitiu são apagados,'
+            + ' e a data original não volta depois. Clique em Confirmar.')
+      : 'Nenhum dos ' + expCtrlSelecionados.size + ' selecionado(s) precisa disso: nada a fazer.';
     msg.className = 'status-msg';
     atualizarAcaoMarcarExpControle();
     return;
   }
 
-  await marcarComoImpressoSelecionados();
-});
+  await aplicarEtiquetaSelecionados(marcar);
+}
+
+document.getElementById('expCtrlMarcarBtn')
+  .addEventListener('click', () => cliqueEtiquetaExpControle(true));
+document.getElementById('expCtrlDesmarcarBtn')
+  .addEventListener('click', () => cliqueEtiquetaExpControle(false));
 
 document.getElementById('expCtrlMarcarCancelarBtn').addEventListener('click', () => {
-  expCtrlConfirmandoMarcacao = false;
+  expCtrlAcaoConfirmando = null;
   const msg = document.getElementById('expEtiquetaMsg');
-  msg.textContent = 'Cancelado. Nada foi marcado.';
+  msg.textContent = 'Cancelado. Nada foi alterado.';
   msg.className = 'status-msg';
   atualizarAcaoMarcarExpControle();
 });

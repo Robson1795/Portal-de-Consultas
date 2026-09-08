@@ -549,20 +549,34 @@ esquecer, e a lista passaria a mentir.
 **Exportar não marca**, só Imprimir. Se a etiqueta passar a sair também do
 Excel, isto precisa mudar junto.
 
-### Marcar como impresso à mão (08/09/2026)
+### Marcar e desmarcar à mão (08/09/2026)
 
-Primeira coluna da aba Entrada: **caixa de seleção**, e o botão **✓ Marcar como
-impresso** ao lado da busca. Serve para o caso que a marcação automática não
-cobre — etiqueta que saiu por fora do portal, ou lista impressa antes de a
-coluna existir.
+Primeira coluna da aba Entrada: **caixa de seleção**, e dois botões ao lado da
+busca — **✓ Marcar como impresso** e **✗ Desmarcar**. Servem para o que a
+marcação automática não cobre: etiqueta que saiu por fora do portal, lista
+impressa antes de a coluna existir, e o engano que antes só se desfazia por
+`update` no painel do Supabase (ou seja: não se desfazia, porque quem está na
+expedição não abre o painel).
 
-**Só administrador vê a coluna e o botão.** ⚠️ E isso é trava de **tela, não de
-segurança**: o RLS de `exp_controle_itens` deixa qualquer conta aprovada da
+**Só administrador vê a coluna e os botões.** ⚠️ E isso é trava de **tela, não
+de segurança**: o RLS de `exp_controle_itens` deixa qualquer conta aprovada da
 unidade escrever, e o próprio Imprimir marca etiqueta para quem não é admin.
-O que esconder o botão evita é marcação em massa por engano — não invasão.
-Quem quisesse burlar usaria o inspetor, ou simplesmente imprimiria. Se um dia
-isso precisar ser trava de verdade, o lugar é uma função `security definer` no
-banco, como `definir_acesso()`.
+O que esconder os botões evita é mexida em massa por engano — não invasão.
+Quem quisesse burlar usaria o inspetor, ou simplesmente imprimiria.
+
+**Por que não é trava de verdade — decisão de 08/09/2026, com o Victor.**
+Existe como fazer: `revoke update (etiqueta_emitida_em, etiqueta_emitida_por)
+on exp_controle_itens from authenticated`, e a escrita só por função
+`security definer` que confere `eh_admin()`. Privilégio por coluna, então as
+outras colunas continuariam editáveis por quem é da unidade. **Não foi feito
+porque o banco não distingue "eu imprimi" de "eu cliquei no botão"** — são a
+mesma chamada. Travar a marcação em admin travaria as duas, e o Imprimir do
+pessoal da expedição (`estoque_alm`) deixaria de marcar a etiqueta. O
+indicador existe justamente porque imprimir *é* emitir; se alguém tiver de
+marcar à mão depois de cada impressão, um dia esquece e o indicador passa a
+mentir. Trocar uma trava fraca por um indicador falso é piorar. Se um dia isso
+precisar mudar, a opção do meio é a função aceitar `admin` **e** `estoque_alm`
+da própria unidade.
 
 - **"Vale o que está na tela":** a seleção acompanha a busca. Item que sai da
   lista sai da seleção, e a caixa do cabeçalho marca só o que a busca mostra —
@@ -585,9 +599,12 @@ banco, como `definir_acesso()`.
   `id` é um uuid de 36 caracteres. Sem os blocos, "selecionar tudo" numa
   unidade cheia estouraria o limite de tamanho da URL, e o sintoma seria
   "marcar 5 funciona, marcar 300 falha".
-- O Imprimir e o botão usam **a mesma** `marcarEtiquetasEmitidas()`. Duplicar
-  faria as duas regras saírem de sincronia, e a data passaria a significar
-  coisas diferentes conforme o caminho.
-
-**Não existe desmarcar pela tela.** Marcou errado, hoje se resolve por `update`
-no painel do Supabase. Se isso acontecer mais de uma vez, vira botão.
+- Os **três** caminhos usam a mesma `gravarEtiquetaEmLote(linhas, marcar)` —
+  Imprimir, Marcar e Desmarcar. Duplicar faria as regras saírem de sincronia, e
+  a data passaria a significar coisas diferentes conforme o caminho. Foi
+  exatamente assim que o item A1 da auditoria sobreviveu tanto tempo: corrigido
+  num arquivo, esquecido no outro.
+- **Desmarcar apaga a data e o nome**, e a data original não volta. A
+  confirmação diz isso antes. Enquanto um botão espera confirmação o outro
+  fica escondido: dois botões que mudam dado, um deles escrito "Confirmar", é
+  convite a clicar no errado.
