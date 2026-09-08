@@ -135,47 +135,33 @@ grant execute on function public.substituir_estoque(jsonb) to authenticated;
 
 
 -- ---------------------------------------------------------------------
--- PARTE 2 — Bobinas de aço
+-- PARTE 2 — Bobinas de aço: NÃO ESTÁ MAIS AQUI
 --
--- Aqui a substituição é da tabela inteira, não por unidade: a planilha de
--- bobinas sai completa da empresa, com a coluna `est` dentro. Mesmo assim
--- ganha a transação, pelo mesmo motivo.
+-- ⚠️ Este script definia `substituir_bobinas()` apagando a tabela INTEIRA:
 --
--- Formato: [ {"item":"BOB-4471","descricao":"...","est":"01","dep":"PAT",
---             "localizacao":"PATIO A","lote":"L-8891","um":"KG",
---             "qtd_liquida":4820}, ... ]
+--     delete from bobinas_aco where id >= 0;   -- TODAS as unidades
+--
+-- Isso está errado desde 08/09/2026. A substituição passou a ser POR UNIDADE,
+-- em `sql/fase15-bobinas-por-unidade.sql`: apaga e repõe só as unidades
+-- presentes na planilha, e unidade que não aparecer não é tocada. Com a versão
+-- antiga, colar a planilha de uma unidade apagava as bobinas das outras sete —
+-- e ninguém descobriria antes do inventário.
+--
+-- A definição foi tirada daqui de propósito, e não só marcada como obsoleta:
+-- enquanto as duas versões existissem no repositório, rodar este arquivo de
+-- novo (para conferir, para refazer o banco, ou por ser o script "oficial" da
+-- substituição em lote) desfaria a correção em silêncio. Uma função, um
+-- arquivo.
+--
+-- Ordem de execução num banco novo: este script e depois o fase15.
 -- ---------------------------------------------------------------------
-
-create or replace function public.substituir_bobinas(linhas jsonb, quem text default null)
-returns jsonb
-language plpgsql security definer set search_path = public as $$
-begin
-  if not public.pode_atualizar_bobinas() then
-    raise exception 'Sem permissão para atualizar a planilha de bobinas.';
-  end if;
-  if jsonb_typeof(linhas) <> 'array' or jsonb_array_length(linhas) = 0 then
-    raise exception 'A planilha de bobinas veio vazia: nada a atualizar.';
-  end if;
-
-  delete from bobinas_aco;
-
-  insert into bobinas_aco (item, descricao, est, dep, localizacao, lote, um,
-                           qtd_liquida, atualizado_em, atualizado_por)
-  select r.item, r.descricao, r.est, r.dep, r.localizacao, r.lote, r.um,
-         r.qtd_liquida, now(), nullif(btrim(coalesce(quem, '')), '')
-    from jsonb_array_elements(linhas) i,
-         jsonb_populate_record(null::bobinas_aco, i) r;
-
-  return jsonb_build_object('ok', true, 'bobinas', jsonb_array_length(linhas));
-end $$;
-
-grant execute on function public.substituir_bobinas(jsonb, text) to authenticated;
 
 
 -- ---------------------------------------------------------------------
 -- PARTE 3 — Conferência
 --
 -- Esperado: as duas funções listadas, ambas security definer (prosecdef = t).
+-- `substituir_bobinas` só aparece depois de rodar o fase15 (ver PARTE 2).
 -- ---------------------------------------------------------------------
 
 select p.proname            as funcao,

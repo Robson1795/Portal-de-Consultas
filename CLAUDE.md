@@ -36,6 +36,7 @@ servidos são o próprio código-fonte. Divididos na Fase 2a (03/09/2026):
 | `js/ocr.js` | Validação de bobina por foto |
 | `js/configuracoes.js` | Aba Configurações: administração de usuários (Fase 4) |
 | `js/requisicao.js` | Tela Requisição ALM e o cadastro de centro de custo e item (Fase 6) |
+| `js/programacao.js` | Programação de Separação e Controle EXP Acessórios — o maior arquivo do projeto (~2.200 linhas) |
 
 São **scripts clássicos, não módulos**, carregados nessa ordem no fim do `body`. O `let`/`const` de
 nível superior vai para o escopo lexical global, compartilhado entre os arquivos — é por isso que o
@@ -257,6 +258,11 @@ Onze tabelas. Os scripts que as criam estão em `sql/` — mas confira a seção
   Nada é gravado sem a prévia — quantos itens caem em cada unidade, quais colunas foram
   reconhecidas, e o que foi ignorado e por quê. Unidade que não aparece na planilha **não é
   tocada**; unidade com zero itens é **recusada** (seria o mesmo que apagar).
+  ⚠️ A confirmação é um segundo clique na própria tela e **não é o confirm() do navegador**.
+  O Chrome oferece "impedir que esta página crie novos diálogos" depois de alguns avisos e,
+  marcado isso, `confirm()` devolve `false` na hora: o clique não faz nada e nenhuma mensagem
+  aparece — indistinguível de botão quebrado. Aconteceu em 08/09/2026. Ver
+  `pedirConfirmacaoLote()` em `js/configuracoes.js`. **Não troque de volta por `confirm()`.**
   ⚠️ A gravação é uma chamada a `substituir_estoque()`/`substituir_bobinas()`
   (`sql/fase12-substituir-estoque-em-lote.sql`), que rodam **numa transação**: falha qualquer
   linha, nada muda. Foi o que fechou o item A2 da auditoria — antes o `delete` e o `insert`
@@ -310,15 +316,28 @@ própria tela de Requisição.
 
 ## 9. Módulo "Bobinas de Aço"
 
-Aba separada, por um link acima da tabela principal, protegida por senha de sessão.
+Aba separada, por um link acima da tabela principal. **Não há senha aqui** — a de
+bobinas saiu na Fase 2b e quem controla o acesso é o perfil (`estoque_aco` ou `admin`).
 
 - **Planilha de entrada:** TSV com 8 colunas nesta ordem — Item, Descrição Item, Est, Dep,
   Localizacao, Lote, Un, Qtd Liquida. Cola direto da planilha da empresa.
 - **Tabela:** todas as colunas + Saldo Físico (editável) + Divergência + Saldo Ajustado.
 - **Cards:** total auditado, com divergência, OK.
 - **Tempo real** igual à contagem geral.
-- Ao colar a planilha, o código **apaga todas as linhas de `bobinas_aco` e insere as novas** —
-  é substituição total, não atualização incremental.
+- **A tela mostra só a unidade selecionada** (`.eq('est', unidadeAtual)` em `loadBobinas()`), e
+  trocar a unidade no cabeçalho recarrega a lista. Até 08/09/2026 mostrava as bobinas de todas
+  as unidades juntas, com o endereço de outra fábrica no meio da contagem.
+- ⚠️ **A carga é paginada de mil em mil, e a paginação não é enfeite:** o PostgREST devolve no
+  máximo 1.000 linhas por requisição e **não avisa** que cortou. Sem o laço de `.range()` a
+  tela mostrava as primeiras mil de 3.436 e parecia completa. Não simplifique para uma
+  consulta só.
+- Ao colar a planilha, a **substituição é por unidade**: `substituir_bobinas()`
+  (`sql/fase15-bobinas-por-unidade.sql`) apaga e repõe apenas as unidades presentes na planilha,
+  numa transação. **Unidade que não aparecer não é tocada** — antes o `delete` levava a tabela
+  inteira, então colar a planilha de uma unidade apagava as bobinas de todas as outras, e isso
+  só apareceria no inventário. Linha sem a coluna `Est` faz a função **recusar a planilha
+  inteira**: sem ela não há como saber de qual unidade é a bobina, e adivinhar manda a linha
+  para a tela de quem não tem nada com ela.
 
 ---
 
@@ -458,3 +477,74 @@ Hoje ele cria só estrutura, e o RLS é assunto dos scripts da Fase 1.
 
 9. **Confirmar as UF de 103, 104, 107 e 110 e a cidade da 109.** Até então `rotuloUnidade()`
     imprime só o que sabe, em vez de `Unidade 107 — Loja ()`.
+
+---
+
+## 13. Programação de Separação e Controle EXP Acessórios
+
+Entraram em 08/09/2026, vivem em `js/programacao.js` e não estavam neste
+documento até 08/09. **Só `estoque_alm` e `admin` veem essas duas páginas**: elas
+movem material de verdade, diferente da Requisição, que é só pedir.
+
+### Programação de Separação (três sub-abas)
+
+Cruza as **duas planilhas manuais do PCP** pelo `numero_pedido`:
+Programação de Acessórios (os itens) e Pedidos Programados (o agendamento do
+caminhão).
+
+| Sub-aba | Para quê |
+|---|---|
+| **Separação** | Item a item, ordenado pelo caminhão que sai primeiro — não pela ordem em que a planilha foi digitada. É a razão de a aba existir |
+| **Endereçamento** | Onde cada item ficou guardado na expedição |
+| **Carregamento** | Agrupado por veículo (CARRETA, TRUCK, TRUCK 8,5M) e horário, com o aviso da planilha em destaque e o botão de registrar saída |
+
+Tabelas: `pedidos`, `pedido_itens`, `exp_acessorios`, `registro_saida`,
+`log_movimentacao`, e a view **`vw_pedidos_prioridade`**, que calcula no banco
+`momento_carregamento`, `minutos_para_carregamento` e `prioridade`
+(atrasado / urgente / atenção / no prazo / concluído / sem agenda).
+Scripts: `sql/programacao-01` e `-02`.
+
+⚠️ Sem a view a tela **não carrega a lista** — foi o que aconteceu quando o
+`programacao-02` ficou sem rodar.
+
+### Controle EXP Acessórios (três sub-abas)
+
+Plataforma própria de entrada e saída dos itens já separados. **Não depende das
+planilhas**: o item pode ser digitado direto. Tabela `exp_controle_itens`
+(`sql/programacao-03` a `-06`).
+
+| Sub-aba | Para quê |
+|---|---|
+| **Entrada** | Onde o item foi guardado. A localização por item é o que responde "onde está?" sem procurar |
+| **Saída / Conferência** | O mesmo registro muda de status (`na_expedicao` → `retirado`), guardando quem retirou e quando. Nunca apaga: vira histórico pesquisável |
+| **Catálogo** | `catalogo_exp_itens`, a planilha do sistema, para ajudar a preencher item, referência e lote |
+
+Duas interfaces para o mesmo registro — "tudo de uma vez" no computador e
+"passo a passo" no celular, um campo grande por tela. Entra no passo a passo
+sozinho em tela pequena, e a escolha fica salva.
+
+Imprimir e exportar (Excel, CSV, HTML) **respeitam a busca**: para tirar só uma
+localização, digite ela na busca antes de clicar.
+
+### Indicador de etiqueta emitida (08/09/2026)
+
+Coluna **Etiqueta** na aba Entrada: ✓ verde para o item cuja etiqueta já saiu,
+com a data e quem emitiu no tooltip. Sem isso, quem chega no meio do turno não
+sabe o que já foi etiquetado — e etiqueta de novo, ou deixa passar.
+
+**Quem marca é o próprio Imprimir**, porque imprimir a lista *é* o ato de
+emitir as etiquetas. Marcar num segundo clique seria mais um passo para
+esquecer, e a lista passaria a mentir.
+
+- Marca só as linhas **daquela impressão** (respeita a busca).
+- Marca só as que **ainda não tinham** etiqueta: reimprimir não reescreve a
+  data da primeira emissão, que é a que responde "desde quando está
+  etiquetado?".
+- `etiqueta_emitida_em` é `timestamptz`, não `boolean`: a data também responde
+  "desde quando" e "quem", que é o que se pergunta quando há divergência no
+  inventário. Ver `sql/fase16-etiqueta-emitida.sql`.
+- Se a gravação falhar, a tela diz que **a impressão saiu mas a marcação não** —
+  senão a pessoa acha que nada aconteceu e imprime de novo.
+
+**Exportar não marca**, só Imprimir. Se a etiqueta passar a sair também do
+Excel, isto precisa mudar junto.
