@@ -628,11 +628,21 @@ async function salvarEstoqueMinimo(id, valorBruto, input) {
   if (novoValor === (item.estoque_minimo != null ? parseQtd(item.estoque_minimo) : null)) return;
 
   input.disabled = true;
-  const { error } = await sb.from('estoque').update({ estoque_minimo: novoValor }).eq('id', id);
+  // .select() de propósito: sem ele, um UPDATE que a política de RLS barra
+  // (ou que não acha a linha por qualquer motivo) volta com error = null e
+  // data vazio -- parece "salvo" (sem erro) mas não gravou nada. Só dá pra
+  // pegar isso conferindo se alguma linha voltou.
+  const { data, error } = await sb.from('estoque')
+    .update({ estoque_minimo: novoValor }).eq('id', id).select('id');
   input.disabled = false;
 
   if (error) {
-    alert('Não foi possível salvar o estoque mínimo: ' + error.message);
+    alert('Não foi possível salvar o estoque seguro: ' + error.message);
+    input.value = item.estoque_minimo != null ? item.estoque_minimo : '';
+    return;
+  }
+  if (!data || data.length === 0) {
+    alert('Não foi possível salvar o estoque seguro: nenhuma linha foi atualizada (sem permissão para esta unidade?). Fale com o administrador.');
     input.value = item.estoque_minimo != null ? item.estoque_minimo : '';
     return;
   }
