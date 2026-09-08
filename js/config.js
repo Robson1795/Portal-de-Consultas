@@ -45,5 +45,65 @@ function resolverIdentificador(valor) {
   return `${usuario}@${DOMINIO_USUARIO}`;
 }
 
+// A biblioteca do Supabase vem de CDN, e no 4G do galpão ela às vezes não
+// chega. Sem esta conferência, a linha de baixo estourava, o `const sb` nunca
+// completava, e os oito arquivos seguintes morriam com "sb is not defined" —
+// erro que não diz nada a quem está com o celular na mão no meio do corredor.
+// Aconteceu em 08/09/2026, no celular.
+if (!window.supabase || typeof window.supabase.createClient !== 'function') {
+  document.body.insertAdjacentHTML('afterbegin',
+    '<div style="margin:16px; padding:16px 18px; border-radius:12px;'
+    + ' background:#fee2e2; border:1px solid #b91c1c; color:#991b1b;'
+    + ' font: 15px/1.45 -apple-system, \'Segoe UI\', Roboto, Arial, sans-serif;">'
+    + '<b>Não foi possível abrir o portal.</b><br>'
+    + 'A biblioteca de acesso ao banco não chegou — quase sempre é a conexão,'
+    + ' não a sua conta. Recarregue a página; se não resolver, tente no Wi-Fi.'
+    + '</div>');
+  // Parar aqui é de propósito: sem cliente do banco, nenhuma tela funciona,
+  // e seguir só produziria uma cascata de erros no console.
+  throw new Error('A biblioteca do Supabase não carregou.');
+}
+
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ---- Bibliotecas pesadas, carregadas só quando usadas ---------------------
+//
+// Até 08/09/2026 o index.html baixava as três bibliotecas em toda abertura de
+// página, mesmo para quem só ia consultar um item:
+//
+//     supabase-js          213 KB   (esta sim é necessária sempre)
+//     tesseract.js          65 KB   (só a leitura de etiqueta por foto usa)
+//     xlsx.full.min.js     861 KB   (só o Exportar Excel do Controle EXP usa)
+//
+// Somavam 1,1 MB antes de a tela abrir. No celular do galpão isso não era só
+// lentidão: bastava um dos pedidos falhar para o portal inteiro não subir.
+// Agora as duas últimas são buscadas no momento do uso, uma vez por sessão.
+const CDN_TESSERACT = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+const CDN_XLSX = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+
+const bibliotecasPedidas = {};
+
+// `jaVeio` é uma função, não um valor: precisa ser reavaliada depois do
+// download para confirmar que a biblioteca realmente se registrou no window.
+function carregarBiblioteca(nome, url, jaVeio) {
+  if (jaVeio()) return Promise.resolve();
+
+  if (!bibliotecasPedidas[nome]) {
+    bibliotecasPedidas[nome] = new Promise((pronto, falhou) => {
+      const tag = document.createElement('script');
+      tag.src = url;
+      tag.onload = () => jaVeio()
+        ? pronto()
+        : falhou(new Error(nome + ' baixou incompleta. Recarregue a página.'));
+      tag.onerror = () => {
+        // Esquece a promessa recusada para que uma nova tentativa possa
+        // baixar de novo, em vez de repetir a falha para sempre.
+        delete bibliotecasPedidas[nome];
+        falhou(new Error('Não foi possível baixar ' + nome + '. Confira a conexão.'));
+      };
+      document.head.appendChild(tag);
+    });
+  }
+  return bibliotecasPedidas[nome];
+}
 
