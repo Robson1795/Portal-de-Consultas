@@ -1498,27 +1498,34 @@ document.getElementById('cancelEditBtn').addEventListener('click', () => {
 });
 
 document.getElementById('saveDataBtn').addEventListener('click', async () => {
-  const records = parsePastedTsv(pasteArea.value).map(r => ({ ...r, unidade: unidadeAtual, atualizado_por: nomeUsuarioAtual }));
-  if (records.length === 0) {
+  const itens = parsePastedTsv(pasteArea.value);
+  if (itens.length === 0) {
     saveMsg.textContent = 'Nenhum item válido encontrado no texto colado.';
     saveMsg.className = 'status-msg status-err';
     return;
   }
   saveMsg.textContent = 'Salvando no banco de dados...';
   saveMsg.className = 'status-msg';
-  try {
-    // Apaga só os itens DESSA unidade e insere a nova lista (abordagem simples e previsível)
-    const { error: delError } = await sb.from('estoque').delete().eq('unidade', unidadeAtual);
-    if (delError) throw delError;
-    const { error: insError } = await sb.from('estoque').insert(records);
-    if (insError) throw insError;
-    saveMsg.textContent = `Atualizado! ${records.length} itens da Unidade ${unidadeAtual} publicados para todos que abrirem o link.`;
-    saveMsg.className = 'status-msg status-ok';
-    await loadData();
-  } catch (e) {
-    saveMsg.textContent = 'Erro ao salvar: ' + e.message;
+
+  // Uma chamada, uma transação. Antes eram duas -- delete e depois insert --
+  // e duas chamadas do navegador nunca serão uma transação: se o insert
+  // falhasse depois de o delete passar, a unidade ficava SEM ESTOQUE e não
+  // havia rollback (AUDITORIA.md, item A2). Agora o delete e o insert vivem
+  // dentro de substituir_estoque() no banco: falha qualquer linha, nada muda.
+  const { error } = await sb.rpc('substituir_estoque', {
+    payload: [{ unidade: unidadeAtual, atualizado_por: nomeUsuarioAtual, itens }]
+  });
+
+  if (error) {
+    saveMsg.textContent = 'NÃO SALVOU: ' + error.message
+      + ' — nada foi alterado, o estoque anterior continua no lugar.';
     saveMsg.className = 'status-msg status-err';
+    console.error('Falha ao substituir o estoque da unidade:', error.message);
+    return;
   }
+  saveMsg.textContent = `Atualizado! ${itens.length} itens da Unidade ${unidadeAtual} publicados para todos que abrirem o link.`;
+  saveMsg.className = 'status-msg status-ok';
+  await loadData();
 });
 
 // Chamada pelo seletor de unidade do cabecalho (js/navegacao.js). Antes era

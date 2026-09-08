@@ -3,7 +3,7 @@
 Contexto do projeto para qualquer agente de IA ou pessoa que for mexer neste repositório.
 Sempre em **português do Brasil**.
 
-**Atualizado:** 04/09/2026
+**Atualizado:** 08/09/2026
 **Mantenedores:** Robson (dono do projeto e admin geral) · Victor Dobner (colaborador)
 
 > Este arquivo é lido automaticamente pelo Claude Code ao abrir a pasta do projeto.
@@ -251,6 +251,19 @@ Onze tabelas. Os scripts que as criam estão em `sql/` — mas confira a seção
   A senha é liberada uma vez por sessão do navegador.
 - **Atualizar dados (admin/gerente):** cola planilha TSV (Item, Descrição, UM, Localização,
   Quantidade); substitui só os itens da unidade selecionada e grava `atualizado_por`.
+- **Atualizar estoques em lote (aba Configurações, só admin):** cola **uma** planilha com o
+  estoque de **todas** as unidades e o portal separa por unidade sozinho, lendo a coluna de
+  unidade do cabeçalho. Três sub-abas: Almoxarifado, SESMT e Aço (bobinas).
+  Nada é gravado sem a prévia — quantos itens caem em cada unidade, quais colunas foram
+  reconhecidas, e o que foi ignorado e por quê. Unidade que não aparece na planilha **não é
+  tocada**; unidade com zero itens é **recusada** (seria o mesmo que apagar).
+  ⚠️ A gravação é uma chamada a `substituir_estoque()`/`substituir_bobinas()`
+  (`sql/fase12-substituir-estoque-em-lote.sql`), que rodam **numa transação**: falha qualquer
+  linha, nada muda. Foi o que fechou o item A2 da auditoria — antes o `delete` e o `insert`
+  eram duas chamadas do navegador, e uma falha no meio deixava a unidade sem estoque.
+  A coluna de unidade é achada por sinônimo (Unidade, Estab, Estabelecimento, Est, Filial), e a
+  **UM é resolvida antes** — em português "unidade" é ambíguo, e sem essa ordem uma coluna "Un"
+  de unidade de medida seria lida como estabelecimento.
 
 ---
 
@@ -420,33 +433,28 @@ Hoje ele cria só estrutura, e o RLS é assunto dos scripts da Fase 1.
 
 **De código:**
 
-4. **🔴 `delete` + `insert` sem transação** (A2 da auditoria), na atualização de planilha do
-   estoque e das bobinas. Se o `insert` falhar depois de o `delete` passar, a tabela fica vazia e
-   não há rollback. É o item mais grave que resta. Correção: os dois numa função `rpc` no
-   Postgres.
-
-5. **Veredito do OCR com vários lotes** (O3) — hoje é suprimido em vez de errado; corrigir de
+4. **Veredito do OCR com vários lotes** (O3) — hoje é suprimido em vez de errado; corrigir de
    verdade pede campo de lote no modal e em `contagem_bobinas_ocr`. E **o alerta de bobina não
    tem recorte por unidade** (O7): um consultor de Anápolis recebe o banner de Araquari.
 
-6. **Pessoas com nome fixo no código** (M2): `ADMIN_EMAIL` em `js/config.js` e
+5. **Pessoas com nome fixo no código** (M2): `ADMIN_EMAIL` em `js/config.js` e
    `j.lisboa@kingspanisoeste.com.br` em `js/estoque.js`. Já existe o padrão certo no projeto —
    tabelas como `gerentes_unidade` e `editores_bobinas`. E **os três logos idênticos em base64**
    no `index.html` (M3): 24 KB baixados sem necessidade a cada acesso.
 
 **De operação:**
 
-7. **Hospedagem com ponto único de falha.** O repositório está numa conta pessoal do GitHub e o
+6. **Hospedagem com ponto único de falha.** O repositório está numa conta pessoal do GitHub e o
    banco num projeto Supabase de conta pessoal, ambos com um único dono. Se aquela conta se
    perder, o acesso ao banco vai com ela e ninguém mais consegue recuperar. Duas melhorias
    baratas: adicionar um segundo membro ao projeto no Supabase (`Settings → Members`) e manter o
    export das tabelas em dia. Vale reavaliar a hospedagem antes de o sistema entrar em uso real.
 
-8. **Dados de produto:** cadastrar mais itens com foto e embalagem em `fichas_tecnicas`; fotos das
+7. **Dados de produto:** cadastrar mais itens com foto e embalagem em `fichas_tecnicas`; fotos das
    massas vedantes (Chemiseal); aguardando a Multi-Fix sobre catálogo de parafusos com códigos
    internos.
 
-9. **Unidades 101 e 105 sem dados reais** — só a estrutura está pronta.
+8. **Unidades 101 e 105 sem dados reais** — só a estrutura está pronta.
 
-10. **Confirmar as UF de 103, 104, 107 e 110 e a cidade da 109.** Até então `rotuloUnidade()`
+9. **Confirmar as UF de 103, 104, 107 e 110 e a cidade da 109.** Até então `rotuloUnidade()`
     imprime só o que sabe, em vez de `Unidade 107 — Loja ()`.

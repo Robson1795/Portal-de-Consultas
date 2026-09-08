@@ -781,6 +781,65 @@
       </div>
     </div>
 
+    <!-- ---- Atualizar estoques em lote: uma planilha, todas as unidades ----
+         Só admin: a seção inteira fica escondida para os outros perfis (ver
+         carregarLote() em js/configuracoes.js), e a função no banco confere a
+         permissão de novo, unidade por unidade. -->
+    <div class="req-secao" id="loteSecaoTitulo">Atualizar estoques em lote</div>
+    <div class="panel" id="loteSecao">
+      <div class="cfg-barra">
+        <div id="loteAbas" style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn btn-primary" data-lote-aba="alm">Almoxarifado</button>
+          <button class="btn" data-lote-aba="sesmt">SESMT</button>
+          <button class="btn" data-lote-aba="aco">Aço (bobinas)</button>
+        </div>
+        <span class="status-msg" id="loteMsg" style="margin-left:auto;"></span>
+      </div>
+
+      <div style="padding:0 16px 16px;">
+        <div class="cfg-email" id="loteFormato" style="margin-bottom:8px;"></div>
+
+        <textarea id="loteTexto"
+                  placeholder="Cole aqui as células copiadas do Excel (Ctrl+C na planilha, Ctrl+V aqui)."
+                  style="width:100%; min-height:130px; padding:9px 11px; border:1px solid var(--border);
+                         border-radius:8px; font-size:12.5px; font-family:monospace; resize:vertical;"></textarea>
+
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px;">
+          <button class="btn btn-primary" id="loteConferirBtn">Conferir</button>
+          <label class="btn" style="margin:0;">
+            Escolher arquivo CSV
+            <input type="file" id="loteArquivo" accept=".csv,text/csv,text/plain" style="display:none;">
+          </label>
+          <span class="cfg-email" id="loteArquivoNome"></span>
+          <button class="btn" id="loteLimparBtn" style="margin-left:auto;">Limpar</button>
+        </div>
+
+        <!-- A prévia é obrigatória antes de gravar: substituir estoque é
+             irreversível, e a pessoa precisa ver quantos itens vão para cada
+             unidade ANTES de confirmar. -->
+        <div id="lotePrevia" style="margin-top:12px;"></div>
+      </div>
+    </div>
+
+    <div class="cfg-nota" id="loteNota">
+      <b>Como funciona.</b> Cole a planilha com o estoque de <b>todas</b> as unidades de uma vez.
+      O sistema lê o cabeçalho, encontra a coluna de unidade e separa as linhas por unidade
+      sozinho. Antes de gravar, mostra quantos itens caíram em cada uma — confira ali e só então
+      confirme.
+      <br><br>
+      <b>É substituição, não acréscimo.</b> Para cada unidade que aparecer na planilha, o estoque
+      anterior daquela unidade é apagado e trocado pelo que veio. Unidade que <b>não</b> aparecer
+      na planilha não é tocada.
+      <br><br>
+      <b>Tudo ou nada.</b> A troca acontece numa transação única no banco: se qualquer linha
+      falhar, nada é gravado e o estoque anterior continua no lugar. Antes disso o portal apagava
+      e inseria em duas chamadas separadas — e uma falha no meio deixava a unidade sem estoque,
+      sem volta (item A2 da auditoria).
+      <br><br>
+      <b>Planilha sem itens para uma unidade é recusada.</b> "Atualizar com zero itens" é
+      indistinguível de "apagar o estoque da unidade", e apagar tem de ser um pedido explícito.
+    </div>
+
     <div class="cfg-nota">
       <b>E-mails do ALM.</b> Destinatários da Requisição ALM daquela unidade. Vários endereços,
       separados por ponto e vírgula. Unidade sem e-mail cadastrado tem o envio desabilitado —

@@ -29,7 +29,7 @@ existe, e `estoque`, `acessos`, `usuarios_permitidos`, `config_unidade` e `bobin
 | C2 · escrita aberta no `estoque` | ✅ corrigido pela Fase 1 |
 | C3 · aprovação de conta burlável | ✅ fechado pelo gatilho `forca_cadastro_neutro` |
 | A1 · contagem parecia salva sem estar | ✅ corrigido em 04/09 |
-| A2 · `delete` + `insert` sem transação | 🔴 **aberto** — é o item mais grave que resta |
+| A2 · `delete` + `insert` sem transação | ✅ corrigido em 08/09 — agora é uma função transacional |
 | A3 · `seedInitialData` | ✅ removido junto com C1 |
 | A4 · "Limpar tudo" sem checar quem clica | ✅ corrigido em 04/09 (falta rodar o SQL) |
 | M1 · senhas em texto claro no código | ✅ corrigido na Fase 7 |
@@ -198,7 +198,27 @@ Mesmo padrão em `L1203`, `L1243`, `L1425` (limpar contagens), `L665` (log de ac
 contagem, só pintar de verde depois de confirmar. Este é o item de maior impacto prático da
 lista.
 
-### A2. `delete` + `insert` sem transação: a unidade pode ficar vazia
+### A2. ✅ CORRIGIDO em 08/09/2026 — `delete` + `insert` sem transação
+
+Duas chamadas separadas do navegador nunca serão uma transação. Dentro de uma função plpgsql,
+sim: o corpo inteiro roda numa transação só.
+
+`substituir_estoque(payload)` e `substituir_bobinas(linhas)`
+(`sql/fase12-substituir-estoque-em-lote.sql`) passaram a fazer o `delete` e o `insert` juntos.
+Falha qualquer linha, o Postgres desfaz tudo e o estoque anterior continua no lugar. O
+navegador faz **uma** chamada, e a mensagem de erro diz explicitamente que nada foi alterado —
+antes a pessoa ficava sem saber se havia ficado pela metade.
+
+As duas funções recusam lista vazia: "atualizar com zero itens" é indistinguível de "apagar o
+estoque da unidade", e apagar tem de ser um pedido explícito.
+
+A correção veio junto com a aba **Atualizar estoques em lote**, que permite colar uma planilha
+com várias unidades de uma vez — e é justamente o caso em que a falta de transação poderia
+esvaziar meia empresa de uma vez.
+
+O texto original do achado fica abaixo, como registro.
+
+### A2 (original). `delete` + `insert` sem transação: a unidade pode ficar vazia
 
 `L1762-1765` (estoque) e `L2068-2070` (bobinas) seguem o mesmo padrão:
 
@@ -508,11 +528,10 @@ de cima a baixo — então sobraram políticas antigas em cima das novas, e res�
 |---|---|---|
 | 1 | **Rodar `sql/fase11-limpar-contagem-restrito.sql`** | O A4 só está corrigido na tela até isso acontecer |
 | 2 | **Criar o bucket `fotos-bobinas`** (O5) | Uma tela no painel do Supabase, e a prova da conferência para de ser perdida |
-| 3 | **A2** — transação no `delete` + `insert` | O item mais grave que resta: a unidade pode ficar sem estoque, sem rollback. Pede função no Postgres |
-| 4 | **O3 completo** — lote no modal e na tabela do OCR | Mudança de desenho: hoje o veredito é suprimido em vez de errado |
-| 5 | **O7** — recortar o alerta de bobina por unidade | Pede teste com duas sessões |
-| 6 | **M2** — tirar os e-mails fixos do código | `ADMIN_EMAIL` em `js/config.js` e `j.lisboa@...` em `js/estoque.js`. Já existe o padrão certo: tabelas como `gerentes_unidade` |
-| 7 | **M3** — os três logos idênticos | 24 KB por acesso, sentido no celular do galpão |
-| 8 | **B1, B3, O9** | Faxina, sem pressa |
+| 3 | **O3 completo** — lote no modal e na tabela do OCR | Mudança de desenho: hoje o veredito é suprimido em vez de errado |
+| 4 | **O7** — recortar o alerta de bobina por unidade | Pede teste com duas sessões |
+| 5 | **M2** — tirar os e-mails fixos do código | `ADMIN_EMAIL` em `js/config.js` e `j.lisboa@...` em `js/estoque.js`. Já existe o padrão certo: tabelas como `gerentes_unidade` |
+| 6 | **M3** — os três logos idênticos | 24 KB por acesso, sentido no celular do galpão |
+| 7 | **B1, B3, O9** | Faxina, sem pressa |
 
 Os itens 1 e 2 são de painel, não de código, e destravam o resto.
