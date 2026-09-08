@@ -54,11 +54,12 @@ create or replace function public.substituir_estoque(payload jsonb)
 returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
-  bloco  jsonb;
-  uni    text;
-  itens  jsonb;
-  quem   text;
-  resumo jsonb := '[]'::jsonb;
+  bloco      jsonb;
+  uni        text;
+  itens      jsonb;
+  quem       text;
+  resumo     jsonb := '[]'::jsonb;
+  minimo_bkp jsonb;
 begin
   if jsonb_typeof(payload) <> 'array' then
     raise exception 'O payload precisa ser uma lista de blocos { unidade, itens }.';
@@ -97,6 +98,17 @@ begin
     itens := bloco -> 'itens';
     quem  := nullif(btrim(coalesce(bloco ->> 'atualizado_por', '')), '');
 
+    -- Guarda o Estoque Seguro (estoque_minimo) de cada item antes de apagar.
+    -- Sem isso, colar uma planilha nova apagava tudo que a pessoa tinha
+    -- configurado manualmente ali -- a planilha colada nunca trouxe essa
+    -- coluna, e o delete+insert abaixo não tem como recriar o que já não
+    -- existe mais. Casa por `item`, não por `id` (o id é novo a cada
+    -- substituição). Bug relatado pelo Robson em 2026-09-08: editou o
+    -- Estoque Seguro de vários itens e, ao colar uma planilha nova depois,
+    -- os valores voltaram como se nunca tivessem sido salvos.
+    select jsonb_object_agg(item, estoque_minimo) into minimo_bkp
+      from estoque where unidade = uni and estoque_minimo is not null;
+
     delete from estoque where unidade = uni;
 
     insert into estoque (item, descricao, um, localizacao, quantidade,
@@ -105,6 +117,12 @@ begin
            uni, now(), quem
       from jsonb_array_elements(itens) i,
            jsonb_populate_record(null::estoque, i) r;
+
+    if minimo_bkp is not null then
+      update estoque e
+         set estoque_minimo = (minimo_bkp ->> e.item)::numeric
+       where e.unidade = uni and minimo_bkp ? e.item;
+    end if;
 
     resumo := resumo || jsonb_build_object('unidade', uni,
                                            'itens', jsonb_array_length(itens));

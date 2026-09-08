@@ -47,6 +47,11 @@ function render(rows, intervalo) {
   const emptyMsg = document.getElementById('emptyMsg');
   document.getElementById('loadingMsg').style.display = 'none';
 
+  // Coluna e card do Estoque Mínimo são só do Robson -- ver
+  // podeVerEstoqueMinimo(). Sincroniza o cabeçalho da coluna aqui (a
+  // célula de cada linha já se ajusta sozinha no template abaixo).
+  document.querySelector('.col-estmin').style.display = podeVerEstoqueMinimo() ? 'table-cell' : 'none';
+
   // O card e a paginacao mostram o total FILTRADO, nao o da unidade toda.
   const total = rows.length;
   document.getElementById('stat-count').textContent = total.toLocaleString('pt-BR');
@@ -101,6 +106,11 @@ function render(rows, intervalo) {
         ? `<button class="padrao-btn" data-item="${escapeHtml(r.item)}" data-qtd="${escapeHtml(r.quantidade)}" title="Ver padrão de caixas esperado">📦</button>`
         : (podeEditarEmbalagem() ? `<button class="avulso-btn" data-item="${escapeHtml(r.item)}" title="Marcar como item avulso, sem padrão de caixa">AVULSO</button>` : '')}</td>
       <td class="num">${escapeHtml(r.quantidade)}</td>
+      <td class="col-estmin" style="display:${podeVerEstoqueMinimo() ? 'table-cell' : 'none'};">
+        <input type="text" inputmode="decimal" class="estmin-input" data-id="${escapeHtml(r.id)}"
+               value="${r.estoque_minimo != null ? escapeHtml(r.estoque_minimo) : ''}" placeholder="—"
+               style="width:70px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px; text-align:right;">
+      </td>
       <td class="col-acoes" style="display:${modoContagemAtivo ? 'none' : 'table-cell'};">
         <button class="acao-btn ficha-btn${fichaFeitoSet.has(r.item) ? '' : ' pendente'}" data-item="${escapeHtml(r.item)}"
                 title="${fichaFeitoSet.has(r.item) ? 'Ver foto e ficha técnica' : 'Ainda não cadastrado — clique para preencher'}">👁</button>
@@ -171,7 +181,7 @@ document.getElementById('pgPorPagina').addEventListener('change', (e) => {
   applyFilterAndSort();
 });
 
-let filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false };
+let filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false, estoqueBaixo: false };
 
 // Paginacao (Fase 3). `imprimindoTudo` existe porque a impressao precisa sair
 // com TODAS as linhas filtradas, nao so a pagina na tela.
@@ -242,6 +252,7 @@ function applyFilterAndSort() {
   if (filtros.padrao === 'avulso') rows = rows.filter(r => { const i = fichaBoxMap.get(r.item); return !!(i && i.semPadrao); });
   if (filtros.padrao === 'pendente') rows = rows.filter(r => !fichaBoxMap.has(r.item));
   if (filtros.zerado) rows = rows.filter(r => parseQtd(r.quantidade) === 0);
+  if (filtros.estoqueBaixo) rows = rows.filter(r => r.estoque_minimo != null && parseQtd(r.quantidade) < parseQtd(r.estoque_minimo));
   if (filtros.comFoto) rows = rows.filter(r => fichaImageMap.has(r.item));
   if (filtros.divergente) {
     // Conta como divergencia tanto quantidade diferente quanto localizacao
@@ -327,7 +338,76 @@ function updateStats() {
     : '-';
   document.getElementById('stat-updated-nota').textContent = latest ? tempoRelativo(latest) : '\u00a0';
   document.getElementById('stat-updated-by').textContent = latestPor || '-';
+
+  const cardBaixo = document.getElementById('statEstoqueBaixoCard');
+  if (podeVerEstoqueMinimo()) {
+    const baixo = currentData.filter(r => r.estoque_minimo != null && parseQtd(r.quantidade) < parseQtd(r.estoque_minimo));
+    document.getElementById('stat-estoque-baixo').textContent = baixo.length.toLocaleString('pt-BR');
+    cardBaixo.style.display = 'flex';
+  } else {
+    cardBaixo.style.display = 'none';
+  }
 }
+
+// Aviso chamativo, só na carga da tela (loadData()) -- não em toda
+// atualização de estoque mínimo/filtro, senão ficaria aparecendo/
+// desaparecendo à toa a cada edição. "quando eu abrir o app" (Robson).
+//
+// Além de avisar, indica em quais outras unidades cada item tem saldo --
+// pedido do Robson pra já saber de onde puxar reposição sem precisar
+// abrir o comparativo item a item. A leitura de `estoque` não é
+// restrita por unidade no RLS (só exige estar aprovado -- ver
+// fase1c-rls.sql), então uma única consulta com `.in('item', ...)` já
+// traz os dados de todas as unidades pros itens em aviso.
+async function avisarEstoqueBaixoSeNecessario() {
+  const aviso = document.getElementById('avisoEstoqueSeguro');
+  if (!podeVerEstoqueMinimo()) { aviso.style.display = 'none'; return; }
+
+  const baixo = currentData.filter(r => r.estoque_minimo != null && parseQtd(r.quantidade) < parseQtd(r.estoque_minimo));
+  if (!baixo.length) { aviso.style.display = 'none'; return; }
+
+  const exemplos = baixo.slice(0, 3);
+  const resto = baixo.length > 3 ? baixo.length - 3 : 0;
+
+  let outrasPorItem = {};
+  try {
+    const { data, error } = await sb.from('estoque')
+      .select('item, unidade, quantidade')
+      .in('item', exemplos.map(r => r.item))
+      .neq('unidade', unidadeAtual);
+    if (error) throw error;
+    (data || []).forEach(r => {
+      const qtd = parseQtd(r.quantidade);
+      if (qtd <= 0) return; // "tem no estoque" -- unidade zerada não ajuda a repor
+      if (!outrasPorItem[r.item]) outrasPorItem[r.item] = [];
+      outrasPorItem[r.item].push({ unidade: r.unidade, quantidade: qtd });
+    });
+  } catch (e) {
+    console.warn('Não foi possível checar outras unidades para o aviso de estoque seguro:', e.message);
+  }
+
+  const linhas = exemplos.map(r => {
+    const outras = (outrasPorItem[r.item] || []).sort((a, b) => b.quantidade - a.quantidade);
+    const detalhe = outras.length
+      ? `tem em ${escapeHtml(rotuloUnidade(outras[0].unidade))}: ${outras[0].quantidade.toLocaleString('pt-BR')}${outras.length > 1 ? ` (+${outras.length - 1} unidade${outras.length > 2 ? 's' : ''})` : ''}`
+      : 'nenhuma outra unidade tem esse item';
+    return `<button type="button" class="aviso-item-btn" data-item="${escapeHtml(r.item)}" title="Ver comparativo entre unidades">${escapeHtml(r.item)}</button> — ${detalhe}`;
+  }).join('<br>');
+
+  const restoTexto = resto ? `<br>e mais ${resto} item(ns) abaixo do estoque seguro nesta unidade.` : '';
+
+  document.getElementById('avisoEstoqueSeguroTexto').innerHTML =
+    `⚠️ ${baixo.length} item(ns) abaixo do estoque seguro nesta unidade:<br>${linhas}${restoTexto}`;
+  aviso.style.display = 'flex';
+}
+
+document.getElementById('avisoEstoqueSeguroFechar').addEventListener('click', () => {
+  document.getElementById('avisoEstoqueSeguro').style.display = 'none';
+});
+document.getElementById('avisoEstoqueSeguroTexto').addEventListener('click', (e) => {
+  const btn = e.target.closest('.aviso-item-btn');
+  if (btn) openCompareModal(btn.dataset.item);
+});
 
 async function loadFichaImageMap() {
   try {
@@ -449,6 +529,24 @@ function atualizarSubtituloUnidade() {
     `Unidade ${unidadeAtual}, em ${u.cidade} (${u.uf}). Consulta de itens, quantidades e localizações do almoxarifado.`;
 }
 
+document.getElementById('statEstoqueBaixoCard').addEventListener('click', () => {
+  filtros.estoqueBaixo = !filtros.estoqueBaixo;
+  document.getElementById('statEstoqueBaixoCard').classList.toggle('stat-card-ativo', filtros.estoqueBaixo);
+  pagina = 1;
+  applyFilterAndSort();
+});
+
+// Estoque Mínimo editável (só visível pra quem podeVerEstoqueMinimo()) --
+// mesmo padrão de salvar-ao-sair já usado no Controle EXP Acessórios.
+document.getElementById('tableBody').addEventListener('focusout', (e) => {
+  const input = e.target.closest('.estmin-input');
+  if (!input) return;
+  salvarEstoqueMinimo(input.dataset.id, input.value, input);
+});
+document.getElementById('tableBody').addEventListener('keydown', (e) => {
+  if (e.target.classList.contains('estmin-input') && e.key === 'Enter') e.target.blur();
+});
+
 async function loadData() {
   const { data, error } = await sb.from('estoque').select('*').eq('unidade', unidadeAtual).order('id', { ascending: true });
   if (error) {
@@ -461,9 +559,10 @@ async function loadData() {
   // ressuscitar dados congelados por cima do estoque real. Carga inicial e
   // tarefa de script SQL, rodado uma vez no Supabase.
   currentData = data || [];
-  await loadFichaImageMap();
+  await Promise.all([loadFichaImageMap(), atualizarPermissaoEstoqueMinimo()]);
   updateStats();
   applyFilterAndSort();
+  avisarEstoqueBaixoSeNecessario();
 }
 
 
@@ -493,6 +592,64 @@ function closeFichaModal() {
 
 function podeEditarEmbalagem() {
   return isAdminAtual || emailUsuarioAtual === 'j.lisboa@kingspanisoeste.com.br';
+}
+
+// "e isso por unidade, cada responsavel pela sua unidade coloca o que
+// quiser" (Robson) -- não é mais uma lista fixa de e-mail: reusa
+// pode_atualizar_estoque(uni), a MESMA função que já decide quem pode
+// carregar a planilha de estoque daquela unidade (RLS, sql/fase1a-
+// colunas-e-funcoes.sql) -- admin sempre, e quem está cadastrado em
+// `gerentes_unidade` para aquela unidade especificamente. Assim, cada
+// unidade tem seu próprio responsável pelo Estoque Seguro, sem precisar
+// mexer em código pra trocar quem vê o quê -- só a tabela gerentes_unidade.
+//
+// É assíncrona (chama o banco) -- por isso fica em cache
+// (_podeVerEstoqueMinimoCache), atualizado em loadData() sempre que a
+// unidade muda. O resto do código (render(), updateStats()) continua
+// chamando podeVerEstoqueMinimo() de forma síncrona, só lendo o cache.
+let _podeVerEstoqueMinimoCache = false;
+
+async function atualizarPermissaoEstoqueMinimo() {
+  if (!unidadeAtual) { _podeVerEstoqueMinimoCache = false; return; }
+  const { data, error } = await sb.rpc('pode_atualizar_estoque', { uni: unidadeAtual });
+  _podeVerEstoqueMinimoCache = !error && data === true;
+}
+
+function podeVerEstoqueMinimo() {
+  return _podeVerEstoqueMinimoCache;
+}
+
+async function salvarEstoqueMinimo(id, valorBruto, input) {
+  const novoValor = valorBruto.trim() ? parseQtd(valorBruto.trim()) : null;
+  // String(): data-id no HTML sempre vem string, mas r.id pode ser number
+  // (id serial) -- comparar direto com === nunca bateria.
+  const item = currentData.find(r => String(r.id) === String(id));
+  if (!item) return;
+  if (novoValor === (item.estoque_minimo != null ? parseQtd(item.estoque_minimo) : null)) return;
+
+  input.disabled = true;
+  // .select() de propósito: sem ele, um UPDATE que a política de RLS barra
+  // (ou que não acha a linha por qualquer motivo) volta com error = null e
+  // data vazio -- parece "salvo" (sem erro) mas não gravou nada. Só dá pra
+  // pegar isso conferindo se alguma linha voltou.
+  const { data, error } = await sb.from('estoque')
+    .update({ estoque_minimo: novoValor }).eq('id', id).select('id');
+  input.disabled = false;
+
+  if (error) {
+    alert('Não foi possível salvar o estoque seguro: ' + error.message);
+    input.value = item.estoque_minimo != null ? item.estoque_minimo : '';
+    return;
+  }
+  if (!data || data.length === 0) {
+    alert('Não foi possível salvar o estoque seguro: nenhuma linha foi atualizada (sem permissão para esta unidade?). Fale com o administrador.');
+    input.value = item.estoque_minimo != null ? item.estoque_minimo : '';
+    return;
+  }
+  item.estoque_minimo = novoValor;
+  input.style.borderColor = 'var(--blue)';
+  setTimeout(() => { input.style.borderColor = ''; }, 1200);
+  updateStats(); // o card de "Estoque baixo" pode ter mudado de numero
 }
 
 function campoEmbalagem(data, itemCode) {
@@ -1316,7 +1473,8 @@ contagemModal.addEventListener('click', (e) => {
 document.getElementById('searchBox').addEventListener('input', () => { pagina = 1; applyFilterAndSort(); });
 document.getElementById('clearBtn').addEventListener('click', () => {
   document.getElementById('searchBox').value = '';
-  filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false };
+  filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false, estoqueBaixo: false };
+  document.getElementById('statEstoqueBaixoCard').classList.remove('stat-card-ativo');
   pagina = 1;
   const sel = document.getElementById('filterPadrao'); if (sel) sel.value = '';
   document.getElementById('filterZerado').checked = false;
@@ -1364,7 +1522,8 @@ document.getElementById('filterApplyBtn').addEventListener('click', () => {
 });
 
 document.getElementById('filterClearAllBtn').addEventListener('click', () => {
-  filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false };
+  filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false, estoqueBaixo: false };
+  document.getElementById('statEstoqueBaixoCard').classList.remove('stat-card-ativo');
   pagina = 1;
   document.getElementById('filterLocalizacao').value = '';
   document.getElementById('filterUm').value = '';
@@ -1466,7 +1625,9 @@ async function trocarUnidade(cod) {
   atualizarSubtituloUnidade();
   document.getElementById('searchBox').value = '';
   sortKey = null;
-  filtros = { localizacao: '', um: '', zerado: false, comFoto: false, divergente: false };
+  filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false, estoqueBaixo: false };
+  const cardBaixo = document.getElementById('statEstoqueBaixoCard');
+  if (cardBaixo) cardBaixo.classList.remove('stat-card-ativo');
   atualizarBadgeFiltros();
   if (modoContagemAtivo) desativarModoContagem();
   await loadData();

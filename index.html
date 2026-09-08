@@ -88,6 +88,16 @@
         <div class="app-content">
   <div id="estoqueContent">
 
+  <!-- Aviso chamativo de estoque abaixo do seguro -- só aparece quando a
+       página termina de carregar (loadData()), pra quem é responsável por
+       ESTA unidade (podeVerEstoqueMinimo()). Não é e-mail automático (isso
+       precisaria de servidor rodando sozinho); é avisar na hora que a
+       pessoa certa abre o app -- ver avisarEstoqueBaixoSeNecessario(). -->
+  <div id="avisoEstoqueSeguro" class="aviso-estoque-seguro" style="display:none;">
+    <span id="avisoEstoqueSeguroTexto"></span>
+    <button type="button" id="avisoEstoqueSeguroFechar" title="Fechar">✕</button>
+  </div>
+
   <div class="stat-cards">
     <div class="stat-card">
       <div class="stat-icone azul">📦</div>
@@ -111,6 +121,18 @@
         <div class="stat-rotulo">Atualizado por</div>
         <div class="stat-valor" id="stat-updated-by">-</div>
         <div class="stat-nota">última alteração</div>
+      </div>
+    </div>
+    <!-- Só aparece pra quem podeVerEstoqueMinimo() (ver js/estoque.js) --
+         quem é responsável (gerentes_unidade) por ESTA unidade, ou admin.
+         Clica pra filtrar só os itens abaixo do estoque seguro cadastrado. -->
+    <div class="stat-card" id="statEstoqueBaixoCard" style="display:none; cursor:pointer;"
+         title="Clique para filtrar só os itens com estoque abaixo do estoque seguro">
+      <div class="stat-icone" style="background:#fee2e2;">⚠️</div>
+      <div class="stat-texto">
+        <div class="stat-rotulo">Estoque baixo</div>
+        <div class="stat-valor" id="stat-estoque-baixo">-</div>
+        <div class="stat-nota">itens abaixo do estoque seguro</div>
       </div>
     </div>
   </div>
@@ -199,6 +221,7 @@
             <th data-key="loc">Localização <span class="arrow"></span></th>
             <th class="col-padrao">Padrão</th>
             <th data-key="qtd">Quantidade <span class="arrow"></span></th>
+            <th class="col-estmin" style="display:none;">Estoque Seguro</th>
             <th class="col-acoes">Ações</th>
             <th class="col-contagem" style="display:none;">
               <div>Estoque Físico</div>
