@@ -34,6 +34,29 @@ function chaveContagem(item, localizacao) {
   return item + '::' + localizacao;
 }
 
+// Estoque Seguro é do ITEM, não da prateleira -- um item guardado em 3
+// localizações não vira 3 alertas nem compara o mínimo com o saldo de UM
+// endereço só. Soma a quantidade do item nas 3 (dentro da unidade atual,
+// que é tudo que `dados` já traz) e compara com o mínimo (que agora é
+// mantido igual nas 3 linhas por salvarEstoqueMinimo()) uma única vez.
+// Achado pelo Robson: item em mais de uma localização "embaralhava" o
+// aviso de estoque baixo (09/09/2026).
+function itensAbaixoDoEstoqueSeguro(dados) {
+  const totalPorItem = new Map();
+  const minimoPorItem = new Map();
+  dados.forEach(r => {
+    totalPorItem.set(r.item, (totalPorItem.get(r.item) || 0) + parseQtd(r.quantidade));
+    if (r.estoque_minimo != null && !minimoPorItem.has(r.item)) {
+      minimoPorItem.set(r.item, parseQtd(r.estoque_minimo));
+    }
+  });
+  const itens = new Set();
+  minimoPorItem.forEach((minimo, item) => {
+    if (totalPorItem.get(item) < minimo) itens.add(item);
+  });
+  return itens;
+}
+
 function formatarDiferenca(fisico, sistema) {
   const diff = parseQtd(fisico) - parseQtd(sistema);
   if (diff === 0) return `<span class="diff-badge diff-ok">✓ OK</span>`;
@@ -107,8 +130,9 @@ function render(rows, intervalo) {
         : (podeEditarEmbalagem() ? `<button class="avulso-btn" data-item="${escapeHtml(r.item)}" title="Marcar como item avulso, sem padrão de caixa">AVULSO</button>` : '')}</td>
       <td class="num">${escapeHtml(r.quantidade)}</td>
       <td class="col-estmin" style="display:${podeVerEstoqueMinimo() ? 'table-cell' : 'none'};">
-        <input type="text" inputmode="decimal" class="estmin-input" data-id="${escapeHtml(r.id)}"
+        <input type="text" inputmode="decimal" class="estmin-input" data-id="${escapeHtml(r.id)}" data-item="${escapeHtml(r.item)}"
                value="${r.estoque_minimo != null ? escapeHtml(r.estoque_minimo) : ''}" placeholder="—"
+               title="Vale pro item inteiro, somando todas as localizações desta unidade — não só esta prateleira"
                style="width:70px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px; text-align:right;">
       </td>
       <td class="col-acoes" style="display:${modoContagemAtivo ? 'none' : 'table-cell'};">
@@ -255,7 +279,7 @@ function applyFilterAndSort() {
   if (filtros.padrao === 'avulso') rows = rows.filter(r => { const i = fichaBoxMap.get(r.item); return !!(i && i.semPadrao); });
   if (filtros.padrao === 'pendente') rows = rows.filter(r => !fichaBoxMap.has(r.item));
   if (filtros.zerado) rows = rows.filter(r => parseQtd(r.quantidade) === 0);
-  if (filtros.estoqueBaixo) rows = rows.filter(r => r.estoque_minimo != null && parseQtd(r.quantidade) < parseQtd(r.estoque_minimo));
+  if (filtros.estoqueBaixo) { const baixos = itensAbaixoDoEstoqueSeguro(currentData); rows = rows.filter(r => baixos.has(r.item)); }
   if (filtros.comFoto) rows = rows.filter(r => fichaImageMap.has(r.item));
   if (filtros.divergente) {
     // Conta como divergencia tanto quantidade diferente quanto localizacao
@@ -344,8 +368,8 @@ function updateStats() {
 
   const cardBaixo = document.getElementById('statEstoqueBaixoCard');
   if (podeVerEstoqueMinimo()) {
-    const baixo = currentData.filter(r => r.estoque_minimo != null && parseQtd(r.quantidade) < parseQtd(r.estoque_minimo));
-    document.getElementById('stat-estoque-baixo').textContent = baixo.length.toLocaleString('pt-BR');
+    const baixo = itensAbaixoDoEstoqueSeguro(currentData);
+    document.getElementById('stat-estoque-baixo').textContent = baixo.size.toLocaleString('pt-BR');
     cardBaixo.style.display = 'flex';
   } else {
     cardBaixo.style.display = 'none';
@@ -366,7 +390,10 @@ async function avisarEstoqueBaixoSeNecessario() {
   const aviso = document.getElementById('avisoEstoqueSeguro');
   if (!podeVerEstoqueMinimo()) { aviso.style.display = 'none'; return; }
 
-  const baixo = currentData.filter(r => r.estoque_minimo != null && parseQtd(r.quantidade) < parseQtd(r.estoque_minimo));
+  const itensBaixos = itensAbaixoDoEstoqueSeguro(currentData);
+  // Uma linha representante por item (a primeira localização encontrada) --
+  // o aviso só usa r.item daqui pra frente, então tanto faz qual localização.
+  const baixo = [...itensBaixos].map(item => currentData.find(r => r.item === item));
   if (!baixo.length) { aviso.style.display = 'none'; return; }
 
   const exemplos = baixo.slice(0, 3);
@@ -727,12 +754,20 @@ async function salvarEstoqueMinimo(id, valorBruto, input) {
   if (novoValor === (item.estoque_minimo != null ? parseQtd(item.estoque_minimo) : null)) return;
 
   input.disabled = true;
+  // Estoque Seguro é do ITEM, não da prateleira -- grava em TODAS as linhas
+  // deste item nesta unidade (não só a linha `id` que a pessoa editou),
+  // senão cada localização guardava um número diferente e o aviso de
+  // estoque baixo comparava a quantidade de UMA prateleira com o mínimo,
+  // "embaralhando" o resultado quando o item tem mais de um endereço
+  // (Robson, 09/09/2026).
+  //
   // .select() de propósito: sem ele, um UPDATE que a política de RLS barra
   // (ou que não acha a linha por qualquer motivo) volta com error = null e
   // data vazio -- parece "salvo" (sem erro) mas não gravou nada. Só dá pra
   // pegar isso conferindo se alguma linha voltou.
   const { data, error } = await sb.from('estoque')
-    .update({ estoque_minimo: novoValor }).eq('id', id).select('id');
+    .update({ estoque_minimo: novoValor })
+    .eq('unidade', unidadeAtual).eq('item', item.item).select('id');
   input.disabled = false;
 
   if (error) {
@@ -745,7 +780,12 @@ async function salvarEstoqueMinimo(id, valorBruto, input) {
     input.value = item.estoque_minimo != null ? item.estoque_minimo : '';
     return;
   }
-  item.estoque_minimo = novoValor;
+  currentData.forEach(r => { if (r.item === item.item) r.estoque_minimo = novoValor; });
+  document.querySelectorAll('.estmin-input').forEach(inp => {
+    if (inp !== input && inp.dataset.item === item.item) {
+      inp.value = novoValor != null ? novoValor : '';
+    }
+  });
   input.style.borderColor = 'var(--blue)';
   setTimeout(() => { input.style.borderColor = ''; }, 1200);
   updateStats(); // o card de "Estoque baixo" pode ter mudado de numero

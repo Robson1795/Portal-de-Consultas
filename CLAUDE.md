@@ -1007,3 +1007,36 @@ unidade, continuava vendo a lista da anterior, e a partir dali a solicitação
 sairia com os dados de uma unidade e o e-mail de outra — e "Substituir análise"
 apagaria a análise da unidade **nova**. Era perda silenciosa de dado, não só
 tela desatualizada.
+
+## Estoque Seguro é do item, não da localização
+
+O Robson (09/09/2026, print do item 144268 em 3 endereços — A-01-06-01,
+A-03-01-02, A-03-06-01, cada um com um saldo diferente): "tem alguns itens que
+tem em mais de uma localização ai o estoque seguro embaralha um pouco, arrume
+isso".
+
+O desenho original (fase12, comentário de lá) guardava o Estoque Seguro **por
+linha** (item+localização), de propósito. Fazia sentido enquanto a maioria dos
+itens tinha um endereço só, mas quebra pra quem tem vários: cada prateleira
+podia acabar com um número diferente (o fase13, por exemplo, preencheu 25% da
+quantidade de **cada linha**, não do item somado), e o aviso de estoque baixo
+comparava a quantidade de **uma** prateleira com esse número — dava alarme (ou
+deixava de dar) errado numa prateleira só, mesmo com o item saudável no total
+das três.
+
+Ajuste em `js/estoque.js`:
+
+- `itensAbaixoDoEstoqueSeguro(dados)` soma a `quantidade` do item em **todas**
+  as localizações da unidade atual antes de comparar com o
+  `estoque_minimo` — usada no card "Estoque baixo", no aviso ao abrir a tela e
+  no filtro "Estoque baixo". Todas liam por linha antes; agora leem por item,
+  uma vez só (item com 3 localizações não vira 3 alarmes).
+- `salvarEstoqueMinimo()` grava o valor em **todas** as linhas do item nesta
+  unidade (`.eq('unidade', ...).eq('item', ...)`, não mais só `.eq('id', id)`),
+  e atualiza os outros campos já na tela (`.estmin-input[data-item=...]`) pra
+  não ficar um número na tela e outro no banco até recarregar.
+
+`sql/fase25-estoque-seguro-por-item.sql` arruma o que já estava divergente no
+banco (sobra do preenchimento antigo por linha): unifica as localizações do
+mesmo item para o **maior** valor de `estoque_minimo` já cadastrado entre elas
+— não inventa número novo, só copia o que já existia pra quem ficou pra trás.
