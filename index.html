@@ -525,6 +525,7 @@
         <input type="text" id="analiseBusca" placeholder="Buscar por código ou descrição do item..."
                style="flex:1; min-width:200px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
         <button class="btn" id="analiseSoFaltaBtn" title="Mostra só os itens em que o saldo não cobre o total pedido">Só o que falta comprar</button>
+        <button class="btn" id="analiseVerIgnoradosBtn" style="display:none;" title="Itens marcados como &quot;não preciso repor&quot;">🚫 Ver "não repor"</button>
         <select id="analiseExportarFormato" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
           <option value="xlsx">Excel (.xlsx)</option>
           <option value="csv">CSV</option>
@@ -544,6 +545,7 @@
               <th title="Quanto falta comprar pra atender todos os pedidos">Comprar</th>
               <th title="Quantos pedidos diferentes pedem este item">Pedidos</th>
               <th title="Data de embarque mais próxima entre os pedidos deste item">1º embarque</th>
+              <th>Ação</th>
             </tr>
           </thead>
           <tbody id="analiseBody"></tbody>

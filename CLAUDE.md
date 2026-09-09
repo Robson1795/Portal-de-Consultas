@@ -685,3 +685,29 @@ substituída inteira, e ninguém escreve nela pela tela.
 **A tela só LÊ o estoque** — não escreve saldo nenhum. Exportar (Excel/CSV)
 respeita a busca e o filtro "só o que falta comprar", pra mandar a lista
 pronta pra Compras.
+
+### "Não preciso repor este item" (09/09/2026)
+
+Botão 🚫 em cada linha da Análise de Compras
+(`sql/fase20-analise-itens-ignorados.sql`). O Robson: *"coloque um botão de
+excluir, tem itens que não preciso repor"* — item fabricado internamente,
+que vem direto de outro setor, ou descontinuado, aparecia todo dia pedindo
+compra e poluía a lista do que realmente falta.
+
+**Não é um delete na `analise_demanda`, é uma lista à parte.** A análise é
+substituída inteira a cada colagem: apagar a linha resolveria só até a
+planilha do dia seguinte, e ele teria que apagar os mesmos itens todo dia.
+"Não preciso repor" é característica **do item**, não daquela colagem — por
+isso mora em `analise_itens_ignorados`, que a substituição não toca.
+
+- Por unidade: um item pode ser comprado pela 106 e não pela 101.
+- **Reversível**: o botão `🚫 Ver "não repor" (N)` abre a lista dos
+  escondidos, cada um com `↺` pra voltar. Esconder item pra sempre por um
+  clique errado, numa tela que existe pra **não deixar faltar material**,
+  seria o pior tipo de bug silencioso.
+- Sem `confirm()` a cada clique: é um item só, é reversível ali do lado, e
+  pedir confirmação numa limpeza de lista seria só atrito.
+- Ignorado não conta em "sem saldo pra atender tudo" e **não vai no
+  Exportar** — ninguém vai comprar ele, então inflaria o número que ela usa
+  pra medir o tamanho do problema do dia, e sujaria a lista mandada pro
+  Compras.

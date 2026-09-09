@@ -16,6 +16,11 @@ let analiseDemanda = [];        // analise_demanda -- uma linha por linha da pla
 let analiseSaldoMap = new Map(); // codigo_item -> saldo somado no almoxarifado da unidade
 let analisePendentes = [];      // prévia da planilha colada, antes de gravar
 let analiseSoFalta = false;     // filtro "só o que falta comprar"
+// Itens marcados como "não preciso repor" (analise_itens_ignorados). Fica
+// fora da lista e do Exportar, mas NÃO some do banco: a próxima colagem da
+// planilha não ressuscita ele, e dá pra voltar atrás pelo botão.
+let analiseIgnorados = new Set();
+let analiseVerIgnorados = false; // mostrando a lista dos ignorados em vez da normal
 
 // Ordem das colunas da planilha que o Robson cola (a mesma do relatório que
 // ele já usa): EMISSÃO, PEDIDO, NOME ABREV, SEQ ETAPA, ITEM ESTOQUE,
@@ -66,9 +71,10 @@ async function carregarAnalise() {
     return;
   }
 
-  const [demanda, estoque] = await Promise.all([
+  const [demanda, estoque, ignorados] = await Promise.all([
     sb.from('analise_demanda').select('*').eq('unidade', unidadeAtual),
-    sb.from('estoque').select('item, quantidade').eq('unidade', unidadeAtual)
+    sb.from('estoque').select('item, quantidade').eq('unidade', unidadeAtual),
+    sb.from('analise_itens_ignorados').select('codigo_item').eq('unidade', unidadeAtual)
   ]);
 
   if (demanda.error) {
@@ -88,6 +94,11 @@ async function carregarAnalise() {
     const atual = analiseSaldoMap.get(r.item) || 0;
     analiseSaldoMap.set(r.item, atual + parseQtd(r.quantidade));
   });
+
+  // Se a fase20 ainda não rodou, o Set fica vazio e a tela funciona igual --
+  // só sem esconder nada (mesmo tratamento do resto do projeto).
+  if (ignorados.error) console.warn('Não foi possível carregar os itens ignorados:', ignorados.error.message);
+  analiseIgnorados = new Set((ignorados.error ? [] : (ignorados.data || [])).map(r => r.codigo_item));
 
   renderAnalise();
 }
@@ -170,7 +181,10 @@ function dataEmbarqueParaOrdenar(texto) {
 
 function linhasFiltradasAnalise() {
   const busca = document.getElementById('analiseBusca').value.trim().toLowerCase();
-  let linhas = agruparAnalise();
+  // Ou a lista normal (sem os ignorados), ou só os ignorados -- nunca as
+  // duas juntas: misturar faria a pessoa mandar pra Compras um item que ela
+  // mesma marcou como "não repor".
+  let linhas = agruparAnalise().filter(l => analiseIgnorados.has(l.codigo_item) === analiseVerIgnorados);
   if (analiseSoFalta) linhas = linhas.filter(l => l.comprar > 0);
   if (busca) {
     linhas = linhas.filter(l =>
@@ -190,19 +204,34 @@ function renderAnalise() {
   const vazio = document.getElementById('analiseVazio');
   const linhas = linhasFiltradasAnalise();
   const todas = agruparAnalise();
-  const faltando = todas.filter(l => l.comprar > 0);
+  const ativos = todas.filter(l => !analiseIgnorados.has(l.codigo_item));
+  const faltando = ativos.filter(l => l.comprar > 0);
+  const qtdIgnorados = todas.length - ativos.length;
 
+  // Os ignorados não contam em "sem saldo pra atender tudo": ninguém vai
+  // comprar eles, então contá-los inflaria o número que ela usa pra saber o
+  // tamanho do problema do dia.
   document.getElementById('analiseResumo').innerHTML = analiseDemanda.length
-    ? `<b>${numeroBR(todas.length)}</b> item(ns) na análise · `
+    ? `<b>${numeroBR(ativos.length)}</b> item(ns) na análise · `
       + `<b style="color:${faltando.length ? '#991b1b' : '#166534'};">${numeroBR(faltando.length)}</b> sem saldo pra atender tudo · `
       + `${numeroBR(analiseDemanda.length)} linha(s) de pedido`
+      + (qtdIgnorados ? ` · <b>${numeroBR(qtdIgnorados)}</b> marcado(s) como "não repor"` : '')
     : '';
+
+  const btnIgnorados = document.getElementById('analiseVerIgnoradosBtn');
+  btnIgnorados.style.display = (qtdIgnorados || analiseVerIgnorados) ? 'inline-block' : 'none';
+  btnIgnorados.className = analiseVerIgnorados ? 'btn btn-primary' : 'btn';
+  btnIgnorados.textContent = analiseVerIgnorados
+    ? '← Voltar pra análise'
+    : `🚫 Ver "não repor" (${numeroBR(qtdIgnorados)})`;
 
   vazio.style.display = linhas.length ? 'none' : 'block';
   if (!linhas.length) {
-    vazio.textContent = analiseDemanda.length
-      ? 'Nenhum item bate com a busca / filtro.'
-      : 'Nenhuma planilha de pedidos colada ainda. Use "Colar planilha de pedidos" acima.';
+    vazio.textContent = analiseVerIgnorados
+      ? 'Nenhum item marcado como "não repor".'
+      : (analiseDemanda.length
+          ? 'Nenhum item bate com a busca / filtro.'
+          : 'Nenhuma planilha de pedidos colada ainda. Use "Colar planilha de pedidos" acima.');
     corpo.innerHTML = '';
     return;
   }
@@ -210,7 +239,7 @@ function renderAnalise() {
   corpo.innerHTML = linhas.map(l => {
     const falta = l.comprar > 0;
     return `
-    <tr${falta ? ' style="background:#fef2f2;"' : ''}>
+    <tr${falta && !analiseVerIgnorados ? ' style="background:#fef2f2;"' : ''}${analiseVerIgnorados ? ' style="opacity:0.65;"' : ''}>
       <td class="item">${escapeHtml(l.codigo_item)}</td>
       <td>${escapeHtml(l.descricao || '—')}</td>
       <td class="loc">${escapeHtml(l.um || '—')}</td>
@@ -221,6 +250,11 @@ function renderAnalise() {
       <td class="num" style="font-weight:800; color:#991b1b;">${falta ? numeroBR(l.comprar) : '—'}</td>
       <td class="loc" title="${escapeHtml([...l.pedidos].join(', '))}">${numeroBR(l.qtdPedidos)}</td>
       <td class="loc">${escapeHtml(l.primeiroEmbarqueTexto || '—')}</td>
+      <td class="col-acoes">
+        ${analiseVerIgnorados
+          ? `<button class="acao-btn analise-restaurar" data-item="${escapeHtml(l.codigo_item)}" title="Voltar este item pra análise">↺</button>`
+          : `<button class="acao-btn analise-ignorar" data-item="${escapeHtml(l.codigo_item)}" title="Não preciso repor este item — some da análise, inclusive nas próximas planilhas">🚫</button>`}
+      </td>
     </tr>`;
   }).join('');
 }
@@ -236,6 +270,51 @@ document.getElementById('analiseSoFaltaBtn').addEventListener('click', () => {
 });
 
 document.getElementById('analiseAtualizarBtn').addEventListener('click', carregarAnalise);
+
+document.getElementById('analiseVerIgnoradosBtn').addEventListener('click', () => {
+  analiseVerIgnorados = !analiseVerIgnorados;
+  renderAnalise();
+});
+
+// Marcar/desmarcar "não preciso repor". Sem confirmação de propósito: é um
+// item só e é reversível ali mesmo, no botão "Ver não repor" -- pedir
+// confirmação a cada clique numa limpeza de lista seria só atrito.
+document.getElementById('analiseBody').addEventListener('click', async (e) => {
+  const btnIgnorar = e.target.closest('.analise-ignorar');
+  if (btnIgnorar) { await marcarItemAnalise(btnIgnorar, btnIgnorar.dataset.item, true); return; }
+  const btnRestaurar = e.target.closest('.analise-restaurar');
+  if (btnRestaurar) await marcarItemAnalise(btnRestaurar, btnRestaurar.dataset.item, false);
+});
+
+async function marcarItemAnalise(botao, codigoItem, ignorar) {
+  const msg = document.getElementById('analiseMsg');
+  botao.disabled = true;
+
+  const { error } = ignorar
+    ? await sb.from('analise_itens_ignorados').insert([{
+        unidade: unidadeAtual, codigo_item: codigoItem, ignorado_por: nomeUsuarioAtual }])
+    : await sb.from('analise_itens_ignorados').delete()
+        .eq('unidade', unidadeAtual).eq('codigo_item', codigoItem);
+
+  botao.disabled = false;
+  if (error) {
+    msg.textContent = 'NÃO GRAVOU: ' + error.message
+      + ' — se a mensagem falar em tabela inexistente, sql/fase20-analise-itens-ignorados.sql'
+      + ' ainda não foi rodado no Supabase.';
+    msg.className = 'status-msg status-err';
+    console.error('Falha ao marcar item da análise:', error.message);
+    return;
+  }
+
+  if (ignorar) analiseIgnorados.add(codigoItem);
+  else analiseIgnorados.delete(codigoItem);
+
+  msg.textContent = ignorar
+    ? `Item ${codigoItem} marcado como "não repor" — não aparece mais na análise, nem nas próximas planilhas.`
+    : `Item ${codigoItem} voltou pra análise.`;
+  msg.className = 'status-msg status-ok';
+  renderAnalise();
+}
 
 // ---- Colar a planilha ---------------------------------------------------
 document.getElementById('analiseColarToggleBtn').addEventListener('click', () => {
