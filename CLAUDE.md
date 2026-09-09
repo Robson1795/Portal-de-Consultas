@@ -1101,6 +1101,17 @@ pergunta quando alguém diz que não recebeu. Script:
 - O `update` pede recibo (`.select('id')`): sem ele, um update barrado pelo RLS
   volta com `error null` e zero linha afetada, e a tela diria "concluída" com o
   F5 desmentindo. Item A1 da `AUDITORIA.md`.
+- ⚠️ **Status novo pede DOIS scripts, e eu esqueci o segundo na primeira vez.**
+  O `fase24` criou as colunas, mas `status` tem uma trava desde o `fase6`
+  (`check (status in ('rascunho','enviada'))`), então "Concluir" devolvia
+  *violates check constraint "requisicoes_alm_status_valido"*. O
+  `sql/fase25-status-concluida.sql` refaz a trava com os três valores. **Da
+  próxima vez que um status ganhar valor novo neste projeto, procure o `check`
+  antes:** existem outros quatro, em `pedidos`, `pedido_itens`,
+  `exp_acessorios` e `exp_controle_itens`, todos no padrão
+  `<tabela>_status_valido`. A trava é boa e fica — é ela que impede
+  "Concluida"/"concluído"/"CONCLUIDA" de virarem quatro estados onde deveria
+  haver um.
 
 **3. Pesquisar o item pela descrição.** O `datalist` só tinha o código. Agora
 cada opção leva `código · descrição` no texto, e o Chrome filtra o `datalist`
@@ -1114,3 +1125,42 @@ pelo código e pelo nome. Como agora dá para digitar qualquer coisa, o centro d
 custo passou a ser **validado contra a lista** (mesma regra do item: código
 inventado só gera retrabalho para o ALM) e o campo fica com a borda laranja
 enquanto o que está escrito não bate com nenhum cadastrado.
+
+### Controle EXP em lote (09/09/2026)
+
+Quarta aba do "Atualizar estoques em lote": cola uma planilha com o Controle
+EXP de **todas** as unidades e o portal separa por unidade sozinho, como já
+fazia com almoxarifado, SESMT e bobinas. Colunas lidas por sinônimo: Unidade
+(ou Estab), Item, Quantidade, Localização, Nº Pedido, Nº OP, Lote, Referência —
+em qualquer ordem. Script: `sql/fase26-exp-em-lote.sql`.
+
+⚠️ **"Substituir" aqui não quer dizer a mesma coisa que nas outras três abas.**
+`estoque` e `bobinas_aco` são retratos: a planilha da empresa é a verdade, e
+substituir a unidade inteira é o certo. `exp_controle_itens` é o contrário — o
+portal é o sistema de registro, e a tabela é **append-only de propósito**: item
+retirado não é apagado, muda de status e vira o histórico pesquisável por
+pedido (seção 13). Na mesma tabela moram a marca de etiqueta emitida e o que
+alimenta a detecção de pedido pronto.
+
+Substituir "igual aos outros" apagaria tudo isso — quem retirou, quando, e as
+etiquetas emitidas — sem erro na tela e sem volta. Então o recorte é mais
+estreito:
+
+```
+delete ... where unidade = X and setor = Y and status = 'na_expedicao'
+```
+
+Substitui **o que está na expedição agora**, que é o que a planilha descreve, e
+não toca no que já saiu. A mensagem de sucesso diz quantos registros retirados
+ficaram de fora (`historico_preservado` no retorno da função), porque sem esse
+número "substituído" soa como "apaguei tudo". Se algum dia a intenção for
+apagar o histórico junto, é uma linha no SQL — mas tem de ser decisão
+consciente, não efeito colateral de uma aba nova.
+
+- `setor` é fixo em `'exp'`: o **Depósito Benchmark** não tem aba de lote. A
+  função aceita `benchmark` no payload, então o dia que precisar é só a UI.
+- A permissão é `pode_atualizar_estoque(uni)`, igual às outras — admin, ou
+  gerente daquela unidade. Quem colar a planilha da empresa toda sendo gerente
+  de uma unidade só recebe erro na primeira unidade que não é dele, **antes de
+  qualquer `delete`** (Passo 1 da função, mesmo desenho de
+  `substituir_estoque`).

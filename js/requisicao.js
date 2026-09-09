@@ -235,9 +235,17 @@ async function concluirRequisicao(id, concluir) {
     .update(patch).eq('id', id).select('id');
 
   if (error) {
+    // A mensagem aponta os DOIS scripts porque as duas falhas são possíveis e
+    // se parecem na tela: coluna que não existe (fase24) e a trava de `status`
+    // que não conhece 'concluida' (fase25). Sem dizer qual é qual, a pessoa
+    // roda o script errado e continua travada.
     msg.textContent = 'NÃO GRAVOU: ' + error.message
-      + ' — se a mensagem falar em coluna inexistente,'
-      + ' sql/fase24-requisicao-concluida.sql ainda não foi rodado no Supabase.';
+      + (/check constraint/i.test(error.message)
+          ? ' — a trava de status não aceita "concluida":'
+            + ' falta rodar sql/fase25-status-concluida.sql no Supabase.'
+          : (/column|coluna/i.test(error.message)
+              ? ' — falta rodar sql/fase24-requisicao-concluida.sql no Supabase.'
+              : ''));
     msg.className = 'status-msg status-err';
     console.error('Falha ao concluir requisição:', error.message);
     return;
