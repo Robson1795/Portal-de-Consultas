@@ -686,21 +686,47 @@ substituída inteira, e ninguém escreve nela pela tela.
 respeita a busca e o filtro "só o que falta comprar", pra mandar a lista
 pronta pra Compras.
 
-### "Não preciso repor este item" (09/09/2026)
+### Transferência entre unidades, em vez de comprar (09/09/2026)
 
-Botão 🚫 em cada linha da Análise de Compras
-(`sql/fase20-analise-itens-ignorados.sql`). O Robson: *"coloque um botão de
-excluir, tem itens que não preciso repor"* — item fabricado internamente,
-que vem direto de outro setor, ou descontinuado, aparecia todo dia pedindo
-compra e poluía a lista do que realmente falta.
+O Robson: *"quero que os itens que não tenho, ele me indique de outras
+unidades para eu pedir transferência"*. Comprar o que a empresa já tem em
+outro galpão é dinheiro jogado fora.
 
-**Não é um delete na `analise_demanda`, é uma lista à parte.** A análise é
-substituída inteira a cada colagem: apagar a linha resolveria só até a
-planilha do dia seguinte, e ele teria que apagar os mesmos itens todo dia.
-"Não preciso repor" é característica **do item**, não daquela colagem — por
-isso mora em `analise_itens_ignorados`, que a substituição não toca.
+Coluna **"Tem em outra unidade"**, só nos itens em falta: `101: 600 · 105: 50`,
+ordenado pela maior quantidade. **Verde** quando uma unidade sozinha cobre a
+falta inteira (dá pra resolver com um pedido de transferência só), **laranja**
+quando só somando várias. Vai no Exportar como texto, pra a lista ir pronta pro
+Compras.
 
-- Por unidade: um item pode ser comprado pela 106 e não pela 101.
+- **Soma os endereços da mesma unidade**: `estoque` tem uma linha por
+  endereço; sem somar, a tela ofereceria transferir só o que está na primeira
+  prateleira.
+- Unidade com saldo zero não aparece — não serve pra transferência.
+- A consulta enxerga as outras unidades porque a leitura de `estoque` no RLS
+  só exige conta aprovada, sem filtro de unidade (`fase1c-rls.sql`).
+- **Em blocos de 100** (`carregarSaldoOutrasUnidades`): o `in` do PostgREST
+  viaja na URL e uma análise cheia tem centenas de itens em falta. O sintoma
+  sem isso seria "com 5 itens funciona, com 300 não".
+
+### Anotações por item: "não repor" e observação (09/09/2026)
+
+Dois pedidos do Robson que são a mesma coisa por baixo — anotação **do item**,
+por unidade, que sobrevive à troca da planilha (`analise_item_notas`,
+`sql/fase20-analise-notas-item.sql`):
+
+| | |
+|---|---|
+| Botão 🚫 **"não preciso repor"** | *"tem itens que não preciso repor"* — fabricado internamente, vem de outro setor, descontinuado. Poluía a lista todo dia |
+| Campo **Observação** | *"se já tem pedido, se já fiz solicitação de compra etc"* — pra não solicitar duas vezes nem esquecer o que já encaminhou |
+
+**Nenhum dos dois mora na `analise_demanda`**, que é substituída inteira a
+cada colagem: a anotação sumiria na planilha do dia seguinte, e ele teria que
+reescrever "já solicitei compra" todo santo dia.
+
+- **Uma tabela só pras duas**, com `upsert ... onConflict (unidade,
+  codigo_item)`: marcar "não repor" num item que já tem observação **não pode
+  apagar a observação**, e vice-versa. `gravarNotaItem()` monta a linha
+  inteira a partir do que já existe antes de gravar.
 - **Reversível**: o botão `🚫 Ver "não repor" (N)` abre a lista dos
   escondidos, cada um com `↺` pra voltar. Esconder item pra sempre por um
   clique errado, numa tela que existe pra **não deixar faltar material**,
@@ -711,3 +737,6 @@ isso mora em `analise_itens_ignorados`, que a substituição não toca.
   Exportar** — ninguém vai comprar ele, então inflaria o número que ela usa
   pra medir o tamanho do problema do dia, e sujaria a lista mandada pro
   Compras.
+- ⚠️ O `upsert` pede recibo (`.select()`): sem ele, um upsert barrado pelo
+  RLS volta com `error null` e nada gravado — a tela diria "salvo" e o F5
+  desmentiria. Mesmo furo do item A1 da auditoria.

@@ -16,11 +16,22 @@ let analiseDemanda = [];        // analise_demanda -- uma linha por linha da pla
 let analiseSaldoMap = new Map(); // codigo_item -> saldo somado no almoxarifado da unidade
 let analisePendentes = [];      // prévia da planilha colada, antes de gravar
 let analiseSoFalta = false;     // filtro "só o que falta comprar"
-// Itens marcados como "não preciso repor" (analise_itens_ignorados). Fica
-// fora da lista e do Exportar, mas NÃO some do banco: a próxima colagem da
-// planilha não ressuscita ele, e dá pra voltar atrás pelo botão.
-let analiseIgnorados = new Set();
+// Anotações por item (analise_item_notas): "não preciso repor" e a
+// observação livre ("já solicitei compra", "pedido 1234"...). Sobrevivem à
+// troca da planilha -- por isso não moram na analise_demanda.
+let analiseNotas = new Map();   // codigo_item -> { ignorado, observacao }
 let analiseVerIgnorados = false; // mostrando a lista dos ignorados em vez da normal
+// codigo_item -> [{ unidade, quantidade }] das OUTRAS unidades que têm o
+// item -- pra pedir transferência em vez de comprar.
+let analiseOutrasUnidades = new Map();
+
+function analiseNotaDoItem(codigoItem) {
+  return analiseNotas.get(codigoItem) || { ignorado: false, observacao: '' };
+}
+
+function analiseItemIgnorado(codigoItem) {
+  return analiseNotaDoItem(codigoItem).ignorado === true;
+}
 
 // Ordem das colunas da planilha que o Robson cola (a mesma do relatório que
 // ele já usa): EMISSÃO, PEDIDO, NOME ABREV, SEQ ETAPA, ITEM ESTOQUE,
@@ -71,10 +82,10 @@ async function carregarAnalise() {
     return;
   }
 
-  const [demanda, estoque, ignorados] = await Promise.all([
+  const [demanda, estoque, notas] = await Promise.all([
     sb.from('analise_demanda').select('*').eq('unidade', unidadeAtual),
     sb.from('estoque').select('item, quantidade').eq('unidade', unidadeAtual),
-    sb.from('analise_itens_ignorados').select('codigo_item').eq('unidade', unidadeAtual)
+    sb.from('analise_item_notas').select('codigo_item, ignorado, observacao').eq('unidade', unidadeAtual)
   ]);
 
   if (demanda.error) {
@@ -95,12 +106,58 @@ async function carregarAnalise() {
     analiseSaldoMap.set(r.item, atual + parseQtd(r.quantidade));
   });
 
-  // Se a fase20 ainda não rodou, o Set fica vazio e a tela funciona igual --
-  // só sem esconder nada (mesmo tratamento do resto do projeto).
-  if (ignorados.error) console.warn('Não foi possível carregar os itens ignorados:', ignorados.error.message);
-  analiseIgnorados = new Set((ignorados.error ? [] : (ignorados.data || [])).map(r => r.codigo_item));
+  // Se a fase20 ainda não rodou, o mapa fica vazio e a tela funciona igual --
+  // só sem esconder nada e sem observação (mesmo tratamento do resto do projeto).
+  if (notas.error) console.warn('Não foi possível carregar as anotações dos itens:', notas.error.message);
+  analiseNotas = new Map((notas.error ? [] : (notas.data || []))
+    .map(r => [r.codigo_item, { ignorado: r.ignorado === true, observacao: r.observacao || '' }]));
 
+  await carregarSaldoOutrasUnidades();
   renderAnalise();
+}
+
+// Pros itens em falta, procura saldo nas OUTRAS unidades: o Robson pediu pra
+// ver de onde dá pra pedir transferência antes de abrir solicitação de
+// compra -- comprar o que a empresa já tem em outro galpão é dinheiro jogado
+// fora. A leitura de `estoque` no RLS não é limitada por unidade (só exige
+// conta aprovada, ver fase1c-rls.sql), então a consulta enxerga as outras.
+//
+// Só busca pros itens EM FALTA: pra quem já tem saldo, de onde mais existe é
+// informação que ninguém vai usar -- e a consulta ficaria grande à toa.
+async function carregarSaldoOutrasUnidades() {
+  analiseOutrasUnidades = new Map();
+  const emFalta = agruparAnalise().filter(l => l.comprar > 0).map(l => l.codigo_item);
+  if (!emFalta.length) return;
+
+  // Em blocos de 100: o `in` do PostgREST viaja na URL e uma análise cheia
+  // tem centenas de itens em falta. Sem os blocos, o sintoma seria "com 5
+  // itens funciona, com 300 não" -- difícil de ligar à causa depois.
+  const BLOCO = 100;
+  for (let de = 0; de < emFalta.length; de += BLOCO) {
+    const pedaco = emFalta.slice(de, de + BLOCO);
+    const { data, error } = await sb.from('estoque')
+      .select('item, unidade, quantidade')
+      .in('item', pedaco)
+      .neq('unidade', unidadeAtual);
+
+    if (error) {
+      console.warn('Não foi possível checar o saldo das outras unidades:', error.message);
+      return;
+    }
+    (data || []).forEach(r => {
+      const qtd = parseQtd(r.quantidade);
+      if (qtd <= 0) return; // unidade zerada não serve pra transferência
+      if (!analiseOutrasUnidades.has(r.item)) analiseOutrasUnidades.set(r.item, []);
+      const lista = analiseOutrasUnidades.get(r.item);
+      // Mesmo item pode estar em vários endereços da mesma unidade -- soma,
+      // senão a tela ofereceria transferir só o que tem no primeiro endereço.
+      const jaTem = lista.find(u => u.unidade === r.unidade);
+      if (jaTem) jaTem.quantidade += qtd;
+      else lista.push({ unidade: r.unidade, quantidade: qtd });
+    });
+  }
+
+  analiseOutrasUnidades.forEach(lista => lista.sort((a, b) => b.quantidade - a.quantidade));
 }
 
 // ---- O cálculo ----------------------------------------------------------
@@ -184,7 +241,7 @@ function linhasFiltradasAnalise() {
   // Ou a lista normal (sem os ignorados), ou só os ignorados -- nunca as
   // duas juntas: misturar faria a pessoa mandar pra Compras um item que ela
   // mesma marcou como "não repor".
-  let linhas = agruparAnalise().filter(l => analiseIgnorados.has(l.codigo_item) === analiseVerIgnorados);
+  let linhas = agruparAnalise().filter(l => analiseItemIgnorado(l.codigo_item) === analiseVerIgnorados);
   if (analiseSoFalta) linhas = linhas.filter(l => l.comprar > 0);
   if (busca) {
     linhas = linhas.filter(l =>
@@ -198,13 +255,33 @@ function numeroBR(valor) {
   return Number(valor || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
 }
 
+// Onde mais a empresa tem este item, pra pedir transferência em vez de
+// comprar. Verde quando alguma unidade sozinha já cobre a falta inteira --
+// é o caso em que dá pra resolver com um pedido de transferência só.
+function transferenciaHtml(linha) {
+  if (linha.comprar <= 0) return '<span style="color:var(--muted);">—</span>';
+
+  const outras = analiseOutrasUnidades.get(linha.codigo_item) || [];
+  if (!outras.length) {
+    return '<span style="color:var(--muted);" title="Nenhuma outra unidade tem saldo deste item">nenhuma</span>';
+  }
+
+  const cobreSozinha = outras[0].quantidade >= linha.comprar;
+  const textoCompleto = outras.map(u => `${u.unidade}: ${numeroBR(u.quantidade)}`).join(' · ');
+  const mostradas = outras.slice(0, 2).map(u => `${u.unidade}: ${numeroBR(u.quantidade)}`).join(' · ');
+  const resto = outras.length > 2 ? ` +${outras.length - 2}` : '';
+
+  return `<span title="${escapeHtml(textoCompleto)}" style="font-weight:600; color:${cobreSozinha ? '#166534' : '#b45309'};">`
+    + `${escapeHtml(mostradas)}${resto}</span>`;
+}
+
 // ---- Tela ---------------------------------------------------------------
 function renderAnalise() {
   const corpo = document.getElementById('analiseBody');
   const vazio = document.getElementById('analiseVazio');
   const linhas = linhasFiltradasAnalise();
   const todas = agruparAnalise();
-  const ativos = todas.filter(l => !analiseIgnorados.has(l.codigo_item));
+  const ativos = todas.filter(l => !analiseItemIgnorado(l.codigo_item));
   const faltando = ativos.filter(l => l.comprar > 0);
   const qtdIgnorados = todas.length - ativos.length;
 
@@ -248,8 +325,13 @@ function renderAnalise() {
       <td class="num" style="font-weight:700; color:${falta ? '#991b1b' : '#166534'};">
         ${falta ? '−' + numeroBR(l.comprar) : '+' + numeroBR(l.sobra)}</td>
       <td class="num" style="font-weight:800; color:#991b1b;">${falta ? numeroBR(l.comprar) : '—'}</td>
+      <td class="loc">${transferenciaHtml(l)}</td>
       <td class="loc" title="${escapeHtml([...l.pedidos].join(', '))}">${numeroBR(l.qtdPedidos)}</td>
       <td class="loc">${escapeHtml(l.primeiroEmbarqueTexto || '—')}</td>
+      <td><input type="text" class="analise-obs-input" data-item="${escapeHtml(l.codigo_item)}"
+             value="${escapeHtml(analiseNotaDoItem(l.codigo_item).observacao)}"
+             placeholder="ex.: já solicitei compra"
+             style="width:170px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px;"></td>
       <td class="col-acoes">
         ${analiseVerIgnorados
           ? `<button class="acao-btn analise-restaurar" data-item="${escapeHtml(l.codigo_item)}" title="Voltar este item pra análise">↺</button>`
@@ -289,31 +371,86 @@ document.getElementById('analiseBody').addEventListener('click', async (e) => {
 async function marcarItemAnalise(botao, codigoItem, ignorar) {
   const msg = document.getElementById('analiseMsg');
   botao.disabled = true;
-
-  const { error } = ignorar
-    ? await sb.from('analise_itens_ignorados').insert([{
-        unidade: unidadeAtual, codigo_item: codigoItem, ignorado_por: nomeUsuarioAtual }])
-    : await sb.from('analise_itens_ignorados').delete()
-        .eq('unidade', unidadeAtual).eq('codigo_item', codigoItem);
-
+  const ok = await gravarNotaItem(codigoItem, { ignorado: ignorar }, msg);
   botao.disabled = false;
-  if (error) {
-    msg.textContent = 'NÃO GRAVOU: ' + error.message
-      + ' — se a mensagem falar em tabela inexistente, sql/fase20-analise-itens-ignorados.sql'
-      + ' ainda não foi rodado no Supabase.';
-    msg.className = 'status-msg status-err';
-    console.error('Falha ao marcar item da análise:', error.message);
-    return;
-  }
-
-  if (ignorar) analiseIgnorados.add(codigoItem);
-  else analiseIgnorados.delete(codigoItem);
+  if (!ok) return;
 
   msg.textContent = ignorar
     ? `Item ${codigoItem} marcado como "não repor" — não aparece mais na análise, nem nas próximas planilhas.`
     : `Item ${codigoItem} voltou pra análise.`;
   msg.className = 'status-msg status-ok';
   renderAnalise();
+}
+
+// Observação livre por item ("já solicitei compra", "pedido 1234"...) --
+// salva ao sair do campo, mesmo padrão da Localização do Controle EXP.
+document.getElementById('analiseBody').addEventListener('focusout', async (e) => {
+  const input = e.target.closest('.analise-obs-input');
+  if (!input) return;
+
+  const codigoItem = input.dataset.item;
+  const novo = input.value.trim();
+  if (novo === analiseNotaDoItem(codigoItem).observacao) return; // nada mudou
+
+  const msg = document.getElementById('analiseMsg');
+  input.disabled = true;
+  const ok = await gravarNotaItem(codigoItem, { observacao: novo || null }, msg);
+  input.disabled = false;
+  if (!ok) {
+    input.value = analiseNotaDoItem(codigoItem).observacao;
+    return;
+  }
+
+  input.style.borderColor = 'var(--blue)';
+  setTimeout(() => { input.style.borderColor = ''; }, 1200);
+  msg.textContent = `Observação do item ${codigoItem} salva.`;
+  msg.className = 'status-msg status-ok';
+});
+
+document.getElementById('analiseBody').addEventListener('keydown', (e) => {
+  if (e.target.classList.contains('analise-obs-input') && e.key === 'Enter') e.target.blur();
+});
+
+// Grava (ou atualiza) a anotação do item e só então mexe no mapa em memória.
+// upsert com onConflict porque a linha pode já existir por causa do outro
+// campo -- marcar "não repor" num item que já tinha observação não pode
+// apagar a observação, e vice-versa.
+async function gravarNotaItem(codigoItem, mudanca, msgEl) {
+  const atual = analiseNotaDoItem(codigoItem);
+  const novo = {
+    ignorado: mudanca.ignorado !== undefined ? mudanca.ignorado : atual.ignorado,
+    observacao: mudanca.observacao !== undefined ? mudanca.observacao : (atual.observacao || null)
+  };
+
+  // .select() de propósito: sem ele, um upsert barrado pelo RLS volta com
+  // error null e nada gravado -- a tela diria "salvo" e o F5 desmentiria.
+  const { data, error } = await sb.from('analise_item_notas')
+    .upsert({
+      unidade: unidadeAtual,
+      codigo_item: codigoItem,
+      ignorado: novo.ignorado,
+      observacao: novo.observacao,
+      atualizado_por: nomeUsuarioAtual,
+      atualizado_em: new Date().toISOString()
+    }, { onConflict: 'unidade,codigo_item' })
+    .select('codigo_item');
+
+  if (error) {
+    msgEl.textContent = 'NÃO GRAVOU: ' + error.message
+      + ' — se a mensagem falar em tabela inexistente, sql/fase20-analise-notas-item.sql'
+      + ' ainda não foi rodado no Supabase.';
+    msgEl.className = 'status-msg status-err';
+    console.error('Falha ao gravar anotação do item:', error.message);
+    return false;
+  }
+  if (!data || !data.length) {
+    msgEl.textContent = 'NÃO GRAVOU: o banco não aceitou a alteração (permissão da unidade?). Nada foi salvo.';
+    msgEl.className = 'status-msg status-err';
+    return false;
+  }
+
+  analiseNotas.set(codigoItem, { ignorado: novo.ignorado, observacao: novo.observacao || '' });
+  return true;
 }
 
 // ---- Colar a planilha ---------------------------------------------------
@@ -411,13 +548,19 @@ async function gravarAnalise() {
 // ---- Exportar (pra mandar pra Compras) ----------------------------------
 const ANALISE_EXPORT_CABECALHO = ['Item', 'Descrição', 'UM', 'Qtd. pedida (total)',
                                   'Saldo almoxarifado', 'Sobra/Falta', 'Comprar',
-                                  'Qtd. pedidos', 'Pedidos', '1º embarque'];
+                                  'Tem em outra unidade', 'Qtd. pedidos', 'Pedidos',
+                                  '1º embarque', 'Observação'];
 
 function linhasExportacaoAnalise() {
   return linhasFiltradasAnalise().map(l => [
     l.codigo_item, l.descricao || '', l.um || '',
     l.pedido, l.saldo, l.sobra, l.comprar,
-    l.qtdPedidos, [...l.pedidos].join(', '), l.primeiroEmbarqueTexto || ''
+    // Texto puro no arquivo (sem HTML): a lista vai pro Compras por e-mail
+    // ou impressa, e "101: 519 · 105: 200" já diz de onde dá pra transferir.
+    (analiseOutrasUnidades.get(l.codigo_item) || [])
+      .map(u => `${u.unidade}: ${numeroBR(u.quantidade)}`).join(' · '),
+    l.qtdPedidos, [...l.pedidos].join(', '), l.primeiroEmbarqueTexto || '',
+    analiseNotaDoItem(l.codigo_item).observacao || ''
   ]);
 }
 
