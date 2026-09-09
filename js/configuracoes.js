@@ -464,6 +464,12 @@ function prepararLote(texto) {
         return;
       }
       if (!porUnidade.has(uni)) porUnidade.set(uni, []);
+      // catalogo_exp_itens.quantidade é `numeric` de verdade (ao contrário de
+      // estoque.quantidade, que é texto) -- "21,6" colado direto quebra o
+      // jsonb_populate_record() do substituir_catalogo_exp() com "invalid
+      // input syntax for type numeric". parseQtd() já faz essa conversão
+      // (vírgula brasileira -> ponto) em todo o resto do portal.
+      const quantidadeTexto = pega('quantidade').trim();
       porUnidade.get(uni).push({
         codigo_item: item,
         descricao: pega('descricao').trim() || null,
@@ -471,7 +477,7 @@ function prepararLote(texto) {
         deposito: pega('deposito').trim() || null,
         referencia: pega('referencia').trim() || null,
         lote: pega('lote').trim() || null,
-        quantidade: pega('quantidade').trim() || null
+        quantidade: quantidadeTexto ? parseQtd(quantidadeTexto) : null
       });
     });
 
