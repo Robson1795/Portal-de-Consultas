@@ -30,8 +30,40 @@ let analiseOutrasUnidades = new Map();
 // mandaria a solicitacao pro lugar errado sem ninguem saber.
 let emailComprasUnidade = '';
 
+// {item, descricao, quantidade}[] do estoque desta unidade -- pra sugerir
+// item equivalente (mesma medida, mesmo material) no lugar de comprar um
+// item difícil de achar fornecedor. Ver sugerirSubstitutos().
+let analiseEstoqueLista = [];
+
+// Acesso restrito (sql/fase21-analise-acesso-restrito.sql): admin, quem
+// está na lista analise_compras_acesso, ou o responsável (gerentes_unidade)
+// desta unidade especifica -- NÃO é sobre qual unidade (isso é minha_unidade(),
+// que já filtra tudo há muito tempo e não muda aqui), é sobre "posso ver esta
+// aba, pra começo de conversa". Ver js/navegacao.js (montarMenu) pra onde isso
+// esconde/mostra o item do menu.
+let podeVerAnaliseCache = false;
+
+async function atualizarPermissaoAnalise() {
+  if (!unidadeAtual) { podeVerAnaliseCache = false; return; }
+  const { data, error } = await sb.rpc('pode_ver_analise_compras', { uni: unidadeAtual });
+  podeVerAnaliseCache = !error && data === true;
+}
+
+// Normaliza o código do item pra comparar/indexar sem se importar com
+// maiúscula/minúscula nem espaço a mais. Bug relatado pelo Robson em
+// 2026-09-09: o item 996613I tinha 43 no almoxarifado (conferido no TOTVS),
+// mas a análise mostrava saldo 0 e mandava comprar -- o código do estoque
+// estava gravado como "996613i" (minúsculo) e o da planilha de pedidos como
+// "996613I" (maiúsculo). Comparação de texto em JS diferencia maiúscula de
+// minúscula, então o saldo batido por `Map.get()` nunca encontrava o item.
+// Sem isso, qualquer item com essa mesma inconsistência entre as duas
+// planilhas mandava comprar o que já tinha no almoxarifado.
+function normalizaCodigoItem(codigo) {
+  return String(codigo || '').trim().toUpperCase();
+}
+
 function analiseNotaDoItem(codigoItem) {
-  return analiseNotas.get(codigoItem)
+  return analiseNotas.get(normalizaCodigoItem(codigoItem))
       || { ignorado: false, observacao: '', solicitado_em: null, solicitado_por: '' };
 }
 
@@ -90,7 +122,7 @@ async function carregarAnalise() {
 
   const [demanda, estoque, notas, emailCompras] = await Promise.all([
     sb.from('analise_demanda').select('*').eq('unidade', unidadeAtual),
-    sb.from('estoque').select('item, quantidade').eq('unidade', unidadeAtual),
+    sb.from('estoque').select('item, descricao, quantidade').eq('unidade', unidadeAtual),
     sb.from('analise_item_notas')
       .select('codigo_item, ignorado, observacao, solicitado_em, solicitado_por')
       .eq('unidade', unidadeAtual),
@@ -108,18 +140,31 @@ async function carregarAnalise() {
 
   // O mesmo item aparece em VÁRIAS linhas do estoque (uma por localização) --
   // somar é obrigatório, senão o saldo sairia só o do primeiro endereço e a
-  // tela mandaria comprar o que já tem.
+  // tela mandaria comprar o que já tem. Chave normalizada (maiúsculo, sem
+  // espaço): ver normalizaCodigoItem().
   analiseSaldoMap = new Map();
   (estoque.error ? [] : (estoque.data || [])).forEach(r => {
-    const atual = analiseSaldoMap.get(r.item) || 0;
-    analiseSaldoMap.set(r.item, atual + parseQtd(r.quantidade));
+    const chave = normalizaCodigoItem(r.item);
+    const atual = analiseSaldoMap.get(chave) || 0;
+    analiseSaldoMap.set(chave, atual + parseQtd(r.quantidade));
   });
+
+  // Guardada à parte (não só o saldo) pra poder sugerir item equivalente no
+  // lugar de comprar um item difícil de achar fornecedor -- ver
+  // sugerirSubstitutos(). Só itens com saldo (item zerado não serve de
+  // sugestão).
+  analiseEstoqueLista = (estoque.error ? [] : (estoque.data || []))
+    .filter(r => parseQtd(r.quantidade) > 0);
 
   // Se a fase20 ainda não rodou, o mapa fica vazio e a tela funciona igual --
   // só sem esconder nada e sem observação (mesmo tratamento do resto do projeto).
   if (notas.error) console.warn('Não foi possível carregar as anotações dos itens:', notas.error.message);
+  // Chave normalizada, igual a busca em analiseNotaDoItem(): sem isso, item
+  // cujo codigo esteja gravado com espaco ou em minuscula nunca casaria -- a
+  // observacao desapareceria da tela, o "nao repor" voltaria a aparecer e a
+  // marca de solicitacao sumiria, tudo sem erro nenhum. Ver normalizaCodigoItem().
   analiseNotas = new Map((notas.error ? [] : (notas.data || []))
-    .map(r => [r.codigo_item, {
+    .map(r => [normalizaCodigoItem(r.codigo_item), {
       ignorado: r.ignorado === true,
       observacao: r.observacao || '',
       solicitado_em: r.solicitado_em || null,
@@ -141,8 +186,57 @@ async function carregarAnalise() {
     emailComprasUnidade = String(emailCompras.data || '').trim();
   }
 
+  await limparObservacoesResolvidas();
   await carregarSaldoOutrasUnidades();
   renderAnalise();
+}
+
+// A observação ("já solicitei compra", "RESSUPRIMENTO"...) sobrevive à
+// troca da planilha de propósito -- mora em analise_item_notas, separada da
+// analise_demanda (ver o SQL). Mas o Robson: "quero que deixe salvo as
+// observações mesmo que eu atualize a planilha, só sair quando o item
+// estiver em estoque" -- ela deve DESAPARECER sozinha quando o saldo
+// finalmente cobrir o pedido de novo, senão ficaria uma anotação velha
+// grudada num item que já foi resolvido, pra sempre.
+//
+// Roda a cada carga (fresh saldo + fresh demanda), depois de agruparAnalise()
+// já poder calcular `comprar` -- não mexe em "não repor" (`ignorado`), que é
+// característica do item e não do estoque estar baixo ou não.
+//
+// Uma chamada só (upsert em lote) em vez de uma por item: pode resolver
+// dezenas de itens de uma vez (reposição grande chegando), e isso é limpeza
+// de fundo, não uma ação que a pessoa pediu -- não faz sentido nem esperar
+// uma rodada de chamadas nem mostrar erro de rede pra ela por causa disso.
+async function limparObservacoesResolvidas() {
+  const resolvidos = agruparAnalise().filter(l =>
+    l.comprar <= 0 && analiseNotaDoItem(l.codigo_item).observacao);
+  if (!resolvidos.length) return;
+
+  const agora = new Date().toISOString();
+  const linhas = resolvidos.map(item => ({
+    unidade: unidadeAtual,
+    codigo_item: item.codigo_item,
+    ignorado: analiseNotaDoItem(item.codigo_item).ignorado,
+    observacao: null,
+    atualizado_por: nomeUsuarioAtual,
+    atualizado_em: agora
+  }));
+
+  const { data, error } = await sb.from('analise_item_notas')
+    .upsert(linhas, { onConflict: 'unidade,codigo_item' })
+    .select('codigo_item');
+
+  if (error) {
+    console.warn('Não foi possível limpar observações de itens já resolvidos:', error.message);
+    return;
+  }
+
+  const limpos = new Set((data || []).map(r => r.codigo_item));
+  resolvidos.forEach(item => {
+    if (!limpos.has(item.codigo_item)) return;
+    const atual = analiseNotaDoItem(item.codigo_item);
+    analiseNotas.set(item.codigo_item, { ignorado: atual.ignorado, observacao: '' });
+  });
 }
 
 // Pros itens em falta, procura saldo nas OUTRAS unidades: o Robson pediu pra
@@ -158,32 +252,67 @@ async function carregarSaldoOutrasUnidades() {
   const emFalta = agruparAnalise().filter(l => l.comprar > 0).map(l => l.codigo_item);
   if (!emFalta.length) return;
 
-  // Em blocos de 100: o `in` do PostgREST viaja na URL e uma análise cheia
-  // tem centenas de itens em falta. Sem os blocos, o sintoma seria "com 5
-  // itens funciona, com 300 não" -- difícil de ligar à causa depois.
-  const BLOCO = 100;
+  // Item que termina em "I" tem um código PRÓPRIO no estoque da Trading (ver
+  // codigoTradingDoItem, js/estoque.js) -- sem tratar à parte, a busca acima
+  // (que casa o código exato) nunca acharia a Trading pra esses itens, mesmo
+  // com saldo lá. Mapa código-da-trading -> código original, pra devolver o
+  // resultado já com o código que o resto da tela reconhece.
+  const codigoOriginalPorCodigoTrading = new Map();
+  emFalta.forEach(codigo => {
+    const codTrading = codigoTradingDoItem(codigo);
+    if (codTrading) codigoOriginalPorCodigoTrading.set(codTrading, codigo);
+  });
+
+  const juntarResultado = (itemBruto, unidade, qtd) => {
+    if (qtd <= 0) return; // unidade zerada não serve pra transferência
+    const item = normalizaCodigoItem(itemBruto); // ver normalizaCodigoItem: mesmo bug do saldo valia aqui
+    if (!analiseOutrasUnidades.has(item)) analiseOutrasUnidades.set(item, []);
+    const lista = analiseOutrasUnidades.get(item);
+    // Mesmo item pode estar em vários endereços da mesma unidade -- soma,
+    // senão a tela ofereceria transferir só o que tem no primeiro endereço.
+    const jaTem = lista.find(u => u.unidade === unidade);
+    if (jaTem) jaTem.quantidade += qtd;
+    else lista.push({ unidade, quantidade: qtd });
+  };
+
+  // `.in()` do Postgres é sensível a maiúscula/minúscula (diferente do
+  // `Map.get()` do JS, que já normalizamos acima) -- sem incluir as duas
+  // variantes na busca, um item gravado em minúsculo em OUTRA unidade nunca
+  // apareceria aqui, mesmo com saldo lá. Em blocos menores (50 códigos, 100
+  // variantes) porque cada código agora entra duas vezes na lista: o `in`
+  // do PostgREST viaja na URL, e o mesmo estouro que blocos de 100 evitam
+  // pra uma variante por código valeria em dobro pra duas.
+  const BLOCO = 50;
   for (let de = 0; de < emFalta.length; de += BLOCO) {
     const pedaco = emFalta.slice(de, de + BLOCO);
+    const variantes = [...new Set(pedaco.flatMap(c => [c, c.toLowerCase()]))];
     const { data, error } = await sb.from('estoque')
       .select('item, unidade, quantidade')
-      .in('item', pedaco)
+      .in('item', variantes)
       .neq('unidade', unidadeAtual);
 
     if (error) {
       console.warn('Não foi possível checar o saldo das outras unidades:', error.message);
       return;
     }
-    (data || []).forEach(r => {
-      const qtd = parseQtd(r.quantidade);
-      if (qtd <= 0) return; // unidade zerada não serve pra transferência
-      if (!analiseOutrasUnidades.has(r.item)) analiseOutrasUnidades.set(r.item, []);
-      const lista = analiseOutrasUnidades.get(r.item);
-      // Mesmo item pode estar em vários endereços da mesma unidade -- soma,
-      // senão a tela ofereceria transferir só o que tem no primeiro endereço.
-      const jaTem = lista.find(u => u.unidade === r.unidade);
-      if (jaTem) jaTem.quantidade += qtd;
-      else lista.push({ unidade: r.unidade, quantidade: qtd });
-    });
+    (data || []).forEach(r => juntarResultado(r.item, r.unidade, parseQtd(r.quantidade)));
+  }
+
+  const codigosTrading = [...codigoOriginalPorCodigoTrading.keys()];
+  for (let de = 0; de < codigosTrading.length; de += BLOCO) {
+    const pedaco = codigosTrading.slice(de, de + BLOCO);
+    const variantes = [...new Set(pedaco.flatMap(c => [c, c.toLowerCase()]))];
+    const { data, error } = await sb.from('estoque')
+      .select('item, quantidade')
+      .in('item', variantes)
+      .eq('unidade', UNIDADE_TRADING);
+
+    if (error) {
+      console.warn('Não foi possível checar o saldo da Trading:', error.message);
+      continue;
+    }
+    (data || []).forEach(r => juntarResultado(
+      codigoOriginalPorCodigoTrading.get(normalizaCodigoItem(r.item)), UNIDADE_TRADING, parseQtd(r.quantidade)));
   }
 
   analiseOutrasUnidades.forEach(lista => lista.sort((a, b) => b.quantidade - a.quantidade));
@@ -197,7 +326,7 @@ function agruparAnalise() {
   const porItem = new Map();
 
   analiseDemanda.forEach(l => {
-    const chave = String(l.codigo_item || '').trim();
+    const chave = normalizaCodigoItem(l.codigo_item);
     if (!chave) return;
     if (!porItem.has(chave)) {
       porItem.set(chave, {
@@ -282,6 +411,162 @@ function linhasFiltradasAnalise() {
 
 function numeroBR(valor) {
   return Number(valor || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+}
+
+// Largura do campo de Observação: o Robson pediu "maleável" -- cresce
+// conforme o texto, com um teto pra não esticar a tabela inteira quando um
+// item tiver uma observação enorme. A tabela já rola pro lado (.scroll-area),
+// então uma coluna mais larga não quebra o layout, só empurra o resto.
+const ANALISE_OBS_LARGURA_MIN = 170;
+const ANALISE_OBS_LARGURA_MAX = 420;
+
+// Estimativa por caractere pra já nascer no tamanho certo, antes mesmo de o
+// campo entrar no DOM (ajustarLarguraObservacao, mais abaixo, refina depois
+// com a largura real do texto renderizado).
+function larguraObservacao(texto) {
+  const estimativa = String(texto || '').length * 7 + 24;
+  return Math.min(ANALISE_OBS_LARGURA_MAX, Math.max(ANALISE_OBS_LARGURA_MIN, estimativa));
+}
+
+// Elemento invisível reaproveitado pra medir o texto -- criar um novo a
+// cada chamada seria desperdício, e um só compartilhado é suficiente
+// porque a medição é síncrona (mede e já lê o resultado, sem sobrepor
+// chamadas).
+let _medidorObservacao = null;
+function medirLarguraTexto(texto, input) {
+  if (!_medidorObservacao) {
+    _medidorObservacao = document.createElement('span');
+    _medidorObservacao.style.position = 'absolute';
+    _medidorObservacao.style.left = '-9999px';
+    _medidorObservacao.style.whiteSpace = 'pre';
+    document.body.appendChild(_medidorObservacao);
+  }
+  // Copia a fonte de verdade do próprio campo (tamanho, peso, família) --
+  // sem isso a medição usaria a fonte padrão do navegador, que pode ser
+  // mais larga ou mais estreita que a da tela e sair errado.
+  _medidorObservacao.style.font = getComputedStyle(input).font;
+  _medidorObservacao.textContent = texto || '';
+  return _medidorObservacao.offsetWidth;
+}
+
+// Ajusta pela largura REAL do texto (medida com a mesma fonte do campo) --
+// `scrollWidth` de um `<input>` não é confiável pra isso em todo navegador
+// (não reflete texto que passa da largura visível, diferente de uma div).
+// Chamada ao digitar, e uma vez logo depois de desenhar a tabela (a
+// estimativa por caractere de larguraObservacao() já deixa perto, isto só
+// afina pro tamanho exato).
+function ajustarLarguraObservacao(input) {
+  const largura = medirLarguraTexto(input.value, input) + 24; // + padding do campo
+  input.style.width = Math.min(ANALISE_OBS_LARGURA_MAX, Math.max(ANALISE_OBS_LARGURA_MIN, largura)) + 'px';
+}
+
+// Sugestão de item EQUIVALENTE já em estoque, no lugar de comprar um item
+// difícil de achar fornecedor. O Robson (09/09/2026): um rebite inox que o
+// cliente quer não tinha em estoque, mas tinha um outro rebite inox da
+// MESMA medida -- só que um rebite da mesma medida que NÃO é inox não
+// serve de sugestão, mesmo com a medida idêntica. A regra: mesma medida
+// (a parte numérica tipo "4,0 X 15MM") E pelo menos uma palavra em comum
+// fora do tipo do item e da própria medida (aqui, "INOX").
+//
+// Por que "palavra em comum" em vez de uma lista fixa de materiais
+// (inox/alumínio/galvanizado...): a mesma lógica serve pra qualquer
+// categoria de item sem o código ter que conhecer o vocabulário de cada
+// uma -- "RAL9006" bate com "RAL9006", "316L" bate com "316L", etc.
+
+// Casa "4,0 X 15MM", "4,0X15MM", "4 X 15 MM" etc -- vírgula ou ponto
+// decimal, com ou sem espaço ao redor do X. Sempre maiúsculo antes de
+// comparar (ver normalizaCodigoItem() pro mesmo motivo com código de item).
+const ANALISE_MEDIDA_REGEX = /(\d+[.,]?\d*)\s*X\s*(\d+[.,]?\d*)\s*MM/;
+
+function extrairMedida(descricao) {
+  const m = String(descricao || '').toUpperCase().match(ANALISE_MEDIDA_REGEX);
+  return m ? `${m[1].replace(',', '.')}X${m[2].replace(',', '.')}` : null;
+}
+
+// Palavras "qualificadoras" de uma descrição: tudo, exceto a medida (já
+// extraída à parte) e a primeira palavra (o TIPO do item -- "REBITE",
+// "PARAFUSO"... -- que é sempre igual dentro da mesma busca e não ajuda a
+// diferenciar um substituto de outro).
+function palavrasQualificadoras(descricao, medida) {
+  let texto = String(descricao || '').toUpperCase();
+  if (medida) texto = texto.replace(ANALISE_MEDIDA_REGEX, ' ');
+  const palavras = texto.split(/[^A-Z0-9]+/).filter(p => p.length > 1);
+  palavras.shift(); // tira a primeira (o tipo do item)
+  return new Set(palavras);
+}
+
+// Varre o estoque local (analiseEstoqueLista) atrás de itens com a MESMA
+// medida da descrição alvo e pelo menos uma palavra qualificadora em
+// comum -- ordenado por quantas palavras batem (mais em comum primeiro).
+function sugerirSubstitutos(codigoAlvo, descricaoAlvo) {
+  const medidaAlvo = extrairMedida(descricaoAlvo);
+  if (!medidaAlvo) return [];
+  const qualAlvo = palavrasQualificadoras(descricaoAlvo, medidaAlvo);
+
+  return analiseEstoqueLista
+    .filter(r => normalizaCodigoItem(r.item) !== normalizaCodigoItem(codigoAlvo))
+    .map(r => {
+      if (extrairMedida(r.descricao) !== medidaAlvo) return null;
+      const qual = palavrasQualificadoras(r.descricao, medidaAlvo);
+      const comuns = [...qualAlvo].filter(p => qual.has(p));
+      if (!comuns.length) return null;
+      return { item: r.item, descricao: r.descricao, quantidade: parseQtd(r.quantidade), comuns };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.comuns.length - a.comuns.length);
+}
+
+// Botão da coluna Substituto -- só aparece pra quem está zerado no
+// almoxarifado (saldo <= 0) e ainda em falta: com algum saldo, o item
+// resolve sozinho ou por transferência, sugerir troca aí só complicaria.
+function substitutoHtml(linha) {
+  if (linha.saldo > 0 || linha.comprar <= 0) return '<span style="color:var(--muted);">—</span>';
+
+  const sugestoes = sugerirSubstitutos(linha.codigo_item, linha.descricao);
+  if (!sugestoes.length) return '<span style="color:var(--muted);">—</span>';
+
+  return `<button class="acao-btn analise-substituto" data-item="${escapeHtml(linha.codigo_item)}"
+                  title="${sugestoes.length} substituto(s) possível(is) já em estoque -- clique para ver">💡</button>`;
+}
+
+// Reaproveita o modal já existente (compareModal/compareModalBox, de
+// js/estoque.js) em vez de montar um terceiro modal do zero -- muda só o
+// conteúdo de dentro.
+function abrirSugestoesSubstituto(codigoItem) {
+  const linha = agruparAnalise().find(l => l.codigo_item === codigoItem);
+  if (!linha) return;
+  const sugestoes = sugerirSubstitutos(codigoItem, linha.descricao);
+
+  compareModalBox.innerHTML = `
+    <button class="modal-close" id="compareCloseBtn2">✕</button>
+    <h3 style="padding-right:24px;">${escapeHtml(linha.descricao || codigoItem)}</h3>
+    <div class="modal-item-code">Código: ${escapeHtml(codigoItem)} — sem saldo no almoxarifado</div>
+    <div class="modal-text" style="margin:8px 0 4px;">
+      Itens já em estoque com a mesma medida e pelo menos uma palavra em comum
+      (ex.: material) -- confira se algum serve no lugar de comprar o original.
+    </div>
+    <table style="width:100%; border-collapse:collapse; margin-top:6px; font-size:13px; table-layout:fixed;">
+      <thead>
+        <tr style="border-bottom:2px solid var(--border);">
+          <th style="width:20%; text-align:left; padding:6px 10px; color:var(--muted); font-size:11px; text-transform:uppercase;">Item</th>
+          <th style="width:50%; text-align:left; padding:6px 10px; color:var(--muted); font-size:11px; text-transform:uppercase;">Descrição</th>
+          <th style="width:15%; text-align:right; padding:6px 10px; color:var(--muted); font-size:11px; text-transform:uppercase;">Saldo</th>
+          <th style="width:15%; text-align:left; padding:6px 10px; color:var(--muted); font-size:11px; text-transform:uppercase;">Em comum</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${sugestoes.map(s => `
+          <tr>
+            <td style="padding:9px 10px; font-weight:600;">${escapeHtml(s.item)}</td>
+            <td style="padding:9px 10px;">${escapeHtml(s.descricao)}</td>
+            <td style="padding:9px 10px; text-align:right; font-weight:700; color:var(--blue-dark);">${numeroBR(s.quantidade)}</td>
+            <td style="padding:9px 10px; color:#166534;">${escapeHtml(s.comuns.join(', '))}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>
+  `;
+  document.getElementById('compareCloseBtn2').addEventListener('click', closeCompareModal);
+  compareModal.classList.add('open');
 }
 
 // Onde mais a empresa tem este item, pra pedir transferência em vez de
@@ -620,12 +905,13 @@ function renderAnalise() {
         ${falta ? '−' + numeroBR(l.comprar) : '+' + numeroBR(l.sobra)}</td>
       <td class="num" style="font-weight:800; color:#991b1b;">${falta ? numeroBR(l.comprar) : '—'}</td>
       <td class="loc">${transferenciaHtml(l)}</td>
+      <td class="loc">${substitutoHtml(l)}</td>
       <td class="loc" title="${escapeHtml([...l.pedidos].join(', '))}">${numeroBR(l.qtdPedidos)}</td>
       <td class="loc">${escapeHtml(l.primeiroEmbarqueTexto || '—')}</td>
       <td><input type="text" class="analise-obs-input" data-item="${escapeHtml(l.codigo_item)}"
              value="${escapeHtml(analiseNotaDoItem(l.codigo_item).observacao)}"
              placeholder="ex.: já solicitei compra"
-             style="width:170px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px;"></td>
+             style="width:${escapeHtml(String(larguraObservacao(analiseNotaDoItem(l.codigo_item).observacao)))}px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px;"></td>
       <td class="col-acoes">
         ${analiseVerIgnorados
           ? `<button class="acao-btn analise-restaurar" data-item="${escapeHtml(l.codigo_item)}" title="Voltar este item pra análise">↺</button>`
@@ -634,6 +920,11 @@ function renderAnalise() {
       </td>
     </tr>`;
   }).join('');
+
+  // Refina a largura estimada por caractere com a largura real do texto já
+  // renderizado (fonte de verdade é o próprio navegador, não uma conta por
+  // caractere) -- só depois de estar no DOM é que scrollWidth existe.
+  document.querySelectorAll('.analise-obs-input').forEach(ajustarLarguraObservacao);
 }
 
 document.getElementById('analiseBusca').addEventListener('input', renderAnalise);
@@ -662,6 +953,9 @@ document.getElementById('analiseBody').addEventListener('click', async (e) => {
   // item?") e o Robson já conhece essa tela.
   const btnComparar = e.target.closest('.analise-comparar');
   if (btnComparar) { openCompareModal(btnComparar.dataset.item, pedidosDoItemHtml(btnComparar.dataset.item)); return; }
+
+  const btnSubstituto = e.target.closest('.analise-substituto');
+  if (btnSubstituto) { abrirSugestoesSubstituto(btnSubstituto.dataset.item); return; }
 
   const btnSolicitar = e.target.closest('.analise-solicitar');
   if (btnSolicitar) {
@@ -723,6 +1017,13 @@ document.getElementById('analiseBody').addEventListener('focusout', async (e) =>
 
 document.getElementById('analiseBody').addEventListener('keydown', (e) => {
   if (e.target.classList.contains('analise-obs-input') && e.key === 'Enter') e.target.blur();
+});
+
+// Cresce o campo em tempo real -- o Robson: "dependendo do tamanho do
+// texto aumenta o tamanho dessa coluna, tem itens que escrevo e não cabe
+// tudo".
+document.getElementById('analiseBody').addEventListener('input', (e) => {
+  if (e.target.classList.contains('analise-obs-input')) ajustarLarguraObservacao(e.target);
 });
 
 // Grava (ou atualiza) a anotação do item e só então mexe no mapa em memória.
@@ -878,7 +1179,7 @@ async function gravarAnalise() {
 // ---- Exportar (pra mandar pra Compras) ----------------------------------
 const ANALISE_EXPORT_CABECALHO = ['Item', 'Descrição', 'UM', 'Qtd. pedida (total)',
                                   'Saldo almoxarifado', 'Sobra/Falta', 'Comprar',
-                                  'Outras unidades', 'Qtd. pedidos', 'Pedidos',
+                                  'Outras unidades', 'Substituto sugerido', 'Qtd. pedidos', 'Pedidos',
                                   '1º embarque', 'Observação'];
 
 function linhasExportacaoAnalise() {
@@ -889,6 +1190,12 @@ function linhasExportacaoAnalise() {
     // ou impressa, e "101: 519 · 105: 200" já diz de onde dá pra transferir.
     (analiseOutrasUnidades.get(l.codigo_item) || [])
       .map(u => `${u.unidade}: ${numeroBR(u.quantidade)}`).join(' · '),
+    // Só calcula pra quem entra no botão 💡 (zerado e ainda em falta) --
+    // pros demais a sugestão não faz sentido (ver substitutoHtml()).
+    (l.saldo <= 0 && l.comprar > 0)
+      ? sugerirSubstitutos(l.codigo_item, l.descricao)
+          .map(s => `${s.item} - ${s.descricao} (${numeroBR(s.quantidade)} disponível)`).join(' · ')
+      : '',
     l.qtdPedidos, [...l.pedidos].join(', '), l.primeiroEmbarqueTexto || '',
     analiseNotaDoItem(l.codigo_item).observacao || ''
   ]);

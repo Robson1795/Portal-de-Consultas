@@ -220,6 +220,7 @@ async function mostrarTelaCorreta(session) {
     pendingScreen.style.display = 'none';
     portalScreen.style.display = 'block';
     montarCabecalho();
+    await atualizarPermissaoAnalise(); // precisa rodar antes do menu, pra saber se mostra "Análise de Compras"
     montarMenu();           // ja abre a primeira pagina permitida
     await atualizarBotaoEditar();
   } else {

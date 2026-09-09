@@ -758,6 +758,168 @@ reescrever "já solicitei compra" todo santo dia.
   RLS volta com `error null` e nada gravado — a tela diria "salvo" e o F5
   desmentiria. Mesmo furo do item A1 da auditoria.
 
+### Observação desaparece sozinha quando o item volta a ter saldo (09/09/2026)
+
+O Robson: *"quero que deixe salvo as observações mesmo que eu atualize a
+planilha, só sair quando o item estiver em estoque"*. A observação já
+sobrevivia à troca de planilha (seção acima) — faltava o outro lado: ela não
+podia ficar pra sempre grudada num item que já foi resolvido.
+
+`limparObservacoesResolvidas()` roda a cada carga da tela (depois de saldo e
+demanda frescos), acha os itens com `comprar <= 0` que ainda têm observação,
+e apaga só a observação (mantém `ignorado` como estava — "não repor" não
+depende do estoque estar baixo). Um `upsert` em lote, silencioso: é limpeza
+de fundo, não uma ação que a pessoa pediu, então erro de rede aqui vira
+`console.warn`, não uma mensagem pra ela.
+
+### Bug: código do item com maiúscula/minúscula diferente entre planilhas (09/09/2026)
+
+O Robson relatou: item `996613I` (2 pedidos, precisa de 2) aparecia com saldo
+**0** e mandando comprar, mas o TOTVS mostrava **43** no almoxarifado (print
+em anexo). *"Esse item eu tenho, a conta não está certo, favor verificar pra
+todos os itens."*
+
+**Causa:** o código estava gravado como `996613I` (maiúsculo) na planilha de
+pedidos colada, e como `996613i` (minúsculo) na tabela `estoque` — mesmo
+item, letra diferente. Duas comparações diferentes, dois bugs diferentes:
+
+1. **No cliente** (`analiseSaldoMap.get(codigo)`): `Map` do JavaScript
+   diferencia maiúscula de minúscula, então o saldo carregado (a tabela
+   inteira da unidade, sem filtro por item) nunca era encontrado na hora de
+   somar por item.
+2. **No banco** (`.eq('item', codigo)` / `.in('item', [...])`): o Postgres
+   também diferencia, então uma busca filtrada por código (outras unidades,
+   `openCompareModal`) também não achava a linha.
+
+**Correção, nos dois lados:**
+
+- `normalizaCodigoItem()` (`js/analise.js`) — maiúsculo + sem espaço — vira a
+  chave de `analiseSaldoMap`, do agrupamento em `agruparAnalise()` e de
+  `analiseOutrasUnidades`. Resolve o problema nº 1 por completo: a tabela
+  `estoque` é lida inteira (sem filtro por item), então o dado já chega
+  certo, só a comparação em JS precisava ignorar a caixa.
+- Para buscas **filtradas** no banco (problema nº 2), não dá pra normalizar
+  no JS e pronto — o filtro roda no Postgres. Duas soluções, conforme o caso:
+  - **Um item só** (`openCompareModal`): trocou `.eq('item', cod)` por
+    `.ilike('item', escapeIlike(cod))` — sem `%`/`_`, `ilike` é uma
+    comparação exata que ignora maiúscula/minúscula.
+  - **Lista de itens** (`carregarSaldoOutrasUnidades`, `.in('item', [...])`):
+    não existe um `.in` case-insensitive pronto no PostgREST. A lista de
+    busca ganhou a variante minúscula de cada código
+    (`[...new Set(pedaco.flatMap(c => [c, c.toLowerCase()]))]`), e o
+    resultado é normalizado de volta na hora de juntar no mapa. Blocos
+    caíram de 100 para 50 códigos: cada um agora entra até duas vezes na
+    lista, e o motivo dos blocos (tamanho da URL do `in`) dobra junto.
+
+### Coluna Observação maleável (09/09/2026)
+
+O Robson: *"pode deixar aqui maleável, dependendo do tamanho do texto aumenta
+o tamanho dessa coluna, tem itens que escrevo e não cabe tudo"*.
+
+O campo cresce em tempo real conforme digita (170px a 420px), com a tabela
+já preparada pra rolar pro lado (`.scroll-area`) quando isso empurra o
+resto. Duas camadas de precisão:
+
+- **Estimativa por caractere** (`larguraObservacao()`) pro tamanho inicial,
+  antes mesmo do campo entrar no DOM (é só uma string de HTML nesse ponto).
+- **Medição real** (`ajustarLarguraObservacao()` + `medirLarguraTexto()`) —
+  um `<span>` invisível fora da tela, com a MESMA fonte do campo
+  (`getComputedStyle`), recebe o texto e `offsetWidth` dá a largura exata.
+  Refina o tamanho a cada tecla e de novo, pra todos os campos, logo depois
+  de desenhar a tabela.
+
+⚠️ **`scrollWidth` de um `<input>` não serve pra isso** — ao contrário de uma
+`<div>`, não reflete de forma confiável o texto que passa da largura visível
+em todo navegador. Foi a primeira tentativa aqui, e o teste pegou: a largura
+não crescia nunca, presa no mínimo. Daí o `<span>` de medição.
+
+### Análise de Compras: acesso restrito, sem senha (09/09/2026)
+
+O RLS original (Fase 19/20) deixava qualquer conta aprovada ver a análise da
+própria unidade -- mais aberto do que devia pra dado comercial (o que falta
+comprar, pra quem, com que urgência). O Robson: *"quero limitar o acesso
+desse para o Joel, eu, Victor, Maiko e Gian do PCP"* + *"essa tela só quero
+pra eles"* + *"deixe liberado sem senha pra eles"* (diferente do Controle
+EXP Acessórios, que usa senha por unidade).
+
+E, no meio do pedido: *"E os responsáveis de cada unidade"* + *"cada unidade
+terá essa aba, só que não misture as coisas"* -- **dois conceitos
+separados**, cada um resolvendo uma pergunta diferente:
+
+1. **De qual unidade você vê a análise?** A sua (`minha_unidade()`), ou
+   todas se for admin. Isso já existia e não mudou.
+2. **Você pode ver a aba, pra começo de conversa?** Só quem está numa lista,
+   OU é o responsável daquela unidade específica. É o que esta fase
+   adiciona -- `pode_ver_analise_compras(uni)`
+   (`sql/fase21-analise-acesso-restrito.sql`): `eh_admin()` OU está em
+   `analise_compras_acesso` OU está em `gerentes_unidade` **daquela
+   unidade**.
+
+**Por que reaproveitar `gerentes_unidade` em vez de duplicar nomes:** "o
+responsável de cada unidade" já é exatamente o que essa tabela guarda (hoje
+Joel-106, David-101, João Ricardo-105, Edvaldo-104...). Copiar pra uma lista
+nova criaria duas listas pra manter sincronizadas -- cadastrar um novo
+responsável de unidade exigiria lembrar de mexer nas duas. `analise_compras
+_acesso` é só pra quem precisa ver **sem ser** responsável de unidade
+nenhuma (hoje: Joel — já também é gerente da 106, então essa entrada é
+redundante mas inofensiva —, Victor e Robson — já são super admin, também
+redundante; Maiko e Gian entram aqui quando os e-mails de login deles
+chegarem).
+
+- **Sem tela de admin pra editar a lista** — mesmo padrão de
+  `gerentes_unidade`/`editores_bobinas`: adiciona por SQL direto no
+  Supabase quando precisar. Confirmado com o Explore desta sessão: não
+  existe (e nunca existiu) uma UI de "adicionar e-mail" pra nenhuma dessas
+  listas neste projeto.
+- **`podeVerAnaliseCache`** (`js/analise.js`) é buscado uma vez, em
+  `js/auth.js` logo depois de `montarCabecalho()` (que já resolveu
+  `unidadeAtual`) e antes de `montarMenu()` — o menu é síncrono e precisa do
+  resultado já pronto. `montarMenu()` filtra `'analise'` da lista de
+  páginas visíveis se a cache for falsa; `mostrarPagina('analise')` repete a
+  checagem como cinto e suspensório.
+- A trava por PERFIL (`PERFIS[perfil].paginas`, decide o SETOR — Estoque
+  ALM vê a página, Estoque Aço não) e a trava por PESSOA
+  (`podeVerAnaliseCache`, decide QUEM dentro do setor) são independentes —
+  as duas precisam passar.
+- `substituir_analise_demanda()` trocou a checagem de `pode_atualizar_estoque
+  (uni)` pra `pode_ver_analise_compras(uni)`: o RLS da tabela só protege
+  escrita/leitura direta, não uma função `security definer` chamada por RPC
+  — sem trocar ali, alguém sem acesso à aba ainda conseguiria gravar dados
+  nela.
+
+### Sugestão de item substituto (09/09/2026)
+
+O Robson: item que o cliente quer (rebite inox, difícil achar fornecedor)
+não tinha em estoque, mas ele tinha OUTRO rebite inox da mesma medida — só
+que um terceiro rebite, mesma medida mas não inox, **não** deveria ser
+sugerido. Botão 💡 na coluna **Substituto**, só pra item **zerado no
+almoxarifado** (`saldo <= 0`) e ainda em falta — com algum saldo, o item já
+resolve sozinho ou por transferência (coluna "Outras unidades"), sugerir
+troca aí só complicaria.
+
+**A regra, em `sugerirSubstitutos()` (js/analise.js):** mesma **medida**
+(a parte numérica da descrição, tipo "4,0 X 15MM" — `extrairMedida()`,
+regex tolerante a vírgula/ponto e espaço ao redor do X) **e** pelo menos
+uma **palavra em comum** fora do tipo do item e da própria medida
+(`palavrasQualificadoras()` — tira a primeira palavra, que é sempre o tipo
+tipo "REBITE"/"PARAFUSO", e a medida já extraída à parte).
+
+- **Por que "palavra em comum" e não uma lista fixa de materiais**
+  (inox/alumínio/galvanizado...): a mesma lógica serve pra qualquer
+  categoria de item sem o código ter que conhecer o vocabulário de cada
+  uma — "RAL9006" bate com "RAL9006", "316L" bate com "316L", etc., sem
+  precisar cadastrar nada disso à parte.
+- Candidatos vêm de `analiseEstoqueLista` (estoque da própria unidade, só
+  itens com saldo > 0) — carregado junto com o saldo em `carregarAnalise()`
+  (a query de `estoque` ganhou a coluna `descricao`, que antes não vinha).
+  Ordenados por quantas palavras batem (mais em comum primeiro).
+- O modal reaproveita o MESMO `compareModal`/`compareModalBox` de
+  `openCompareModal()` (js/estoque.js) — muda só o conteúdo de dentro, não é
+  um terceiro modal desenhado do zero.
+- Vai no Exportar como texto (`Substituto sugerido`), só pra quem entra no
+  botão — pra quem decide comprar ou não já ver a alternativa na planilha
+  mandada pro Compras.
+
 ### Solicitação de compra por item (09/09/2026)
 
 Cada item em falta ganha um botão **🛒** na coluna Ação, que abre o e-mail de
