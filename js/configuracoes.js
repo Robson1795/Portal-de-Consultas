@@ -276,7 +276,7 @@ document.getElementById('cfgUniRecarregar').addEventListener('click', carregarCo
 // Ver sql/fase12-substituir-estoque-em-lote.sql.
 // ===========================================================================
 
-let loteAba = 'alm';          // 'alm' | 'sesmt' | 'aco'
+let loteAba = 'alm';          // 'alm' | 'sesmt' | 'aco' | 'exp'
 let lotePreparado = null;     // resultado do Conferir, aguardando confirmação
 
 const LOTE_FORMATOS = {
@@ -285,6 +285,10 @@ const LOTE_FORMATOS = {
   sesmt: 'Precisa de cabeçalho, e uma das colunas tem de ser a unidade — igual à do '
        + 'almoxarifado. Colunas lidas: Unidade (ou Estab), Item, Descrição, UM, Localização, '
        + 'Quantidade. Vai para o depósito SESMT (EPI) de cada unidade.',
+  exp: 'Precisa de cabeçalho, e uma das colunas tem de ser a unidade. Colunas lidas: '
+     + 'Unidade (ou Estab), Item, Quantidade, Localização, Nº Pedido, Nº OP, Lote, '
+     + 'Referência — em qualquer ordem. Substitui o que está NA EXPEDIÇÃO de cada '
+     + 'unidade; o que já foi retirado não é tocado.',
   aco: 'As oito colunas da planilha de bobinas, nesta ordem: Item, Descrição Item, Est, Dep, '
      + 'Localizacao, Lote, Un, Qtd Liquida. A coluna Est diz a unidade de cada bobina, e '
      + 'só as unidades que aparecerem na planilha são substituídas.'
@@ -302,7 +306,13 @@ const LOTE_SINONIMOS = {
                 'nome do item'],
   localizacao: ['localizacao', 'local', 'endereco', 'end', 'localizacao item', 'posicao'],
   quantidade:  ['quantidade', 'qtd', 'qtde', 'qtd atual', 'saldo', 'saldo atual',
-                'quantidade atual', 'qtd liquida', 'estoque']
+                'quantidade atual', 'qtd liquida', 'estoque'],
+  // Só o Controle EXP usa estas três. Nº do pedido e Nº da OP aparecem
+  // com meia dúzia de grafias diferentes na planilha do PCP.
+  lote:          ['lote', 'lote item', 'n lote', 'nº lote', 'numero lote', 'no lote'],
+  numero_pedido: ['numero pedido','n pedido','no pedido','nº pedido','pedido','num pedido','numero do pedido'],
+  numero_os_op:  ['numero os','n os','nº os','os','op','n op','nº op','numero op','os op','n os op','nº os/op','os/op'],
+  referencia:    ['referencia','ref','referência'],
 };
 
 function normalizaCabecalho(s) {
@@ -408,6 +418,73 @@ function prepararLote(texto) {
     return { tipo: 'aco', registros, avisos, mapa: null,
              porEst: [...porEst.entries()].sort((a, b) => a[0].localeCompare(b[0])) };
   }
+
+  // ---------------------------------------- Controle EXP
+  //
+  // Fica ANTES do ramo de estoque porque as colunas são outras: aqui não há
+  // descrição nem UM (a tabela não guarda -- decisão do sql/programacao-03), e
+  // há número de pedido, OP, lote e referência.
+  if (loteAba === 'exp') {
+    if (!pareceCabecalho(linhas[0])) {
+      return { erro: 'Esta planilha precisa de cabeçalho: é nele que eu encontro a coluna da '
+                   + 'unidade. Cole incluindo a primeira linha, com os nomes das colunas.' };
+    }
+    const cabecalho = linhas[0];
+    const mapa = mapearColunas(cabecalho, ['um', 'unidade', 'item', 'quantidade', 'localizacao',
+                                           'numero_pedido', 'numero_os_op', 'lote', 'referencia']);
+    if (mapa.item === undefined) {
+      return { erro: 'Não encontrei a coluna do item. Cabeçalho lido: ' + cabecalho.join(' · ') };
+    }
+    if (mapa.unidade === undefined) {
+      return { erro: 'Não encontrei a coluna da unidade. Ela pode se chamar Unidade, Estab, '
+                   + 'Estabelecimento, Est ou Filial. Cabeçalho lido: ' + cabecalho.join(' · ') };
+    }
+
+    const conhecidas = new Set(Object.keys(UNIDADES));
+    const porUnidade = new Map();
+    const desconhecidas = new Map();
+    let semItem = 0;
+
+    linhas.slice(1).forEach(c => {
+      const pega = (campo) => (mapa[campo] !== undefined ? (c[mapa[campo]] || '') : '');
+      const item = pega('item').trim();
+      const uni = pega('unidade').trim();
+      if (!item || !uni) { semItem++; return; }
+      if (!conhecidas.has(uni)) {
+        desconhecidas.set(uni, (desconhecidas.get(uni) || 0) + 1);
+        return;
+      }
+      if (!porUnidade.has(uni)) porUnidade.set(uni, []);
+      porUnidade.get(uni).push({
+        codigo_item: item,
+        quantidade: pega('quantidade').trim() || null,
+        localizacao: pega('localizacao').trim() || null,
+        numero_pedido: pega('numero_pedido').trim() || null,
+        numero_os_op: pega('numero_os_op').trim() || null,
+        lote: pega('lote').trim() || null,
+        referencia: pega('referencia').trim() || null
+      });
+    });
+
+    if (semItem) {
+      avisos.push(semItem + ' linha(s) ignorada(s) por estar sem código de item ou sem unidade.');
+    }
+    for (const [uni, n] of desconhecidas) {
+      avisos.push(n + ' linha(s) ignorada(s) da unidade "' + uni + '", que não existe no portal.');
+    }
+    if (!porUnidade.size) {
+      return { erro: 'Nenhuma linha aproveitável: confira se a coluna da unidade tem os códigos '
+                   + '(101, 105, 106...) e se a coluna do item está preenchida.' };
+    }
+
+    const blocos = [...porUnidade.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([unidade, itens]) => ({ unidade, itens, setor: 'exp',
+                                    registrado_por: nomeUsuarioAtual }));
+
+    return { tipo: 'exp', blocos, avisos, mapa, cabecalho };
+  }
+
 
   // ---------------------------------------- Estoque: ALM e SESMT
   // As DUAS precisam da coluna de unidade desde 09/09/2026: o SESMT deixou
@@ -586,6 +663,18 @@ function cancelarConfirmacaoLote() {
 }
 
 // ---- Gravar ---------------------------------------------------------------
+// Diz quantos registros JÁ RETIRADOS ficaram de fora da substituição. Sem
+// esse número, "substituído" soa como "apaguei tudo" -- e no EXP a tabela
+// guarda o histórico de quem retirou o quê (ver sql/fase26-exp-em-lote.sql).
+function avisoHistoricoExp(data) {
+  const guardados = ((data && data.blocos) || [])
+    .reduce((s, b) => s + (b.historico_preservado || 0), 0);
+  return guardados
+    ? ' ' + guardados.toLocaleString('pt-BR') + ' registro(s) já retirado(s) não foram tocados.'
+    : '';
+}
+
+
 async function aplicarLote() {
   const msg = document.getElementById('loteMsg');
   const botao = document.getElementById('loteConfirmarBtn');
@@ -604,7 +693,9 @@ async function aplicarLote() {
 
   const { data, error } = (lotePreparado.tipo === 'aco')
     ? await sb.rpc('substituir_bobinas', { linhas: lotePreparado.registros, quem: nomeUsuarioAtual })
-    : await sb.rpc('substituir_estoque', { payload: lotePreparado.blocos });
+    : (lotePreparado.tipo === 'exp')
+      ? await sb.rpc('substituir_exp_controle', { payload: lotePreparado.blocos })
+      : await sb.rpc('substituir_estoque', { payload: lotePreparado.blocos });
 
   if (botao) botao.disabled = false;
   if (error) {
@@ -622,6 +713,10 @@ async function aplicarLote() {
     ? 'Bobinas substituídas em '
       + ((data && data.unidades) ? data.unidades.length : '?') + ' unidade(s): '
       + ((data && data.bobinas) || 0) + ' linha(s).'
+    : (lotePreparado.tipo === 'exp')
+      ? 'Controle EXP substituído em '
+        + ((data && data.blocos) ? data.blocos.length : '?') + ' unidade(s).'
+        + avisoHistoricoExp(data)
     : 'Estoque substituído em '
       + ((data && data.unidades) ? data.unidades.length : '?') + ' unidade(s).'
       + avisoEstoqueMinimoNaoPreservado(data);
