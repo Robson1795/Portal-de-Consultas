@@ -483,6 +483,79 @@
   </div>
   <!-- ================= FIM PROGRAMAÇÃO DE SEPARAÇÃO ================= -->
 
+  <!-- ================= ANÁLISE DE COMPRAS ================= -->
+  <!-- Cola a planilha dos pedidos que estão entrando pra separação e compara
+       o total pedido de cada item com o saldo do almoxarifado da unidade:
+       o que falta comprar, e com que urgência (ver js/analise.js). -->
+  <div id="analiseComprasContent" style="display:none;">
+    <div class="panel">
+      <h2 style="margin:0 0 4px;">📊 Análise de Compras</h2>
+      <div class="modal-text" style="margin-bottom:12px;">
+        Some o que <b>todos os pedidos juntos</b> precisam de cada item e compare com o
+        saldo do almoxarifado desta unidade — pra saber o que comprar antes de faltar.
+      </div>
+
+      <div class="cfg-barra">
+        <button class="btn" id="analiseColarToggleBtn">📋 Colar planilha de pedidos</button>
+        <button class="btn" id="analiseAtualizarBtn" style="margin-left:auto;">Atualizar</button>
+      </div>
+
+      <div id="analiseColarArea" style="padding:16px; display:none;">
+        <div class="modal-text" style="margin-bottom:8px;">
+          Copie da planilha e cole aqui, <b>nesta ordem de colunas</b>:
+          <b>Emissão · Pedido · Nome abrev. · Seq. etapa · Item · Descrição · UM ·
+          Qt. pedida · Qt. atendida · Data embarque · OS</b>.
+          A linha de cabeçalho pode vir junto, é ignorada.
+          <br>⚠️ Cada colagem <b>substitui</b> a análise anterior desta unidade — é o retrato do dia.
+        </div>
+        <textarea id="analiseTexto" rows="6" placeholder="Cole aqui as células copiadas do Excel (Ctrl+C na planilha, Ctrl+V aqui)."
+                  style="width:100%; padding:10px; border:1px solid var(--border); border-radius:8px; font-family:monospace; font-size:12px;"></textarea>
+        <div class="cfg-barra" style="padding:10px 0 0;">
+          <button class="btn btn-primary" id="analiseConferirBtn">Conferir</button>
+          <span class="status-msg" id="analiseColarMsg"></span>
+        </div>
+        <div id="analisePrevia" style="margin-top:10px;"></div>
+      </div>
+
+      <div class="cfg-barra">
+        <span id="analiseResumo" style="font-size:13px; color:var(--muted);"></span>
+      </div>
+
+      <div class="cfg-barra">
+        <input type="text" id="analiseBusca" placeholder="Buscar por código ou descrição do item..."
+               style="flex:1; min-width:200px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+        <button class="btn" id="analiseSoFaltaBtn" title="Mostra só os itens em que o saldo não cobre o total pedido">Só o que falta comprar</button>
+        <select id="analiseExportarFormato" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <option value="xlsx">Excel (.xlsx)</option>
+          <option value="csv">CSV</option>
+        </select>
+        <button class="btn" id="analiseExportarBtn">Exportar</button>
+        <span class="status-msg" id="analiseMsg" style="flex-basis:100%;"></span>
+      </div>
+
+      <div class="scroll-area">
+        <table>
+          <thead>
+            <tr>
+              <th>Item</th><th>Descrição</th><th>UM</th>
+              <th title="Soma da Qt. pedida de todos os pedidos deste item">Qtd. pedida (total)</th>
+              <th title="Saldo somado de todas as localizações desta unidade">Saldo almoxarifado</th>
+              <th title="Saldo menos o total pedido: negativo é falta">Sobra / Falta</th>
+              <th title="Quanto falta comprar pra atender todos os pedidos">Comprar</th>
+              <th title="Quantos pedidos diferentes pedem este item">Pedidos</th>
+              <th title="Data de embarque mais próxima entre os pedidos deste item">1º embarque</th>
+            </tr>
+          </thead>
+          <tbody id="analiseBody"></tbody>
+        </table>
+      </div>
+      <div class="empty-msg" id="analiseVazio" style="display:none;">
+        Nenhuma planilha de pedidos colada ainda.
+      </div>
+    </div>
+  </div>
+  <!-- ================= FIM ANÁLISE DE COMPRAS ================= -->
+
   <!-- ================= CONTROLE EXP ACESSÓRIOS ================= -->
   <!-- Plataforma própria, só de controle de entrada e saída dos itens já
        separados na expedição -- não depende das planilhas de Programação de
@@ -1072,5 +1145,6 @@
 <script src="js/configuracoes.js"></script>
 <script src="js/requisicao.js"></script>
 <script src="js/programacao.js"></script>
+<script src="js/analise.js"></script>
 </body>
 </html>

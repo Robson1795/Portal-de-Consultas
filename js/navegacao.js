@@ -15,9 +15,9 @@
 // da Requisicao (que e so pedir). Quem faz esse fluxo e o ALM da unidade.
 const PERFIS = {
   consultor:   { rotulo: 'Consultor',   paginas: ['estoque', 'sesmt', 'requisicao'] },
-  estoque_alm: { rotulo: 'Estoque ALM', paginas: ['estoque', 'sesmt', 'requisicao', 'programacao', 'expacessorios', 'expbenchmark'] },
+  estoque_alm: { rotulo: 'Estoque ALM', paginas: ['estoque', 'sesmt', 'requisicao', 'programacao', 'expacessorios', 'expbenchmark', 'analise'] },
   estoque_aco: { rotulo: 'Estoque Aço', paginas: ['bobinas', 'requisicao'] },
-  admin:       { rotulo: 'Admin',       paginas: ['estoque', 'sesmt', 'bobinas', 'requisicao', 'programacao', 'expacessorios', 'expbenchmark', 'config'] }
+  admin:       { rotulo: 'Admin',       paginas: ['estoque', 'sesmt', 'bobinas', 'requisicao', 'programacao', 'expacessorios', 'expbenchmark', 'analise', 'config'] }
 };
 
 const PAGINAS = {
@@ -39,6 +39,9 @@ const PAGINAS = {
   // e o comentário em sql/fase18-deposito-benchmark.sql sobre por que não é
   // uma tabela própria.
   expbenchmark: { rotulo: 'Depósito Benchmark', icone: '🏭', elemento: 'expAcessoriosContent' },
+  // Demanda dos pedidos x saldo do almoxarifado: o que falta comprar.
+  // Só lê o estoque -- não mexe em saldo nenhum (ver js/analise.js).
+  analise: { rotulo: 'Análise de Compras', icone: '📊', elemento: 'analiseComprasContent' },
   config:  { rotulo: 'Configurações',     icone: '⚙️', elemento: 'configContent' }
 };
 
@@ -129,6 +132,7 @@ function mostrarPagina(id) {
     trocarAbaExpAcessorios('entrada');
     carregarCatalogoExp().then(carregarProgramacao);
   }
+  if (id === 'analise') { carregarAnalise(); }
   if (id === 'config')  { carregarUsuarios(); carregarConfigUnidades(); carregarLote(); }
 }
 

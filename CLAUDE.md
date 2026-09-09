@@ -3,7 +3,7 @@
 Contexto do projeto para qualquer agente de IA ou pessoa que for mexer neste repositório.
 Sempre em **português do Brasil**.
 
-**Atualizado:** 09/09/2026 (Depósito Benchmark)
+**Atualizado:** 09/09/2026 (Depósito Benchmark, Análise de Compras)
 **Mantenedores:** Robson (dono do projeto e admin geral) · Victor Dobner (colaborador)
 
 > Este arquivo é lido automaticamente pelo Claude Code ao abrir a pasta do projeto.
@@ -36,7 +36,8 @@ servidos são o próprio código-fonte. Divididos na Fase 2a (03/09/2026):
 | `js/ocr.js` | Validação de bobina por foto |
 | `js/configuracoes.js` | Aba Configurações: administração de usuários (Fase 4) |
 | `js/requisicao.js` | Tela Requisição ALM e o cadastro de centro de custo e item (Fase 6) |
-| `js/programacao.js` | Programação de Separação e Controle EXP Acessórios — o maior arquivo do projeto (~2.200 linhas) |
+| `js/programacao.js` | Programação de Separação, Controle EXP Acessórios e Depósito Benchmark — o maior arquivo do projeto (~2.200 linhas) |
+| `js/analise.js` | Análise de Compras: demanda dos pedidos x saldo do almoxarifado (seção 14) |
 
 São **scripts clássicos, não módulos**, carregados nessa ordem no fim do `body`. O `let`/`const` de
 nível superior vai para o escopo lexical global, compartilhado entre os arquivos — é por isso que o
@@ -636,3 +637,51 @@ Mesmo truque já usado pelo Estoque SESMT (reusa `estoqueContent`).
 - Relatório do PCP: o assunto do e-mail agora diz "Saídas EXP" ou "Saídas
   Benchmark" conforme a tela aberta, pra não virar um relatório misturado
   sem ninguém perceber.
+
+## 14. Análise de Compras (09/09/2026)
+
+O Robson: *"a ideia é eu não deixar faltar material em estoque, e que eu
+consiga me antecipar com as solicitações de compra"*. Ele cola todo dia a
+planilha dos pedidos que estão entrando pra separação, e a tela responde:
+somando **todos** os pedidos, qual item não tem saldo no almoxarifado e
+quanto falta comprar de cada um.
+
+Tela: **Análise de Compras** (`js/analise.js`, `sql/fase19-analise-compras.sql`).
+
+**O cálculo, por item:**
+
+| | |
+|---|---|
+| Qtd. pedida (total) | soma de `Qt. pedida` de **todas** as linhas daquele item, de todos os pedidos |
+| Saldo almoxarifado | soma de `estoque.quantidade` do item **em todas as localizações** da unidade |
+| Comprar | `max(0, pedida − saldo)` |
+
+- ⚠️ **`Qt. atendida` não entra na conta** — decisão do Robson em 09/09/2026
+  ("preciso que olhe só a coluna qtd pedida"). É gravada junto porque vem na
+  planilha e ajuda a conferir a linha, mas nenhuma fórmula a usa. Se um dia a
+  regra mudar, o dado já está lá.
+- **Somar o saldo de todas as localizações é obrigatório:** o mesmo item tem
+  uma linha por endereço em `estoque`. Pegar só a primeira mandaria comprar o
+  que já está no estoque, em outro endereço.
+- **A ordem da lista é a ordem da urgência:** falta primeiro e, entre as
+  faltas, o embarque mais próximo na frente (`data_embarque` mínima entre os
+  pedidos do item). Não é ordem alfabética — é a ordem em que o material
+  precisa chegar.
+- Data de embarque é montada por partes (DD/MM/AAAA), nunca por `new Date()`
+  na string brasileira — mesmo motivo do `parseDataHoraBR()` do Controle EXP.
+
+**Cada colagem substitui a análise inteira da unidade** (decisão do Robson):
+é o retrato do dia, não histórico. A substituição é transacional
+(`substituir_analise_demanda`), pelo mesmo motivo de `substituir_estoque` —
+se o insert falhar no meio, a análise de ontem continua no lugar em vez de a
+unidade ficar sem nada (AUDITORIA.md, item A2).
+
+**Tabela própria, e não `pedido_itens`:** `pedido_itens` é da Programação de
+Separação (tem `status_separacao`, quem separou, e é recriada a cada
+importação da Planilha A). Misturar faria uma tela mexer no estado da outra
+sem querer. `analise_demanda` é só matéria-prima de análise: entra inteira, é
+substituída inteira, e ninguém escreve nela pela tela.
+
+**A tela só LÊ o estoque** — não escreve saldo nenhum. Exportar (Excel/CSV)
+respeita a busca e o filtro "só o que falta comprar", pra mandar a lista
+pronta pra Compras.
