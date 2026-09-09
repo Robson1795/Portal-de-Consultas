@@ -1172,7 +1172,7 @@ Quarta aba do "Atualizar estoques em lote": cola uma planilha com o **Catálogo
 EXP** de todas as unidades e o portal separa por unidade sozinho, como já fazia
 com almoxarifado, SESMT e bobinas. Colunas lidas por sinônimo: Unidade (ou
 Estab), Item, Descrição, UM, Depósito, Referência, Lote, Quantidade — em
-qualquer ordem. Script: `sql/fase27-catalogo-exp-em-lote.sql`.
+qualquer ordem. Script: `sql/fase28-catalogo-exp-em-lote.sql`.
 
 ⚠️ **Catálogo EXP e Controle EXP são tabelas diferentes, e a confusão entre as
 duas é fácil de fazer — eu fiz.** A primeira versão desta aba substituía

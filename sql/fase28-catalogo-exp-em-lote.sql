@@ -5,6 +5,12 @@
 --             NUNCA na interface web do GitHub (ver sql/README.md).
 --
 -- Rode DEPOIS do sql/programacao-06-catalogo-exp.sql.
+--
+-- Renumerado de fase27 para fase28 em 09/09/2026: o Robson renomeou um script
+-- dele para fase27 (estoque seguro por item) para escapar do meu fase25/26, e
+-- eu criei este como 27 depois -- os dois colidiram. Se voce ja rodou o
+-- fase27-catalogo-exp-em-lote, este e o MESMO script: nao precisa rodar de
+-- novo.
 -- =====================================================================
 --
 -- CORRIGE UM ERRO MEU DE INTERPRETAÇÃO
