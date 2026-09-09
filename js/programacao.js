@@ -996,7 +996,9 @@ async function buscarDescricoesItens(codigos) {
   const faltando = unicos.filter(c => !mapa.has(c));
   if (faltando.length) {
     const { data: doEstoque } = await sb.from('estoque')
-      .select('item, descricao, um').in('item', faltando);
+      // Almoxarifado: e so pra preencher descricao/UM na tela. Sem o recorte,
+      // um EPI com o mesmo codigo poderia emprestar a descricao dele aqui.
+      .select('item, descricao, um').in('item', faltando).eq('deposito', 'alm');
     (doEstoque || []).forEach(r => {
       if (!mapa.has(r.item)) mapa.set(r.item, { descricao: r.descricao, um: r.um });
     });

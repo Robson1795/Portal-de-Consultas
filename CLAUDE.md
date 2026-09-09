@@ -207,13 +207,13 @@ Onze tabelas. Os scripts que as criam estão em `sql/` — mas confira a seção
 
 | Tabela | Para quê | Observação |
 |---|---|---|
-| `estoque` | Estoque principal, uma linha por item **por endereço** | O mesmo item aparece em vários endereços da mesma unidade — é normal |
+| `estoque` | Estoque principal, uma linha por item **por endereço e por depósito** | O mesmo item aparece em vários endereços da mesma unidade — é normal. `deposito` é `alm` ou `sesmt` (seção 15) |
 | `fichas_tecnicas` | Foto, uso e embalagem por item | Global, não é por unidade. PK: `item` |
 | `acessos` | Log de cada login | Preenchido pelo app |
 | `usuarios_permitidos` | Aprovação manual de conta | Usuário cria a própria linha com `aprovado=false`; só o admin aprova |
 | `gerentes_unidade` | Quem edita o estoque de cada unidade | PK: `unidade` + `email` |
-| `contagem_fisica` | Contagem do estoque geral | PK: `item` + `unidade` + `localizacao`. Tempo real |
-| `atribuicoes_corredor` | Responsável por contar cada corredor | PK: `unidade` + `corredor`. Tempo real |
+| `contagem_fisica` | Contagem do estoque geral | Única: `item` + `unidade` + `localizacao` + **`deposito`**. Tempo real |
+| `atribuicoes_corredor` | Responsável por contar cada corredor | Única: `unidade` + `corredor` + **`deposito`**. Tempo real |
 | `editores_bobinas` | Quem atualiza a planilha de bobinas | PK: `email` |
 | `bobinas_aco` | Saldo do sistema das bobinas | Colunas em uso: `id, item, descricao, est, dep, localizacao, lote, um, qtd_liquida` |
 | `contagem_bobinas` | Contagem física das bobinas | PK: `item` + `localizacao` + `lote` — **não** `codigo`. Tempo real |
@@ -1008,6 +1008,8 @@ sairia com os dados de uma unidade e o e-mail de outra — e "Substituir anális
 apagaria a análise da unidade **nova**. Era perda silenciosa de dado, não só
 tela desatualizada.
 
+---
+
 ## Estoque Seguro é do item, não da localização
 
 O Robson (09/09/2026, print do item 144268 em 3 endereços — A-01-06-01,
@@ -1032,11 +1034,123 @@ Ajuste em `js/estoque.js`:
   no filtro "Estoque baixo". Todas liam por linha antes; agora leem por item,
   uma vez só (item com 3 localizações não vira 3 alarmes).
 - `salvarEstoqueMinimo()` grava o valor em **todas** as linhas do item nesta
-  unidade (`.eq('unidade', ...).eq('item', ...)`, não mais só `.eq('id', id)`),
-  e atualiza os outros campos já na tela (`.estmin-input[data-item=...]`) pra
-  não ficar um número na tela e outro no banco até recarregar.
+  unidade **e depósito** (`.eq('unidade', ...).eq('item', ...).eq('deposito',
+  depositoAtual)`, não mais só `.eq('id', id)`), e atualiza os outros campos já
+  na tela (`.estmin-input[data-item=...]`) pra não ficar um número na tela e
+  outro no banco até recarregar. O recorte por `deposito` é o mesmo motivo da
+  seção 15 logo abaixo: sem ele, o mesmo código de item no ALM e no SESMT
+  (dois depósitos, mesma unidade) ficaria com um só Estoque Seguro para os
+  dois — editar na Consulta de Itens vazaria para o Depósito SESMT.
 
 `sql/fase25-estoque-seguro-por-item.sql` arruma o que já estava divergente no
 banco (sobra do preenchimento antigo por linha): unifica as localizações do
 mesmo item para o **maior** valor de `estoque_minimo` já cadastrado entre elas
 — não inventa número novo, só copia o que já existia pra quem ficou pra trás.
+
+---
+
+## 15. Depósitos: Almoxarifado e SESMT (09/09/2026)
+
+O Victor: *"Não existe unidade SESMT. Sesmt seria um novo depósito, onde ficam
+materiais de EPI. Todas as telas onde tem a 'unidade SESMT' devem ser
+reformuladas como se fossem um depósito, igual funciona o almoxarifado e o aço.
+Também deve ser separado pelas unidades de 101 a 1101."*
+
+**Como era, e por que estava errado.** O SESMT era uma **unidade falsa**:
+`estoque.unidade = 'SESMT'`, fora de `UNIDADES`, com o seletor de unidade do
+topo escondido e `unidadeAtual` trocado por esse código ao abrir a página.
+Consequência: existia **um** estoque de EPI para a empresa inteira, e não havia
+como saber de qual fábrica era cada luva.
+
+**Como é.** Unidade continua unidade (101…1101) e o depósito é uma coluna à
+parte — `estoque.deposito`, `alm` ou `sesmt`. É o mesmo padrão do `setor` de
+`exp_controle_itens` (seção 13) e pelo mesmo motivo: o formato do dado é
+idêntico e a tela é a mesma, então uma coluna resolve onde uma tabela nova
+duplicaria toda a lógica de contagem, filtro, impressão e exportação.
+Script: `sql/fase23-sesmt-deposito.sql`.
+
+- `DEPOSITOS` e `depositoAtual` vivem em `js/estoque.js`; `js/navegacao.js`
+  troca `depositoAtual` ao abrir "Consulta de Itens" (`alm`) ou
+  "Depósito SESMT" (`sesmt`) e remonta o cabeçalho.
+- **O seletor de unidade continua funcionando nas duas** — é o ponto da
+  mudança. Um crachá laranja ao lado da unidade diz qual depósito está na
+  frente, porque as duas telas são a MESMA e as listas se parecem.
+- ⚠️ **TODA consulta a `estoque`, `contagem_fisica` e `atribuicoes_corredor`
+  tem de recortar por depósito.** As exceções são de propósito e estão
+  comentadas no código: a Análise de Compras, a Requisição ALM e a busca de
+  descrição do Controle EXP fixam `'alm'` (EPI não atende pedido de cliente
+  nem se pede ao ALM). O `update` do Estoque Seguro (seção acima) também
+  recorta por `deposito` desde 09/09/2026 — deixou de casar só por `id`
+  quando passou a gravar em todas as localizações do item de uma vez.
+
+**As duas armadilhas que isto fechou** — as duas eram perda silenciosa:
+
+1. **`substituir_estoque()` apagava por unidade e nada mais.** Com dois
+   depósitos na mesma unidade, colar a planilha do almoxarifado da 106
+   apagaria o estoque de EPI da 106 junto, e o sintoma só apareceria quando
+   alguém fosse procurar um EPI — dias depois, sem ligação com a colagem.
+   Agora o recorte é `(unidade, deposito)`, e o `deposito` vai no payload
+   (ausente = `alm`, para uma chamada antiga continuar igual).
+2. **A chave da contagem era `item + unidade + localizacao`.** O mesmo item,
+   no mesmo endereço, nos dois depósitos, colidiria: contar no almoxarifado
+   sobrescreveria a contagem do EPI, e "Limpar tudo" levaria as duas. A chave
+   passou a incluir o depósito, nela e em `atribuicoes_corredor`. **O
+   `onConflict` do `upsert` no JavaScript tem de casar com a restrição nova** —
+   se ficar `item,unidade,localizacao`, o PostgREST recusa a gravação inteira.
+
+**A planilha de EPI agora precisa da coluna de unidade**, igual à do
+almoxarifado — antes ela ia toda para a unidade falsa. Sem a coluna não há como
+saber de qual fábrica é cada EPI, e chutar mandaria a luva para o galpão
+errado. A aba de lote das Configurações lê a coluna por sinônimo, como já fazia
+para o ALM.
+
+**As linhas antigas foram apagadas**, e isso foi decidido em 09/09/2026: as
+linhas gravadas com `unidade = 'SESMT'` não tinham como ser atribuídas a uma
+fábrica (a informação nunca existiu naquele modelo), e o Victor vai colar a
+planilha de EPI de todas as unidades pela aba de lote. Deixá-las seria pior que
+apagar: com `'SESMT'` fora de `UNIDADES`, nenhuma tela as mostraria, e elas
+ficariam ocupando a tabela para sempre sem ninguém conseguir vê-las nem
+corrigi-las.
+
+### Requisição ALM: quatro mudanças (09/09/2026)
+
+Pedidos do Victor, na mesma conversa.
+
+**1. Só as requisições da unidade.** `carregarMinhasRequisicoes()` não filtrava
+por unidade. O RLS já barrava outra unidade para quem não é admin, mas o admin
+via as oito misturadas numa lista só — e o número do pedido não diz de qual
+fábrica é. Trocar a unidade no cabeçalho agora recarrega a tela.
+
+**2. Marcar como concluída.** `status` só tinha `rascunho` e `enviada`, então
+requisição atendida ficava "enviada" para sempre e a lista só crescia.
+`concluida` é um **terceiro estado do status**, e não uma coluna booleana à
+parte: os três são mutuamente exclusivos, e um booleano ao lado do status
+abriria a porta para "rascunho e concluída ao mesmo tempo" — estado que não
+existe e que a tela teria de decidir como desenhar. `concluido_em`
+(`timestamptz`) e `concluido_por` respondem "quando" e "quem", que é o que se
+pergunta quando alguém diz que não recebeu. Script:
+`sql/fase24-requisicao-concluida.sql`.
+
+- **Concluída sai da lista por padrão** — é o ponto de concluir. O botão
+  `✅ Ver concluídas (N)` abre o histórico, com `↩ Reabrir` em cada uma. Mesmo
+  padrão do "Ver não repor" da Análise de Compras.
+- **Rascunho não oferece "Concluir"**: não foi enviado a ninguém, então não há
+  o que ter sido atendido. Sai da lista sendo enviado ou excluído.
+- Quem já podia editar a requisição pode concluí-la, **inclusive o autor** —
+  "recebi o material" é informação dele, e quem concluiu fica gravado.
+- O `update` pede recibo (`.select('id')`): sem ele, um update barrado pelo RLS
+  volta com `error null` e zero linha afetada, e a tela diria "concluída" com o
+  F5 desmentindo. Item A1 da `AUDITORIA.md`.
+
+**3. Pesquisar o item pela descrição.** O `datalist` só tinha o código. Agora
+cada opção leva `código · descrição` no texto, e o Chrome filtra o `datalist`
+pelo `value` **e** pelo texto — digitar "parafuso" acha o item sem a pessoa
+saber o código de cabeça. O `value` continua sendo só o código, que é o que o
+resto da tela lê.
+
+**4. Pesquisar o centro de custo pelo nome.** Era um `<select>`, onde digitar
+só salta pela primeira letra. Virou campo de texto com `datalist`, que filtra
+pelo código e pelo nome. Como agora dá para digitar qualquer coisa, o centro de
+custo passou a ser **validado contra a lista** (mesma regra do item: código
+inventado só gera retrabalho para o ALM) e o campo fica com a borda laranja
+enquanto o que está escrito não bate com nenhum cadastrado.

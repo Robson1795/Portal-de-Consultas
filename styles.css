@@ -742,3 +742,19 @@ td.col-acoes { white-space: nowrap; text-align: center; }
   }
   .contagem-clear-btn:hover { color: #b91c1c; }
   #contagemBtn.active-toggle { background: var(--blue); color: white; border-color: var(--blue-dark); }
+
+/* Crachá do depósito, ao lado da unidade no cabeçalho. As telas de
+   Almoxarifado e SESMT são a MESMA -- sem este aviso não há nada dizendo qual
+   das duas listas está na frente, e elas se parecem. Só aparece quando o
+   depósito NÃO é o almoxarifado (o padrão), pra não virar ruído. */
+.topbar-deposito {
+  margin-left: 8px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #fef3c7;
+  border: 1px solid #d97706;
+  color: #92400e;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}

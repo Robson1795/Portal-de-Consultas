@@ -57,19 +57,35 @@ async function carregarRequisicao() {
 async function carregarCentrosCusto() {
   const { data, error } = await sb.from('centros_custo')
     .select('codigo, descricao, ativo').order('codigo');
-  const sel = document.getElementById('reqCentroCusto');
+  // Campo de texto com datalist, e não <select>: num <select> digitar só
+  // salta pela primeira letra, e o Robson precisa achar o centro de custo
+  // pelo NOME. O datalist filtra pelo código E pelo nome enquanto digita.
+  const campo = document.getElementById('reqCentroCusto');
+  const sel = document.getElementById('reqCcDatalist');
   if (error) {
     console.error('Falha ao carregar centros de custo:', error.message);
-    sel.innerHTML = '<option value="">(não foi possível carregar)</option>';
+    sel.innerHTML = '';
+    campo.value = '';
+    campo.placeholder = '(não foi possível carregar os centros de custo)';
     centrosCusto = [];
     return;
   }
   centrosCusto = data || [];
   const ativos = centrosCusto.filter(c => c.ativo);
-  sel.innerHTML = '<option value="">Selecione o centro de custo...</option>' +
-    ativos.map(c => `<option value="${escapeHtml(c.codigo)}">${escapeHtml(c.codigo)}${c.descricao ? ' · ' + escapeHtml(c.descricao) : ''}</option>`).join('');
+  sel.innerHTML =
+    ativos.map(c => `<option value="${escapeHtml(c.codigo)}">${escapeHtml(c.codigo)}`
+      + `${c.descricao ? ' · ' + escapeHtml(c.descricao) : ''}</option>`).join('');
   document.getElementById('reqSemCentroCusto').style.display = ativos.length ? 'none' : 'block';
 }
+
+// Marca em laranja centro de custo que não está na lista -- mesmo aviso do
+// campo de item, e pelo mesmo motivo: erro visto na hora é erro que não chega
+// ao ALM.
+document.getElementById('reqCentroCusto').addEventListener('input', (e) => {
+  const cod = e.target.value.trim();
+  const existe = centrosCusto.some(c => c.ativo && c.codigo === cod);
+  e.target.style.borderColor = (cod && !existe) ? '#d97706' : '';
+});
 
 // O catálogo (`itens_requisicao`) MAIS os itens do estoque da unidade. O
 // catálogo existe para pedir item que a unidade ainda não tem, e vence em
@@ -79,7 +95,8 @@ async function carregarCatalogoItens() {
 
   const [cat, est] = await Promise.all([
     sb.from('itens_requisicao').select('codigo, descricao, um, ativo'),
-    sb.from('estoque').select('item, descricao, um').eq('unidade', unidadeAtual)
+    // Almoxarifado: é a Requisição ALM. EPI se pede ao SESMT, não aqui.
+    sb.from('estoque').select('item, descricao, um').eq('unidade', unidadeAtual).eq('deposito', 'alm')
   ]);
 
   if (est.error) console.error('Falha ao carregar itens do estoque:', est.error.message);
@@ -95,7 +112,13 @@ async function carregarCatalogoItens() {
   });
 
   document.getElementById('reqItensDatalist').innerHTML =
-    [...catalogoItens.keys()].sort().map(c => `<option value="${escapeHtml(c)}">`).join('');
+    // O texto da opção leva a descrição, e não só o código: o Chrome filtra o
+    // datalist pelo value E pelo texto, então digitar "parafuso" acha o item
+    // sem a pessoa saber o código de cabeça. O value continua sendo só o
+    // código, que é o que o resto da tela lê.
+    [...catalogoItens.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([c, i]) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}`
+        + `${i.descricao ? ' · ' + escapeHtml(i.descricao) : ''}</option>`).join('');
 }
 
 async function carregarEmailsAlm() {
@@ -110,7 +133,12 @@ async function carregarEmailsAlm() {
 
 async function carregarMinhasRequisicoes() {
   const { data, error } = await sb.from('requisicoes_alm')
-    .select('id, unidade, centro_custo, status, criado_em, requisicoes_alm_itens(id)')
+    .select('id, unidade, centro_custo, status, criado_em, concluido_em, concluido_por, requisicoes_alm_itens(id)')
+    // Só a unidade aberta. Sem este filtro o RLS já barrava outra
+    // unidade para quem não é admin, mas o admin via as oito
+    // misturadas numa lista só -- e o número do pedido não diz de
+    // qual fábrica é.
+    .eq('unidade', unidadeAtual)
     .order('criado_em', { ascending: false }).limit(50);
   if (error) {
     console.error('Falha ao carregar as requisições:', error.message);
@@ -122,33 +150,110 @@ async function carregarMinhasRequisicoes() {
   renderMinhasRequisicoes();
 }
 
+// Concluída sai da lista por padrão: é o ponto de concluir -- a lista
+// que sobra é a do que ainda falta chegar. O botão abaixo mostra as
+// concluídas quando alguém quiser conferir o histórico (mesmo padrão
+// do 'Ver não repor' da Análise de Compras).
+let reqVerConcluidas = false;
+
 function renderMinhasRequisicoes() {
   const alvo = document.getElementById('reqLista');
   if (!minhasRequisicoes.length) {
     alvo.innerHTML = '<div class="empty-msg" style="display:block;">Nenhuma requisição ainda.</div>';
     return;
   }
-  alvo.innerHTML = minhasRequisicoes.map(r => {
+  const concluidas = minhasRequisicoes.filter(r => r.concluido_em).length;
+  const lista = minhasRequisicoes.filter(r => reqVerConcluidas ? r.concluido_em : !r.concluido_em);
+
+  const barra = concluidas
+    ? `<div style="margin-bottom:10px;">
+         <button class="btn" id="reqVerConcluidasBtn">${reqVerConcluidas
+           ? '↩ Voltar para as em aberto'
+           : `✅ Ver concluídas (${concluidas})`}</button></div>`
+    : '';
+
+  if (!lista.length) {
+    alvo.innerHTML = barra + '<div class="empty-msg" style="display:block;">'
+      + (reqVerConcluidas ? 'Nenhuma requisição concluída.'
+                          : 'Nenhuma requisição em aberto nesta unidade.')
+      + '</div>';
+    return;
+  }
+
+  alvo.innerHTML = barra + lista.map(r => {
     const qtd = (r.requisicoes_alm_itens || []).length;
     const quando = new Date(r.criado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
-    const enviada = r.status === 'enviada';
+    const concluida = !!r.concluido_em;
+    const enviada = r.status === 'enviada' && !concluida;
+    // Rascunho não oferece "Concluir": não foi enviado a ninguém, então não
+    // há o que ter sido atendido. Ele sai da lista sendo enviado ou excluído.
     return `
     <div class="req-card" data-id="${r.id}">
       <div class="req-card-info">
         <div class="req-card-topo">
           <b>#${r.id}</b>
-          <span class="cfg-status ${enviada ? 'st-ativo' : 'st-pendente'}">${enviada ? 'Enviada' : 'Rascunho'}</span>
+          <span class="cfg-status ${concluida ? 'st-ativo' : (enviada ? 'st-ativo' : 'st-pendente')}">${
+            concluida ? 'Concluída' : (enviada ? 'Enviada' : 'Rascunho')}</span>
         </div>
         <div class="req-card-sub">
-          ${quando} · ${qtd} ${qtd === 1 ? 'item' : 'itens'}${r.centro_custo ? ' · CC ' + escapeHtml(r.centro_custo) : ''}
+          ${quando} · ${qtd} ${qtd === 1 ? 'item' : 'itens'}${r.centro_custo ? ' · CC ' + escapeHtml(r.centro_custo) : ''}${
+            concluida ? ' · atendida em ' + escapeHtml(formatarDataHoraBR(r.concluido_em))
+                      + (r.concluido_por ? ' por ' + escapeHtml(r.concluido_por) : '') : ''}
         </div>
       </div>
       <div class="req-card-acoes">
         <button class="btn req-abrir">Abrir</button>
+        ${concluida
+          ? `<button class="btn req-reabrir" title="Voltar para em aberto: ainda não foi atendida">↩ Reabrir</button>`
+          : (enviada
+              ? `<button class="btn req-concluir" title="A requisição já foi atendida: sai da lista de em aberto">✅ Concluir</button>`
+              : '')}
         <button class="btn req-excluir">Excluir</button>
       </div>
     </div>`;
   }).join('');
+}
+
+// ---- Concluir / reabrir ----------------------------------------------------
+//
+// "Concluída" é o terceiro estado do status (rascunho -> enviada ->
+// concluída), e não uma coluna booleana à parte: os três são mutuamente
+// exclusivos, e um booleano ao lado do status abriria a porta pra "rascunho e
+// concluída ao mesmo tempo". Ver sql/fase24-requisicao-concluida.sql.
+async function concluirRequisicao(id, concluir) {
+  const msg = document.getElementById('reqMsg');
+  const agora = new Date().toISOString();
+
+  // .select() de propósito: sem ele, um update barrado pelo RLS volta com
+  // error null e zero linha afetada -- a tela diria "concluída" e o F5
+  // desmentiria. Item A1 da AUDITORIA.md.
+  const patch = concluir
+    ? { status: 'concluida', concluido_em: agora, concluido_por: nomeUsuarioAtual }
+    : { status: 'enviada',   concluido_em: null,  concluido_por: null };
+
+  const { data, error } = await sb.from('requisicoes_alm')
+    .update(patch).eq('id', id).select('id');
+
+  if (error) {
+    msg.textContent = 'NÃO GRAVOU: ' + error.message
+      + ' — se a mensagem falar em coluna inexistente,'
+      + ' sql/fase24-requisicao-concluida.sql ainda não foi rodado no Supabase.';
+    msg.className = 'status-msg status-err';
+    console.error('Falha ao concluir requisição:', error.message);
+    return;
+  }
+  if (!data || !data.length) {
+    msg.textContent = 'NÃO GRAVOU: o banco não aceitou a alteração'
+      + ' (sem permissão para esta requisição?). Nada foi salvo.';
+    msg.className = 'status-msg status-err';
+    return;
+  }
+
+  msg.textContent = concluir
+    ? 'Requisição #' + id + ' marcada como concluída.'
+    : 'Requisição #' + id + ' voltou para em aberto.';
+  msg.className = 'status-msg status-ok';
+  await carregarMinhasRequisicoes();
 }
 
 // ---- Linhas de item --------------------------------------------------------
@@ -210,8 +315,15 @@ function validar(f) {
   const erro = (t) => { msg.textContent = t; msg.className = 'status-msg status-err'; return false; };
 
   if (!f.centro_custo) {
-    return erro('Selecione o centro de custo — sem ele o ALM não consegue lançar no CD1406.');
+    return erro('Escolha o centro de custo — sem ele o ALM não consegue lançar no CD1406.');
   }
+  // Agora que é campo de texto, dá pra digitar qualquer coisa. Centro de
+  // custo inventado só gera retrabalho pro ALM -- mesma regra do item.
+  if (!centrosCusto.some(c => c.ativo && c.codigo === f.centro_custo)) {
+    return erro('Centro de custo não cadastrado: ' + f.centro_custo
+      + '. Escolha um da lista, ou peça ao administrador para cadastrar.');
+  }
+
   if (!f.itens.length) return erro('Inclua pelo menos um item.');
 
   const semQtd = f.itens.filter(i => !(i.quantidade > 0)).map(i => i.item);
@@ -339,10 +451,19 @@ document.getElementById('reqEnviarBtn').addEventListener('click', async () => {
 
 // ---- Abrir, excluir, limpar ------------------------------------------------
 document.getElementById('reqLista').addEventListener('click', async (e) => {
+  const verConcluidas = e.target.closest('#reqVerConcluidasBtn');
+  if (verConcluidas) { reqVerConcluidas = !reqVerConcluidas; renderMinhasRequisicoes(); return; }
+
   const card = e.target.closest('.req-card');
   if (!card) return;
+
   const id = parseInt(card.dataset.id, 10);
   const msg = document.getElementById('reqMsg');
+
+  const btnConcluir = e.target.closest('.req-concluir');
+  if (btnConcluir) { btnConcluir.disabled = true; await concluirRequisicao(id, true); return; }
+  const btnReabrir = e.target.closest('.req-reabrir');
+  if (btnReabrir) { btnReabrir.disabled = true; await concluirRequisicao(id, false); return; }
 
   if (e.target.closest('.req-abrir')) {
     const { data, error } = await sb.from('requisicoes_alm')
