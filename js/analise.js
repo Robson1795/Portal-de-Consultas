@@ -117,7 +117,10 @@ async function carregarAnalise() {
 
   const [demanda, estoque, notas, emailCompras] = await Promise.all([
     sb.from('analise_demanda').select('*').eq('unidade', unidadeAtual),
-    sb.from('estoque').select('item, descricao, quantidade').eq('unidade', unidadeAtual),
+    // Sempre o almoxarifado: a análise compara a carteira de PEDIDOS com o
+    // estoque de produção. EPI não atende pedido de cliente, e um código que
+    // exista nos dois depósitos inflaria o saldo e esconderia uma falta.
+    sb.from('estoque').select('item, descricao, quantidade').eq('unidade', unidadeAtual).eq('deposito', 'alm'),
     sb.from('analise_item_notas')
       .select('codigo_item, ignorado, observacao, solicitado_em, solicitado_por')
       .eq('unidade', unidadeAtual),

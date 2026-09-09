@@ -22,11 +22,10 @@ const PERFIS = {
 
 const PAGINAS = {
   estoque: { rotulo: 'Consulta de Itens', icone: '🔎', elemento: 'estoqueContent' },
-  // Estoque SESMT usa a MESMA tela de Consulta de Itens (mesmo formato de
-  // dado: item/descricao/UM/local/qtd, na mesma tabela `estoque`), so que
-  // com o codigo de unidade UNIDADE_SESMT em vez de uma fabrica -- por isso
-  // aponta pro mesmo elemento. Ver a troca de unidade em mostrarPagina().
-  sesmt: { rotulo: 'Estoque SESMT', icone: '⛑️', elemento: 'estoqueContent' },
+  // Depósito SESMT usa a MESMA tela de Consulta de Itens (mesmo formato de
+  // dado: item, descrição, UM, localização, quantidade), só que recortada
+  // pelo depósito 'sesmt' em vez de 'alm' -- ver DEPOSITOS em js/estoque.js.
+  sesmt: { rotulo: 'Depósito SESMT', icone: '⛑️', elemento: 'estoqueContent' },
   bobinas: { rotulo: 'Estoque de Aço',    icone: '📦', elemento: 'bobinasContent' },
   requisicao: { rotulo: 'Requisição ALM', icone: '📝', elemento: 'requisicaoContent' },
   programacao: { rotulo: 'Programação de Separação', icone: '🚚', elemento: 'programacaoContent' },
@@ -106,17 +105,15 @@ function mostrarPagina(id) {
   marcarItemAtivo();
   fecharMenuNoCelular();
 
-  // SESMT reusa a tela de Consulta de Itens, so que com o codigo de unidade
-  // proprio (nao e uma fabrica, entao nao aparece no seletor do topo).
-  // Entrando: troca a unidade ativa e fixa o topo. Saindo: reconstroi o
-  // cabecalho do jeito normal (unidade fabril da pessoa, com ou sem
-  // seletor) -- mais seguro que tentar guardar/restaurar o valor anterior.
-  if (indoParaSesmt) {
-    unidadeAtual = UNIDADE_SESMT;
-    const caixa = document.getElementById('topbarLocal');
-    if (caixa) caixa.innerHTML = '<span class="pin">⛑️</span><span class="topbar-unidade-fixa">Estoque SESMT</span>';
-  } else if (saindoDoSesmt) {
-    montarCabecalho();
+  // O SESMT reusa a tela de Consulta de Itens, e o que muda entre as duas
+  // é o DEPÓSITO -- não a unidade. Até 09/09/2026 esta página trocava
+  // `unidadeAtual` por um código falso ('SESMT') e escondia o seletor do
+  // topo: existia um estoque de EPI para a empresa inteira. Agora a unidade
+  // continua a mesma (o seletor segue funcionando, para admin) e só o
+  // depósito muda. Ver DEPOSITOS em js/estoque.js.
+  if (id === 'estoque' || id === 'sesmt') {
+    depositoAtual = (id === 'sesmt') ? 'sesmt' : 'alm';
+    montarCabecalho();   // redesenha o crachá do depósito ao lado da unidade
   }
 
   // Cada pagina carrega os proprios dados ao ser aberta.
@@ -306,13 +303,19 @@ function montarCabecalho() {
 
   if (permitidas.includes(unidadeDoUsuario)) unidadeAtual = unidadeDoUsuario;
   else if (!permitidas.includes(unidadeAtual)) unidadeAtual = permitidas[0];
+  // Crachá do depósito, ao lado da unidade: as duas telas são a MESMA, e sem
+  // isto não há nada dizendo se o que está listado é o almoxarifado ou o EPI.
+  const cracha = (depositoAtual && depositoAtual !== 'alm')
+    ? `<span class="topbar-deposito">${DEPOSITOS[depositoAtual].icone} ${escapeHtml(rotuloDeposito())}</span>`
+    : '';
+
   if (permitidas.length === 1) {
-    caixa.innerHTML = `<span class="pin">📍</span><span class="topbar-unidade-fixa">${escapeHtml(rotuloUnidade(permitidas[0]))}</span>`;
+    caixa.innerHTML = `<span class="pin">📍</span><span class="topbar-unidade-fixa">${escapeHtml(rotuloUnidade(permitidas[0]))}</span>` + cracha;
   } else {
     caixa.innerHTML = `<span class="pin">📍</span>
       <select id="unitSelect" class="unit-select">${permitidas.map(c =>
         `<option value="${c}" ${c === unidadeAtual ? 'selected' : ''}>${escapeHtml(rotuloUnidade(c))}</option>`
-      ).join('')}</select>`;
+      ).join('')}</select>` + cracha;
     document.getElementById('unitSelect').addEventListener('change', (e) => {
       // Trocar a unidade pelo seletor do topo enquanto está no Controle EXP
       // Acessórios ou no Depósito Benchmark não pode pular a senha daquela

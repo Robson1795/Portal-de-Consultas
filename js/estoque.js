@@ -375,9 +375,11 @@ async function avisarEstoqueBaixoSeNecessario() {
   let outrasPorItem = {};
   try {
     const { data, error } = await sb.from('estoque')
+      // Mesmo depósito nas outras unidades: repor EPI olhando o saldo do
+      // almoxarifado (ou o contrário) mandaria procurar no armazém errado.
       .select('item, unidade, quantidade')
       .in('item', exemplos.map(r => r.item))
-      .neq('unidade', unidadeAtual);
+      .neq('unidade', unidadeAtual).eq('deposito', depositoAtual);
     if (error) throw error;
     (data || []).forEach(r => {
       const qtd = parseQtd(r.quantidade);
@@ -504,12 +506,36 @@ const UNIDADES = {
   '1101': { cidade: 'Trading',                uf: ''   }
 };
 
-// Estoque SESMT: mesmo formato do estoque fabril (item, descrição, UM,
-// localização, quantidade) e mora na mesma tabela `estoque`, só que com
-// este codigo de unidade proprio -- por isso NAO entra em UNIDADES: ele
-// nao aparece no seletor de unidade do topo (nao e uma fabrica), tem
-// entrada propria no menu lateral (ver js/navegacao.js).
-const UNIDADE_SESMT = 'SESMT';
+// DEPÓSITOS — em qual armazém da unidade o item está.
+//
+// Até 09/09/2026 o SESMT era uma unidade falsa (`unidade = 'SESMT'`, fora de
+// UNIDADES, com o seletor do topo escondido): existia UM estoque de EPI para a
+// empresa inteira, e não havia como saber de qual fábrica era cada luva.
+// Não existe unidade SESMT — existe o depósito de EPI de cada unidade.
+//
+// Hoje unidade é unidade (101..1101) e o depósito é uma coluna à parte, igual
+// ao `setor` de `exp_controle_itens` (sql/fase18) e pelo mesmo motivo: o
+// formato do dado é idêntico e a tela é a mesma, então uma coluna resolve onde
+// uma tabela nova duplicaria toda a lógica de contagem, filtro e impressão.
+//
+// ⚠️ TODA consulta a `estoque`, `contagem_fisica` e `atribuicoes_corredor` tem
+// de recortar por depósito. A chave da contagem é
+// (item, unidade, localizacao, deposito): sem o depósito na conta, contar o
+// mesmo item no mesmo endereço do almoxarifado sobrescreveria a contagem do
+// EPI, e "Limpar tudo" levaria os dois. Ver sql/fase23-sesmt-deposito.sql.
+const DEPOSITOS = {
+  alm:   { rotulo: 'Almoxarifado', icone: '📦' },
+  sesmt: { rotulo: 'SESMT (EPI)',  icone: '⛑️' }
+};
+
+// Depósito da tela aberta agora. Trocado por js/navegacao.js ao abrir
+// "Consulta de Itens" (alm) ou "Depósito SESMT" (sesmt).
+let depositoAtual = 'alm';
+
+function rotuloDeposito(cod) {
+  const d = DEPOSITOS[cod || depositoAtual];
+  return d ? d.rotulo : (cod || depositoAtual);
+}
 
 const UNIDADE_TRADING = '1101';
 
@@ -647,7 +673,7 @@ document.getElementById('tableBody').addEventListener('keydown', (e) => {
 });
 
 async function loadData() {
-  const { data, error } = await sb.from('estoque').select('*').eq('unidade', unidadeAtual).order('id', { ascending: true });
+  const { data, error } = await sb.from('estoque').select('*').eq('unidade', unidadeAtual).order('id', { ascending: true }).eq('deposito', depositoAtual);
   if (error) {
     document.getElementById('loadingMsg').textContent = 'Erro ao carregar dados: ' + error.message;
     return;
@@ -970,7 +996,7 @@ async function salvarContagemItem(input) {
 
   if (valor === '') {
     const { error } = await sb.from('contagem_fisica')
-      .delete().eq('item', itemCode).eq('unidade', unidadeAtual).eq('localizacao', loc);
+      .delete().eq('item', itemCode).eq('unidade', unidadeAtual).eq('localizacao', loc).eq('deposito', depositoAtual);
     if (error) return marcarFalhaContagem(input, diffSlot, error.message);
     if (diffSlot) diffSlot.innerHTML = '';
     if (clearBtn) clearBtn.style.display = 'none';
@@ -980,10 +1006,11 @@ async function salvarContagemItem(input) {
   }
 
   const { error } = await sb.from('contagem_fisica').upsert({
-    item: itemCode, unidade: unidadeAtual, localizacao: loc, quantidade_fisica: valor,
+    item: itemCode, unidade: unidadeAtual, localizacao: loc,
+    deposito: depositoAtual, quantidade_fisica: valor,
     contado_por: nomeUsuarioAtual,
     contado_em: new Date().toISOString()
-  }, { onConflict: 'item,unidade,localizacao' });
+  }, { onConflict: 'item,unidade,localizacao,deposito' });
   if (error) return marcarFalhaContagem(input, diffSlot, error.message);
 
   contagemMap[chave] = valor;
@@ -1023,9 +1050,9 @@ async function limparContagemItem(itemCode, loc) {
   const { error } = temLocalFisico
     ? await sb.from('contagem_fisica')
         .update({ quantidade_fisica: null, contado_por: null, contado_em: null })
-        .eq('item', itemCode).eq('unidade', unidadeAtual).eq('localizacao', loc)
+        .eq('item', itemCode).eq('unidade', unidadeAtual).eq('localizacao', loc).eq('deposito', depositoAtual)
     : await sb.from('contagem_fisica')
-        .delete().eq('item', itemCode).eq('unidade', unidadeAtual).eq('localizacao', loc);
+        .delete().eq('item', itemCode).eq('unidade', unidadeAtual).eq('localizacao', loc).eq('deposito', depositoAtual);
   if (error) return marcarFalhaContagem(input, diffSlot, error.message);
   input.value = '';
   input.classList.remove('contagem-salvo', 'contagem-divergente');
@@ -1079,7 +1106,7 @@ async function openCompareModal(itemCode, extraHtml) {
   // em 2026-09-09 -- item existia com 43 no almoxarifado e a tela dizia que
   // não tinha em unidade nenhuma). `eq` é sensível a isso; `ilike` sem
   // curinga faz a mesma comparação exata, só que ignorando a caixa.
-  const { data, error } = await sb.from('estoque').select('*').ilike('item', escapeIlike(itemCode));
+  const { data, error } = await sb.from('estoque').select('*').ilike('item', escapeIlike(itemCode)).eq('deposito', depositoAtual);
 
   // A Trading guarda este item com um código próprio (ver codigoTradingDoItem) --
   // busca à parte, e junta no mesmo grupo de linhas antes de somar por unidade.
@@ -1087,7 +1114,7 @@ async function openCompareModal(itemCode, extraHtml) {
   let dadosTrading = [];
   if (codigoTrading) {
     const { data: dt } = await sb.from('estoque').select('*')
-      .ilike('item', escapeIlike(codigoTrading)).eq('unidade', UNIDADE_TRADING);
+      .ilike('item', escapeIlike(codigoTrading)).eq('unidade', UNIDADE_TRADING).eq('deposito', depositoAtual);
     dadosTrading = dt || [];
   }
   const todasAsLinhas = [...(data || []), ...dadosTrading];
@@ -1234,7 +1261,7 @@ let contagemMap = {};
 let localizacaoFisicaMap = {};
 
 async function carregarContagens() {
-  const { data, error } = await sb.from('contagem_fisica').select('*').eq('unidade', unidadeAtual);
+  const { data, error } = await sb.from('contagem_fisica').select('*').eq('unidade', unidadeAtual).eq('deposito', depositoAtual);
   contagemMap = {};
   localizacaoFisicaMap = {};
   if (error) {
@@ -1264,9 +1291,10 @@ async function salvarLocalizacaoFisica(itemCode, loc, valorBruto, botao) {
   botao.disabled = true;
   const { error } = await sb.from('contagem_fisica').upsert({
     item: itemCode, unidade: unidadeAtual, localizacao: loc,
+    deposito: depositoAtual,
     localizacao_fisica: valor || null,
     contado_por: nomeUsuarioAtual
-  }, { onConflict: 'item,unidade,localizacao' });
+  }, { onConflict: 'item,unidade,localizacao,deposito' });
   botao.disabled = false;
 
   const msg = document.createElement('span');
@@ -1371,7 +1399,9 @@ async function limparTodasAsContagens() {
   }
   const confirmado = confirm(`Isso vai apagar TODAS as quantidades de estoque físico digitadas na Unidade ${unidadeAtual}, pra todo mundo. Essa ação não pode ser desfeita. Confirma?`);
   if (!confirmado) return;
-  const { error } = await sb.from('contagem_fisica').delete().eq('unidade', unidadeAtual);
+  // Só o depósito aberto: "Limpar tudo" no almoxarifado não pode levar
+  // a contagem do EPI da mesma unidade.
+  const { error } = await sb.from('contagem_fisica').delete().eq('unidade', unidadeAtual).eq('deposito', depositoAtual);
   if (error) {
     // Não limpa a tela se o banco recusou: senão parece que apagou e não apagou.
     alert('Erro ao limpar as contagens: ' + error.message + ' \u2014 nada foi apagado.');
@@ -1408,7 +1438,7 @@ function corredorDoItem(itemCode) {
 
 async function renderizarQuemContou() {
   const resumoContainer = document.getElementById('resumoContagemContainer');
-  const { data, error } = await sb.from('contagem_fisica').select('item, localizacao, contado_por, contado_em').eq('unidade', unidadeAtual);
+  const { data, error } = await sb.from('contagem_fisica').select('item, localizacao, contado_por, contado_em').eq('unidade', unidadeAtual).eq('deposito', depositoAtual);
 
   if (error || !data || data.length === 0) {
     resumoContainer.innerHTML = `<div class="modal-empty">Ninguém registrou contagem ainda nesta unidade.</div>`;
@@ -1483,7 +1513,7 @@ async function renderizarAtribuicoes() {
     container.innerHTML = `<div style="font-size:12.5px; color:var(--muted);">Nenhum corredor identificado nesta unidade.</div>`;
     return;
   }
-  const { data } = await sb.from('atribuicoes_corredor').select('*').eq('unidade', unidadeAtual);
+  const { data } = await sb.from('atribuicoes_corredor').select('*').eq('unidade', unidadeAtual).eq('deposito', depositoAtual);
   const atual = {};
   (data || []).forEach(r => { atual[r.corredor] = r.pessoa; });
 
@@ -1500,14 +1530,15 @@ async function renderizarAtribuicoes() {
 async function salvarAtribuicao(input) {
   const corredor = input.dataset.corredor;
   const pessoa = input.value.trim();
-  try {
-    await sb.from('atribuicoes_corredor').upsert(
-      { unidade: unidadeAtual, corredor, pessoa: pessoa || null, atualizado_em: new Date().toISOString() },
-      { onConflict: 'unidade,corredor' }
-    );
-  } catch (err) {
-    console.warn('Erro ao salvar atribuição:', err.message);
-  }
+  // O cliente do Supabase devolve { error } em vez de lançar, então o
+  // try/catch que estava aqui nunca disparava: falha de gravação era
+  // silenciosa de verdade (item A1 da AUDITORIA.md).
+  const { error } = await sb.from('atribuicoes_corredor').upsert(
+    { unidade: unidadeAtual, corredor, deposito: depositoAtual,
+      pessoa: pessoa || null, atualizado_em: new Date().toISOString() },
+    { onConflict: 'unidade,corredor,deposito' }
+  );
+  if (error) console.warn('Erro ao salvar atribuição:', error.message);
 }
 
 document.getElementById('quemContouBtn').addEventListener('click', async () => {
@@ -1831,6 +1862,7 @@ async function trocarUnidade(cod) {
   // vendo as bobinas da anterior (bug de 08/09/2026).
   if (paginaAtual === 'bobinas') await loadBobinas();
   if (paginaAtual === 'analise') await carregarAnalise();
+  if (paginaAtual === 'requisicao') await carregarRequisicao();
   // Se a contagem estava ativa e a unidade ja foi desbloqueada nesta sessao,
   // mantem ativa sem pedir a senha de novo.
   if (estavaContando && unidadeDesbloqueada(unidadeAtual)) {

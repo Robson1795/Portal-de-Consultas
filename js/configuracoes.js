@@ -282,8 +282,9 @@ let lotePreparado = null;     // resultado do Conferir, aguardando confirmação
 const LOTE_FORMATOS = {
   alm: 'Precisa de cabeçalho, e uma das colunas tem de ser a unidade. Colunas lidas: '
      + 'Unidade (ou Estab), Item, Descrição, UM, Localização, Quantidade — em qualquer ordem.',
-  sesmt: 'Com cabeçalho ou sem. Colunas: Item, Descrição, UM, Localização, Quantidade. '
-       + 'Tudo vai para o estoque SESMT — não precisa de coluna de unidade.',
+  sesmt: 'Precisa de cabeçalho, e uma das colunas tem de ser a unidade — igual à do '
+       + 'almoxarifado. Colunas lidas: Unidade (ou Estab), Item, Descrição, UM, Localização, '
+       + 'Quantidade. Vai para o depósito SESMT (EPI) de cada unidade.',
   aco: 'As oito colunas da planilha de bobinas, nesta ordem: Item, Descrição Item, Est, Dep, '
      + 'Localizacao, Lote, Un, Qtd Liquida. A coluna Est diz a unidade de cada bobina, e '
      + 'só as unidades que aparecerem na planilha são substituídas.'
@@ -409,7 +410,12 @@ function prepararLote(texto) {
   }
 
   // ---------------------------------------- Estoque: ALM e SESMT
-  const precisaUnidade = (loteAba === 'alm');
+  // As DUAS precisam da coluna de unidade desde 09/09/2026: o SESMT deixou
+  // de ser uma unidade falsa e passou a ser o depósito de EPI de cada
+  // unidade. Sem a coluna não há como saber de qual fábrica é cada EPI, e
+  // chutar mandaria a luva para o galpão errado.
+  const precisaUnidade = true;
+  const deposito = (loteAba === 'sesmt') ? 'sesmt' : 'alm';
   const campos = precisaUnidade
     ? ['um', 'unidade', 'item', 'descricao', 'localizacao', 'quantidade']
     : ['um', 'item', 'descricao', 'localizacao', 'quantidade'];
@@ -422,12 +428,9 @@ function prepararLote(texto) {
     cabecalho = linhas[0];
     mapa = mapearColunas(cabecalho, campos);
     corpo = linhas.slice(1);
-  } else if (precisaUnidade) {
+  } else {
     return { erro: 'Esta planilha precisa de cabeçalho: é nele que eu encontro a coluna da '
                  + 'unidade. Cole incluindo a primeira linha, com os nomes das colunas.' };
-  } else {
-    // SESMT sem cabeçalho: a mesma ordem que o portal já usava.
-    mapa = { item: 0, descricao: 1, um: 2, localizacao: 3, quantidade: 4 };
   }
 
   if (mapa.item === undefined) {
@@ -438,7 +441,7 @@ function prepararLote(texto) {
                  + 'Estabelecimento, Est ou Filial. Cabeçalho lido: ' + linhas[0].join(' · ') };
   }
 
-  const conhecidas = new Set(Object.keys(UNIDADES).concat([UNIDADE_SESMT]));
+  const conhecidas = new Set(Object.keys(UNIDADES));
   const porUnidade = new Map();
   const desconhecidas = new Map();
   let semItem = 0;
@@ -446,7 +449,7 @@ function prepararLote(texto) {
   corpo.forEach(c => {
     const pega = (campo) => (mapa[campo] !== undefined ? (c[mapa[campo]] || '') : '');
     const item = pega('item').trim();
-    const uni = precisaUnidade ? pega('unidade').trim() : UNIDADE_SESMT;
+    const uni = pega('unidade').trim();
 
     if (!item || !uni) { semItem++; return; }
 
@@ -477,7 +480,8 @@ function prepararLote(texto) {
 
   const blocos = [...porUnidade.entries()]
     .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([unidade, itens]) => ({ unidade, itens, atualizado_por: nomeUsuarioAtual }));
+    .map(([unidade, itens]) => ({ unidade, itens, deposito,
+                                  atualizado_por: nomeUsuarioAtual }));
 
   return { tipo: 'estoque', blocos, avisos, mapa, cabecalho };
 }
