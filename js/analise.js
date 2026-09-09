@@ -134,7 +134,7 @@ async function carregarAnalise() {
     console.warn('Nao foi possivel ler o e-mail do Compras:', emailCompras.error.message);
     msg.textContent = 'Atenção: não foi possível ler o e-mail do Compras ('
       + emailCompras.error.message + '). O botão de solicitação fica desabilitado.'
-      + ' Se a mensagem falar em função inexistente, sql/fase21-solicitacao-compra.sql'
+      + ' Se a mensagem falar em função inexistente, sql/fase22-solicitacao-compra.sql'
       + ' ainda não foi rodado no Supabase.';
     msg.className = 'status-msg status-err';
   } else {
@@ -762,7 +762,7 @@ async function gravarNotaItem(codigoItem, mudanca, msgEl) {
     msgEl.textContent = 'NÃO GRAVOU: ' + error.message
       + ' — se a mensagem falar em tabela inexistente, sql/fase20-analise-notas-item.sql'
       + ' ainda não foi rodado no Supabase; se falar em coluna inexistente,'
-      + ' é o sql/fase21-solicitacao-compra.sql.';
+      + ' é o sql/fase22-solicitacao-compra.sql.';
     msgEl.className = 'status-msg status-err';
     console.error('Falha ao gravar anotação do item:', error.message);
     return false;

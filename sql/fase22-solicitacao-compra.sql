@@ -5,6 +5,16 @@
 --             NUNCA na interface web do GitHub (ver sql/README.md).
 --
 -- Rode DEPOIS do sql/fase20-analise-notas-item.sql.
+--
+-- Renumerado de fase21 para fase22 em 09/09/2026: o Robson criou um
+-- fase21-analise-acesso-restrito.sql no mesmo dia. Se voce ja rodou o
+-- fase21-solicitacao-compra, este e o MESMO script -- nao precisa rodar de
+-- novo.
+--
+-- O fase21 dele refaz as politicas de `analise_item_notas`, a tabela que ganha
+-- colunas aqui. Isso NAO conflita e a ordem entre os dois nao importa:
+-- politica de RLS e da tabela, nao da coluna. Rodar este depois nao reabre
+-- nada, porque este script nao mexe em politica nenhuma.
 -- =====================================================================
 --
 -- O QUE ISTO HABILITA

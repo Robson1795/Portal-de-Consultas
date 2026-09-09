@@ -772,7 +772,7 @@ só admin lê `config_unidade` direto, porque a tabela guarda as senhas na mesma
 linha. Cadastra-se na aba **Configurações**. **Unidade sem e-mail deixa o botão
 desabilitado**, dizendo para procurar o administrador — falha fechado, porque
 adivinhar um endereço mandaria a solicitação para o lugar errado sem ninguém
-saber. Script: `sql/fase21-solicitacao-compra.sql`.
+saber. Script: `sql/fase22-solicitacao-compra.sql`.
 
 **O e-mail leva a conta, não só o número:** quantidade a comprar, quanto os
 pedidos pedem, quanto tem no almoxarifado, a lista dos pedidos que dependem do
