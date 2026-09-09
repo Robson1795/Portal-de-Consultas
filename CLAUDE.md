@@ -3,7 +3,7 @@
 Contexto do projeto para qualquer agente de IA ou pessoa que for mexer neste repositório.
 Sempre em **português do Brasil**.
 
-**Atualizado:** 09/09/2026
+**Atualizado:** 09/09/2026 (Depósito Benchmark)
 **Mantenedores:** Robson (dono do projeto e admin geral) · Victor Dobner (colaborador)
 
 > Este arquivo é lido automaticamente pelo Claude Code ao abrir a pasta do projeto.
@@ -589,10 +589,50 @@ acabou de ficar pronto — ninguém precisa clicar em nada.
 - **Reabre sozinho:** se ela voltar e registrar mais um item para um pedido
   que já tinha sido marcado pronto, a marca é desfeita — óbvio que não estava
   pronto de verdade.
-- O botão Imprimir avisa (não bloqueia) se algum pedido da impressão atual
-  ainda não foi detectado como pronto, com a lista de quais — mesmo padrão do
-  aviso de etiqueta: um segundo clique consciente, não confirm() do
-  navegador transformado em trava.
 - `ultimoPedidoRegistrado` é reconstruído ao carregar a página (o último
   `criado_em` de `exp_controle_itens`), para a detecção continuar funcionando
   depois de um F5 no meio do trabalho.
+
+⚠️ **O aviso no botão Imprimir foi removido em 09/09/2026** (o Robson: "essa
+mensagem pode tirar também, não precisa mais, na hora de imprimir mostrou
+isso"). A detecção em si (`exp_pedido_status`) continua rodando por baixo —
+só não tem mais nenhum lugar na tela que leia `expPedidoProntoMap` pra
+avisar nada. Fica gravado caso um dia sirva pra outra coisa (um relatório de
+pedidos prontos, por exemplo), mas hoje é dado que ninguém olha.
+
+### Depósito Benchmark (09/09/2026)
+
+Itens da expedição às vezes ficam guardados fisicamente no espaço do
+Benchmark, não no setor de acessórios — contar tudo junto confundia o
+inventário (não dava pra saber, só pela tela, onde o item estava de
+verdade). O Robson pediu uma segunda tela **"mesmo modelo"** do Controle EXP
+Acessórios, reaproveitando o **mesmo Catálogo EXP** como referência.
+
+**Mesma tabela, mesma tela, coluna nova.** Em vez de duplicar
+`exp_controle_itens` (e com ela, toda a lógica de gravação, edição por
+célula, etiqueta, exportar, imprimir e relatório do PCP em
+js/programacao.js — ~800 linhas), a tabela ganhou uma coluna `setor` (`exp`
+| `benchmark`, `sql/fase18-deposito-benchmark.sql`). "Controle EXP
+Acessórios" e "Depósito Benchmark" apontam pro **mesmo** `elemento` em
+`PAGINAS` (`js/navegacao.js`) — é a mesma tela, só o que aparece nela muda.
+Mesmo truque já usado pelo Estoque SESMT (reusa `estoqueContent`).
+
+- `setorExpAtual` (`'exp'` ou `'benchmark'`) é trocado por
+  `js/navegacao.js` ao abrir cada uma das duas páginas, e lido por
+  `linhasDoSetorAtual()` — o único ponto que filtra `progExpControle` (que
+  chega da unidade inteira, os dois setores juntos, numa query só) pro que
+  aquela tela deve mostrar. `renderExpControle`, `renderConferencia`,
+  `renderHistoricoRetiradas`, `montarRelatorioPcp`, Exportar e Imprimir usam
+  todos essa mesma função — corrigir o filtro num lugar só corrige nos dois
+  setores.
+- `gravarMovimentacaoManual()` e a gravação em lote (`gravarExpControle()`)
+  gravam `setor: setorExpAtual` na hora de inserir.
+- **O Catálogo EXP não ganhou coluna de setor** — de propósito, é o mesmo
+  catálogo pros dois (pedido explícito do Robson).
+- A senha de entrada (`sql/fase9-senha-exp.sql`, `unidadeExpDesbloqueada`)
+  também é a mesma pros dois — é a mesma área física de expedição, mesmo
+  "cofre", só o setor dentro dela muda. `gateAlvoPagina` guarda pra qual das
+  duas telas ir depois da senha confirmada (o modal é o mesmo pras duas).
+- Relatório do PCP: o assunto do e-mail agora diz "Saídas EXP" ou "Saídas
+  Benchmark" conforme a tela aberta, pra não virar um relatório misturado
+  sem ninguém perceber.

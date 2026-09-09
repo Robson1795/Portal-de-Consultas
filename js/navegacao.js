@@ -15,9 +15,9 @@
 // da Requisicao (que e so pedir). Quem faz esse fluxo e o ALM da unidade.
 const PERFIS = {
   consultor:   { rotulo: 'Consultor',   paginas: ['estoque', 'sesmt', 'requisicao'] },
-  estoque_alm: { rotulo: 'Estoque ALM', paginas: ['estoque', 'sesmt', 'requisicao', 'programacao', 'expacessorios'] },
+  estoque_alm: { rotulo: 'Estoque ALM', paginas: ['estoque', 'sesmt', 'requisicao', 'programacao', 'expacessorios', 'expbenchmark'] },
   estoque_aco: { rotulo: 'Estoque Aço', paginas: ['bobinas', 'requisicao'] },
-  admin:       { rotulo: 'Admin',       paginas: ['estoque', 'sesmt', 'bobinas', 'requisicao', 'programacao', 'expacessorios', 'config'] }
+  admin:       { rotulo: 'Admin',       paginas: ['estoque', 'sesmt', 'bobinas', 'requisicao', 'programacao', 'expacessorios', 'expbenchmark', 'config'] }
 };
 
 const PAGINAS = {
@@ -34,6 +34,11 @@ const PAGINAS = {
   // -- não depende das planilhas da Programação, o item pode ser digitado
   // direto no app (ver "Entrada" em js/programacao.js).
   expacessorios: { rotulo: 'Controle EXP Acessórios', icone: '🔄', elemento: 'expAcessoriosContent' },
+  // Mesma tela e mesma tabela do Controle EXP Acessórios (exp_controle_itens),
+  // só filtrada pela coluna `setor` -- ver setorExpAtual em js/programacao.js
+  // e o comentário em sql/fase18-deposito-benchmark.sql sobre por que não é
+  // uma tabela própria.
+  expbenchmark: { rotulo: 'Depósito Benchmark', icone: '🏭', elemento: 'expAcessoriosContent' },
   config:  { rotulo: 'Configurações',     icone: '⚙️', elemento: 'configContent' }
 };
 
@@ -115,7 +120,15 @@ function mostrarPagina(id) {
   // demora mais que o resto), a Descrição/UM saía em branco mesmo pro item
   // que estava certinho no Catálogo. Ver carregarCatalogoExp() e
   // buscarDescricoesItens() em js/programacao.js.
-  if (id === 'expacessorios') { trocarAbaExpAcessorios('entrada'); carregarCatalogoExp().then(carregarProgramacao); }
+  // 'expacessorios' e 'expbenchmark' sao a MESMA tela (mesmo elemento, mesma
+  // tabela exp_controle_itens) -- so muda setorExpAtual, que filtra o que
+  // aparece em cada uma. Ver comentario em PAGINAS.expbenchmark acima.
+  if (id === 'expacessorios' || id === 'expbenchmark') {
+    setorExpAtual = (id === 'expbenchmark') ? 'benchmark' : 'exp';
+    atualizarTituloSetorExp();
+    trocarAbaExpAcessorios('entrada');
+    carregarCatalogoExp().then(carregarProgramacao);
+  }
   if (id === 'config')  { carregarUsuarios(); carregarConfigUnidades(); carregarLote(); }
 }
 
@@ -125,15 +138,19 @@ document.getElementById('sidebarNav').addEventListener('click', (e) => {
   // Controle EXP Acessórios não abre direto: primeiro escolhe a unidade e
   // confere a senha dela (abrirGateExp, mais abaixo). Cada unidade só
   // enxerga o próprio estoque -- nunca mistura com as outras.
-  if (item.dataset.pagina === 'expacessorios') { abrirGateExp(); return; }
+  if (item.dataset.pagina === 'expacessorios' || item.dataset.pagina === 'expbenchmark') {
+    abrirGateExp(item.dataset.pagina);
+    return;
+  }
   mostrarPagina(item.dataset.pagina);
 });
 
-// ---- Entrada no Controle EXP Acessórios: unidade + senha --------------------
+// ---- Entrada no Controle EXP Acessórios / Depósito Benchmark: unidade + senha
 // Mesmo padrão da senha de Contagem Física (js/estoque.js,
 // senha_contagem_confere): a senha nunca chega no navegador, o banco só
 // responde sim/não (sql/fase9-senha-exp.sql). Fica desbloqueada só nesta
-// sessão do navegador (sessionStorage), por unidade.
+// sessão do navegador (sessionStorage), por unidade -- vale pras duas telas
+// (mesma senha, mesma área física de expedição, só o setor muda).
 function unidadeExpDesbloqueada(cod) {
   try { return sessionStorage.getItem('exp_ok_' + cod) === '1'; } catch (err) { return false; }
 }
@@ -141,7 +158,13 @@ function marcarUnidadeExpDesbloqueada(cod) {
   try { sessionStorage.setItem('exp_ok_' + cod, '1'); } catch (err) { /* sem sessionStorage, so pede de novo */ }
 }
 
-function abrirGateExp() {
+// Qual das duas telas abrir depois da senha confirmada -- guardado aqui
+// porque o clique no botão "Entrar" do modal não sabe de onde veio.
+let gateAlvoPagina = 'expacessorios';
+
+function abrirGateExp(alvoPagina) {
+  gateAlvoPagina = alvoPagina || 'expacessorios';
+  document.getElementById('expGateTitulo').textContent = PAGINAS[gateAlvoPagina].rotulo;
   const permitidas = (perfilAtual === 'admin')
     ? Object.keys(UNIDADES)
     : (unidadeDoUsuario ? [unidadeDoUsuario] : []);
@@ -176,7 +199,7 @@ async function entrarNoControleExp(uni) {
   document.getElementById('expGateModal').classList.remove('open');
   const sel = document.getElementById('unitSelect'); // topbar, só existe pra admin (varias unidades)
   if (sel) sel.value = uni;
-  mostrarPagina('expacessorios');
+  mostrarPagina(gateAlvoPagina);
 }
 
 document.getElementById('expGateEntrarBtn').addEventListener('click', async () => {
@@ -281,12 +304,13 @@ function montarCabecalho() {
       ).join('')}</select>`;
     document.getElementById('unitSelect').addEventListener('change', (e) => {
       // Trocar a unidade pelo seletor do topo enquanto está no Controle EXP
-      // Acessórios não pode pular a senha daquela unidade -- senão bastava
-      // trocar aqui em vez de usar o botão do menu pra escapar da senha.
-      if (paginaAtual === 'expacessorios') {
+      // Acessórios ou no Depósito Benchmark não pode pular a senha daquela
+      // unidade -- senão bastava trocar aqui em vez de usar o botão do menu
+      // pra escapar da senha.
+      if (paginaAtual === 'expacessorios' || paginaAtual === 'expbenchmark') {
         const escolhida = e.target.value;
         e.target.value = unidadeAtual; // volta o seletor pra unidade atual até confirmar a senha
-        abrirGateExp(); // popula as opções e reseta o modal
+        abrirGateExp(paginaAtual); // popula as opções e reseta o modal, mantendo a mesma tela de destino
         document.getElementById('expGateUnidade').value = escolhida;
         atualizarCampoSenhaGateExp();
         return;

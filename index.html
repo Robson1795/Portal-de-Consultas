@@ -489,6 +489,7 @@
        Separação (o item pode ir pra lá digitado direto no app). -->
   <div id="expAcessoriosContent" style="display:none;">
     <div class="panel">
+      <h2 id="expSetorTitulo" style="margin:0 0 12px;">🔄 Controle EXP Acessórios</h2>
       <div class="cfg-barra">
         <div id="expAbas" style="display:flex; gap:8px; flex-wrap:wrap;">
           <button class="btn btn-primary" data-exp-aba="entrada">Entrada</button>
@@ -621,7 +622,7 @@
           </table>
         </div>
         <div class="empty-msg" id="expCtrlVazio" style="display:none;">
-          Nenhum item registrado no Controle EXP ainda.
+          Nenhum item registrado ainda.
         </div>
       </div>
 
@@ -638,7 +639,7 @@
         </div>
         <div id="confBody" style="padding:0 16px 16px;"></div>
         <div class="empty-msg" id="confVazio" style="display:none;">
-          Nenhum item pendente de retirada no Controle EXP.
+          Nenhum item pendente de retirada.
         </div>
 
         <!-- ---- Historico de retiradas: "quando saiu o material do pedido X" ---- -->
@@ -1032,7 +1033,7 @@
   <div class="modal-overlay" id="expGateModal">
     <div class="modal-box" style="max-width:360px; text-align:center;">
       <button class="modal-close" id="expGateCloseBtn">✕</button>
-      <h3 style="margin-top:0;">Controle EXP Acessórios</h3>
+      <h3 style="margin-top:0;" id="expGateTitulo">Controle EXP Acessórios</h3>
       <p style="font-size:13px; color:var(--muted); margin-bottom:14px;">Escolha a unidade para entrar.</p>
       <select id="expGateUnidade" style="width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:10px; font-size:14px; background:white; color:var(--ink);"></select>
       <input type="password" id="expGateSenhaInput" placeholder="Senha desta unidade" maxlength="20" style="width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:10px; font-size:14px; text-align:center;">

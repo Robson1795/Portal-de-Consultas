@@ -22,6 +22,10 @@ let progImportAba = 'A';
 let progPedidos = [];       // vw_pedidos_prioridade (pedido + contagem de itens)
 let progItens = [];         // pedido_itens dos pedidos carregados
 let progExpControle = [];   // exp_controle_itens -- localizacao por item, pro inventario
+// 'exp' (Controle EXP Acessórios) ou 'benchmark' (Depósito Benchmark) --
+// mesma tabela, mesma tela, só o que é listado muda (ver linhasDoSetorAtual).
+// Trocado por js/navegacao.js ao abrir cada uma das duas páginas.
+let setorExpAtual = 'exp';
 let expCtrlDescMap = new Map(); // codigo_item -> {descricao, um}, resolvido em cascata pra exibir a lista
 let catalogoExpItens = []; // catalogo_exp_itens -- planilha do sistema, carregada só ao entrar na página
 let expPedidoProntoMap = new Map(); // numero_pedido -> {pronto_em, pronto_por} -- ver marcarPedidoAnteriorComoPronto()
@@ -1061,6 +1065,7 @@ async function gravarExpControle() {
 
   const linhas = expCtrlPendentes.map(l => ({
     unidade: unidadeAtual,
+    setor: setorExpAtual,
     numero_pedido: l.numero_pedido,
     codigo_item: l.codigo_item,
     quantidade: l.quantidade,
@@ -1122,13 +1127,29 @@ function parseDataHoraBR(texto, dataAtualFallback) {
   return data;
 }
 
+// Só as linhas do setor da tela aberta agora (Controle EXP Acessórios ou
+// Depósito Benchmark) -- `progExpControle` traz as duas juntas da mesma
+// tabela (uma query só por unidade), e é aqui que elas se separam pra tela.
+// `|| 'exp'` cobre linha antiga, gravada antes de a coluna setor existir.
+function linhasDoSetorAtual() {
+  return progExpControle.filter(l => (l.setor || 'exp') === setorExpAtual);
+}
+
+// Atualiza o título visível dentro da tela (mesmo elemento pras duas
+// páginas -- sem isso, nada na tela diria qual das duas está aberta).
+function atualizarTituloSetorExp() {
+  const el = document.getElementById('expSetorTitulo');
+  if (!el) return;
+  el.textContent = setorExpAtual === 'benchmark' ? '🏭 Depósito Benchmark' : '🔄 Controle EXP Acessórios';
+}
+
 // Mesmo filtro da busca (#expCtrlBusca) usado tanto pra desenhar a lista
 // quanto pra exportar/imprimir -- assim, pra imprimir só o que tem numa
 // localização, é só digitar ela na busca antes de clicar em Imprimir ou
 // Exportar (nenhum controle novo, reaproveita o que já existe).
 function linhasFiltradasExpControle() {
   const busca = document.getElementById('expCtrlBusca').value.trim().toLowerCase();
-  let linhas = progExpControle;
+  let linhas = linhasDoSetorAtual();
   if (busca) {
     linhas = linhas.filter(l =>
       String(l.localizacao).toLowerCase().includes(busca) ||
@@ -1172,9 +1193,9 @@ function renderExpControle(erroCarregamento) {
     `${totalPedidos} pedido${totalPedidos === 1 ? '' : 's'} na expedição`;
   vazio.style.display = linhas.length ? 'none' : 'block';
   if (!linhas.length) {
-    vazio.textContent = progExpControle.length
+    vazio.textContent = linhasDoSetorAtual().length
       ? 'Nenhum item bate com a busca.'
-      : 'Nenhum item registrado no Controle EXP ainda.';
+      : 'Nenhum item registrado ainda.';
     corpo.innerHTML = '';
     return;
   }
@@ -1304,6 +1325,7 @@ async function gravarMovimentacaoManual({ codigo, pedido, quantidadeTexto, local
 
   const linha = {
     unidade: unidadeAtual,
+    setor: setorExpAtual, // 'exp' ou 'benchmark' -- qual das duas telas gravou
     numero_pedido: (pedido || '').trim() || null,
     codigo_item: codigo,
     quantidade: (quantidadeTexto || '').trim() ? parseQtd(quantidadeTexto.trim()) : null,
@@ -1836,7 +1858,7 @@ function exportarExpControleHtml(nomeBase) {
 document.getElementById('expCtrlExportarBtn').addEventListener('click', async () => {
   const linhas = linhasFiltradasExpControle();
   if (!linhas.length) {
-    alert(progExpControle.length ? 'Nenhum item bate com a busca atual.' : 'Nenhum item no Controle EXP para exportar.');
+    alert(linhasDoSetorAtual().length ? 'Nenhum item bate com a busca atual.' : 'Nenhum item para exportar.');
     return;
   }
 
@@ -1871,7 +1893,7 @@ document.getElementById('expCtrlExportarBtn').addEventListener('click', async ()
 document.getElementById('expCtrlImprimirBtn').addEventListener('click', async () => {
   const linhas = linhasFiltradasExpControle();
   if (!linhas.length) {
-    alert(progExpControle.length ? 'Nenhum item bate com a busca atual.' : 'Nenhum item no Controle EXP para imprimir.');
+    alert(linhasDoSetorAtual().length ? 'Nenhum item bate com a busca atual.' : 'Nenhum item para imprimir.');
     return;
   }
 
@@ -1972,7 +1994,7 @@ document.getElementById('confNomeInput').addEventListener('input', (e) => {
 })();
 
 function renderConferencia() {
-  const pendentes = progExpControle.filter(l => l.status !== 'retirado');
+  const pendentes = linhasDoSetorAtual().filter(l => l.status !== 'retirado');
   const corpo = document.getElementById('confBody');
   const vazio = document.getElementById('confVazio');
 
@@ -2041,7 +2063,7 @@ document.getElementById('confBody').addEventListener('click', async (e) => {
   const btnLocal = e.target.closest('.conf-retirar-tudo');
   if (btnLocal) {
     const local = btnLocal.dataset.local;
-    const itens = progExpControle.filter(l => (l.localizacao || '(sem localização)') === local && l.status !== 'retirado');
+    const itens = linhasDoSetorAtual().filter(l => (l.localizacao || '(sem localização)') === local && l.status !== 'retirado');
     if (!confirm(`Confirmar a retirada de ${itens.length} item(ns) de "${local}"?`)) return;
     btnLocal.disabled = true;
     for (const item of itens) await marcarSaidaExpControle(item.id, nome);
@@ -2057,7 +2079,7 @@ function renderHistoricoRetiradas() {
   const corpo = document.getElementById('confHistBody');
   const vazio = document.getElementById('confHistVazio');
 
-  let retirados = progExpControle.filter(l => l.status === 'retirado');
+  let retirados = linhasDoSetorAtual().filter(l => l.status === 'retirado');
   retirados = [...retirados].sort((a, b) => new Date(b.retirado_em || 0) - new Date(a.retirado_em || 0));
 
   if (busca) {
@@ -2069,7 +2091,7 @@ function renderHistoricoRetiradas() {
 
   vazio.style.display = retirados.length ? 'none' : 'block';
   if (!retirados.length) {
-    vazio.textContent = progExpControle.some(l => l.status === 'retirado')
+    vazio.textContent = linhasDoSetorAtual().some(l => l.status === 'retirado')
       ? 'Nenhuma retirada bate com a busca.'
       : 'Nenhuma retirada registrada ainda.';
     corpo.innerHTML = '';
@@ -2123,7 +2145,7 @@ function montarRelatorioPcp(dataEscolhida, emailPcp) {
   // Compara por data local (nao UTC) -- e a mesma data que a coluna
   // "Retirado em" mostra na tela (toLocaleString), pra bater com o que a
   // pessoa esta vendo.
-  const saidasDoDia = progExpControle.filter(l =>
+  const saidasDoDia = linhasDoSetorAtual().filter(l =>
     l.status === 'retirado' && l.retirado_em
     && new Date(l.retirado_em).toLocaleDateString('en-CA') === dataEscolhida);
 
@@ -2132,7 +2154,8 @@ function montarRelatorioPcp(dataEscolhida, emailPcp) {
   }
 
   const dataFormatada = new Date(dataEscolhida + 'T00:00:00').toLocaleDateString('pt-BR');
-  const assunto = `Saídas EXP ${rotuloUnidade(unidadeAtual)} - ${dataFormatada}`;
+  const rotuloSetor = setorExpAtual === 'benchmark' ? 'Benchmark' : 'EXP';
+  const assunto = `Saídas ${rotuloSetor} ${rotuloUnidade(unidadeAtual)} - ${dataFormatada}`;
 
   const linhas = saidasDoDia
     .sort((a, b) => new Date(a.retirado_em) - new Date(b.retirado_em))
