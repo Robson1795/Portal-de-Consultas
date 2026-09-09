@@ -886,3 +886,36 @@ chegarem).
   escrita/leitura direta, não uma função `security definer` chamada por RPC
   — sem trocar ali, alguém sem acesso à aba ainda conseguiria gravar dados
   nela.
+
+### Sugestão de item substituto (09/09/2026)
+
+O Robson: item que o cliente quer (rebite inox, difícil achar fornecedor)
+não tinha em estoque, mas ele tinha OUTRO rebite inox da mesma medida — só
+que um terceiro rebite, mesma medida mas não inox, **não** deveria ser
+sugerido. Botão 💡 na coluna **Substituto**, só pra item **zerado no
+almoxarifado** (`saldo <= 0`) e ainda em falta — com algum saldo, o item já
+resolve sozinho ou por transferência (coluna "Outras unidades"), sugerir
+troca aí só complicaria.
+
+**A regra, em `sugerirSubstitutos()` (js/analise.js):** mesma **medida**
+(a parte numérica da descrição, tipo "4,0 X 15MM" — `extrairMedida()`,
+regex tolerante a vírgula/ponto e espaço ao redor do X) **e** pelo menos
+uma **palavra em comum** fora do tipo do item e da própria medida
+(`palavrasQualificadoras()` — tira a primeira palavra, que é sempre o tipo
+tipo "REBITE"/"PARAFUSO", e a medida já extraída à parte).
+
+- **Por que "palavra em comum" e não uma lista fixa de materiais**
+  (inox/alumínio/galvanizado...): a mesma lógica serve pra qualquer
+  categoria de item sem o código ter que conhecer o vocabulário de cada
+  uma — "RAL9006" bate com "RAL9006", "316L" bate com "316L", etc., sem
+  precisar cadastrar nada disso à parte.
+- Candidatos vêm de `analiseEstoqueLista` (estoque da própria unidade, só
+  itens com saldo > 0) — carregado junto com o saldo em `carregarAnalise()`
+  (a query de `estoque` ganhou a coluna `descricao`, que antes não vinha).
+  Ordenados por quantas palavras batem (mais em comum primeiro).
+- O modal reaproveita o MESMO `compareModal`/`compareModalBox` de
+  `openCompareModal()` (js/estoque.js) — muda só o conteúdo de dentro, não é
+  um terceiro modal desenhado do zero.
+- Vai no Exportar como texto (`Substituto sugerido`), só pra quem entra no
+  botão — pra quem decide comprar ou não já ver a alternativa na planilha
+  mandada pro Compras.
