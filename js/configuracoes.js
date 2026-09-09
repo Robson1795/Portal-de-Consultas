@@ -162,7 +162,7 @@ async function carregarConfigUnidades() {
   aviso.className = 'status-msg';
 
   const { data, error } = await sb.from('config_unidade')
-    .select('unidade, emails_alm, email_pcp, senha_contagem, senha_exp, pin_edicao').order('unidade');
+    .select('unidade, emails_alm, email_pcp, email_compras, senha_contagem, senha_exp, pin_edicao').order('unidade');
 
   if (error) {
     aviso.textContent = 'Não foi possível carregar: ' + error.message;
@@ -178,6 +178,7 @@ async function carregarConfigUnidades() {
 function renderConfigUnidades() {
   document.getElementById('cfgUniCorpo').innerHTML = configUnidades.map(u => {
     const faltaEmail = !u.emails_alm;
+    const faltaEmailCompras = !u.email_compras;
     const faltaSenha = !u.senha_contagem;
     const faltaSenhaExp = !u.senha_exp;
     return `
@@ -187,11 +188,14 @@ function renderConfigUnidades() {
         ${faltaSenha ? '<div class="cfg-email" style="color:#92400e;">sem senha — contagem bloqueada</div>' : ''}
         ${faltaSenhaExp ? '<div class="cfg-email" style="color:#92400e;">sem senha EXP — página bloqueada</div>' : ''}
         ${faltaEmail ? '<div class="cfg-email" style="color:#92400e;">sem e-mail — envio desabilitado</div>' : ''}
+        ${faltaEmailCompras ? '<div class="cfg-email" style="color:#92400e;">sem e-mail do Compras — solicitação de compra desabilitada</div>' : ''}
       </td>
       <td><input type="text" class="cfgu-emails" placeholder="alm@kingspanisoeste.com.br; outro@..."
                  value="${escapeHtml(u.emails_alm || '')}" style="max-width:320px;"></td>
       <td><input type="text" class="cfgu-email-pcp" placeholder="pcp@kingspanisoeste.com.br"
                  value="${escapeHtml(u.email_pcp || '')}" style="max-width:240px;"></td>
+      <td><input type="text" class="cfgu-email-compras" placeholder="compras@kingspanisoeste.com.br"
+                 value="${escapeHtml(u.email_compras || '')}" style="max-width:240px;"></td>
       <td><input type="text" class="cfgu-senha" placeholder="ex: INV${escapeHtml(u.unidade)}"
                  value="${escapeHtml(u.senha_contagem || '')}" style="max-width:130px;"></td>
       <td><input type="text" class="cfgu-senha-exp" placeholder="ex: EXP${escapeHtml(u.unidade)}"
@@ -211,6 +215,7 @@ document.getElementById('cfgUniCorpo').addEventListener('click', async (e) => {
 
   const emails    = tr.querySelector('.cfgu-emails').value.trim();
   const emailPcp  = tr.querySelector('.cfgu-email-pcp').value.trim();
+  const emailCompras = tr.querySelector('.cfgu-email-compras').value.trim();
   const senha     = tr.querySelector('.cfgu-senha').value.trim();
   const senhaExp  = tr.querySelector('.cfgu-senha-exp').value.trim();
   const pin       = tr.querySelector('.cfgu-pin').value.trim();
@@ -222,6 +227,7 @@ document.getElementById('cfgUniCorpo').addEventListener('click', async (e) => {
   const { error } = await sb.from('config_unidade').update({
     emails_alm: emails || null,
     email_pcp: emailPcp || null,
+    email_compras: emailCompras || null,
     senha_contagem: senha || null,
     senha_exp: senhaExp || null,
     pin_edicao: pin || null,
