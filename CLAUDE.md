@@ -1104,15 +1104,23 @@ na Trading o Estoque Seguro não é usado. Fora da Trading nada muda.
   marcar a lista inteira é resma — quem clicou merece saber pela tela, não
   pela impressora.
 
-A folha usa o mesmo desenho da do Controle EXP (milímetros, não px): **TRADING**
-no topo, item em 26 mm, descrição em 8 mm, quantidade em 14 mm e a
-**localização em 28 mm** entre dois filetes, com `Impresso por <nome> — <data
-hora>` no rodapé. Só entram os dados que a planilha da Trading tem.
+A folha usa o mesmo desenho da do Controle EXP (milímetros, não px), **em
+paisagem**: **TRADING** no topo, item em 32 mm, descrição em 9 mm, quantidade
+em 16 mm e a **localização em 40 mm** entre dois filetes, com `Impresso por
+<nome> — <data hora>` no rodapé. Só entram os dados que a planilha da Trading
+tem.
 
-Os 28 mm da localização são medidos, não chutados: `B-01-01-01` neste peso
-ocupa 5,98 em (o hífen é ponto de quebra natural), e nos 178 mm úteis do A4
-qualquer corpo acima de ~29 mm parte o endereço em duas linhas — `B-01-01-`
-numa e `01` na outra, que é pior que letra menor. Em 28 mm lê-se a 4 metros.
+**Por que paisagem** (Robson, 09/09/2026): não é só girar o papel. Quem limita
+a letra desta etiqueta é a **largura** — o endereço é uma linha só e comprida —
+e na horizontal a linha útil passa de 178 mm para 265 mm. Por isso os corpos
+subiram junto ao girar; manter os de retrato desperdiçaria exatamente o que a
+paisagem deu.
+
+Os 40 mm da localização são medidos, não chutados: `B-01-01-01` neste peso
+ocupa 5,98 em (o hífen é ponto de quebra natural), e nos 265 mm úteis da
+paisagem qualquer corpo acima de ~44 mm parte o endereço em duas linhas —
+`B-01-01-` numa e `01` na outra, que é pior que letra menor. Em 40 mm lê-se a
+quase 6 metros, e cada etiqueta ocupa 165 mm dos 190 mm de altura da folha.
 
 ---
 

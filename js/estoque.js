@@ -1841,12 +1841,18 @@ function montarHtmlEtiquetasTrading(linhas) {
 <title>Etiquetas Trading — ${new Date().toLocaleDateString('pt-BR')}</title>
 <style>
   /* Milímetros, não px: o papel é a medida. Altura de maiúscula ≈ distância
-     ÷ 200 -- 21mm de corpo na Arial dá ~15mm de maiúscula, que se lê a 3
-     metros. Mesma conta da folha do Controle EXP. */
-  @page { size: A4 portrait; margin: 10mm; }
+     ÷ 200 -- é a conta que traduz "ler a 3 metros" em corpo de fonte, a mesma
+     da folha do Controle EXP.
+
+     PAISAGEM (Robson, 09/09/2026: "coloque em modo paisagem"). Não é só girar
+     o papel: na horizontal a linha útil passa de 178mm para 265mm, e é a
+     largura que limita a letra da etiqueta -- o endereço é uma linha só e
+     comprida. Por isso os corpos subiram junto; deixar os de retrato aqui
+     seria desperdiçar exatamente o que a paisagem deu. */
+  @page { size: A4 landscape; margin: 10mm; }
   body { font-family: Arial, sans-serif; margin: 0; }
   .etiqueta {
-    box-sizing: border-box; padding: 6mm; text-align: center;
+    box-sizing: border-box; padding: 5mm 6mm; text-align: center;
     /* Uma folha por item: é etiqueta de prateleira, duas na mesma folha
        viram uma folha que ninguém pode colar em lugar nenhum. */
     page-break-after: always; break-after: page;
@@ -1854,26 +1860,26 @@ function montarHtmlEtiquetasTrading(linhas) {
   .etiqueta:last-child { page-break-after: auto; break-after: auto; }
   .etq-topo {
     display: flex; justify-content: space-between; align-items: baseline;
-    border-bottom: 0.8mm solid #000; padding-bottom: 2mm; margin-bottom: 6mm;
+    border-bottom: 0.8mm solid #000; padding-bottom: 2mm; margin-bottom: 4mm;
   }
   .etq-marca { font-size: 12mm; font-weight: 900; letter-spacing: 0.08em; }
   .etq-unidade { font-size: 4mm; color: #333; }
-  .etq-item { font-size: 26mm; font-weight: 900; line-height: 1; overflow-wrap: anywhere; }
-  .etq-desc { font-size: 8mm; font-weight: 700; line-height: 1.15; margin-top: 4mm; }
-  .etq-qtd { font-size: 14mm; font-weight: 800; margin-top: 4mm; }
+  .etq-item { font-size: 32mm; font-weight: 900; line-height: 1; overflow-wrap: anywhere; }
+  .etq-desc { font-size: 9mm; font-weight: 700; line-height: 1.15; margin-top: 3mm; }
+  .etq-qtd { font-size: 16mm; font-weight: 800; margin-top: 3mm; }
   .etq-qtd small { font-size: 0.45em; font-weight: 700; }
   /* O endereço é o que se procura de longe na estante -- é o maior de todos.
-     28mm e não mais: medido no navegador, "B-01-01-01" nesta fonte/peso ocupa
-     5,98em (o hífen é ponto de quebra natural), e nos 178mm úteis do A4
-     qualquer corpo acima de ~29mm parte o endereço em duas linhas -- "B-01-01-"
-     numa e "01" na outra, que é pior que letra menor. Em 28mm se lê a 4
-     metros, com folga sobre os 3 pedidos. */
+     40mm e não mais: medido no navegador, "B-01-01-01" nesta fonte/peso ocupa
+     5,98em (o hífen é ponto de quebra natural), e nos 265mm úteis da paisagem
+     qualquer corpo acima de ~44mm parte o endereço em duas linhas -- "B-01-01-"
+     numa e "01" na outra, que é pior que letra menor. Em 40mm lê-se a quase 6
+     metros, bem além dos 3 pedidos. */
   .etq-local {
-    font-size: 28mm; font-weight: 900; line-height: 1.05; letter-spacing: 0.02em;
-    margin-top: 6mm; padding: 4mm 0; border-top: 0.8mm solid #000;
+    font-size: 40mm; font-weight: 900; line-height: 1.05; letter-spacing: 0.02em;
+    margin-top: 4mm; padding: 3mm 0; border-top: 0.8mm solid #000;
     border-bottom: 0.8mm solid #000; overflow-wrap: anywhere;
   }
-  .etq-rodape { font-size: 3.5mm; color: #333; margin-top: 5mm; }
+  .etq-rodape { font-size: 3.5mm; color: #333; margin-top: 3mm; }
 </style></head><body>
 ${etiquetas}
 ${'<script>window.onload = () => window.print();<' + '/script>'}
