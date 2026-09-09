@@ -699,6 +699,22 @@ O detalhe (quais unidades têm saldo) vira tooltip do botão; o clique abre
 `openCompareModal()`, com saldo e localização de cada unidade. O texto
 completo continua indo pro Exportar (arquivo estático, sem botão pra clicar).
 
+**O modal de comparação ganhou uma seção extra, só quando vem da Análise de
+Compras:** a lista de pedidos que precisam daquele item, ordenada pelo
+embarque mais próximo. O Robson: *"quero que apareça pra quais pedidos
+preciso, aí a ideia é eu enviar um print pro responsável do almoxarifado que
+vou pedir"* — é o que ele manda por print pra justificar o pedido de
+transferência.
+
+- `openCompareModal(itemCode, extraHtml)` ganhou um segundo parâmetro
+  **opcional**: HTML pronto que entra depois da tabela de unidades. Só
+  `js/analise.js` passa algo (`pedidosDoItemHtml()`, montada a partir de
+  `analiseDemanda`); os outros lugares que chamam essa função (Consulta de
+  Itens) continuam chamando com um argumento só, e a seção nem aparece.
+- Ficou na função existente, e não num modal novo, pra não duplicar a
+  montagem da tabela de unidades (mesmo motivo de reaproveitar o modal
+  inteiro, ver acima).
+
 - **Soma os endereços da mesma unidade**: `estoque` tem uma linha por
   endereço; sem somar, a tela ofereceria transferir só o que está na primeira
   prateleira.

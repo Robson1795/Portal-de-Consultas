@@ -959,7 +959,13 @@ function closeCompareModal() {
   compareModal.classList.remove('open');
 }
 
-async function openCompareModal(itemCode) {
+// `extraHtml` é opcional: um bloco de HTML pronto pra entrar depois da
+// tabela de unidades. Hoje só a Análise de Compras usa (lista de pedidos
+// que precisam do item, ver js/analise.js) -- o Robson: "quero que apareça
+// para quais pedidos preciso, ai a ideia é eu enviar um print pro
+// responsável do almoxarifado que vou pedir". Fica aqui e não lá pra não
+// duplicar a montagem da tabela de unidades num segundo modal.
+async function openCompareModal(itemCode, extraHtml) {
   compareModalBox.innerHTML = `
     <button class="modal-close" id="compareCloseBtn">✕</button>
     <div class="modal-empty">Carregando...</div>
@@ -1040,6 +1046,7 @@ async function openCompareModal(itemCode) {
         </tr>
       </tfoot>
     </table>
+    ${extraHtml || ''}
   `;
   document.getElementById('compareCloseBtn2').addEventListener('click', closeCompareModal);
 }

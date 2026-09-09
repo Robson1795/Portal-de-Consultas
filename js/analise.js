@@ -279,6 +279,52 @@ function transferenciaHtml(linha) {
                   title="${escapeHtml(titulo)}">⇄</button>`;
 }
 
+// Lista, dentro do modal de comparação entre unidades, os pedidos que
+// precisam deste item -- é o que o Robson vai printar e mandar pro
+// responsável do almoxarifado de onde ele está pedindo a transferência
+// ("pra quais pedidos preciso, ai a ideia é eu enviar um print pro
+// responsável"). Ordenada pelo embarque mais próximo, mesmo critério da
+// análise: é o que chega primeiro que precisa do material primeiro.
+function pedidosDoItemHtml(codigoItem) {
+  const linhas = analiseDemanda.filter(l => l.codigo_item === codigoItem);
+  if (!linhas.length) return '';
+
+  const ordenadas = [...linhas].sort((a, b) => {
+    const da = dataEmbarqueParaOrdenar(a.data_embarque);
+    const db = dataEmbarqueParaOrdenar(b.data_embarque);
+    if (da && db) return da - db;
+    if (da) return -1;
+    if (db) return 1;
+    return 0;
+  });
+
+  return `
+    <div style="margin-top:16px; padding-top:12px; border-top:2px solid var(--border);">
+      <div style="font-size:11px; text-transform:uppercase; color:var(--muted); font-weight:700; margin-bottom:6px;">
+        Pedidos que precisam deste item
+      </div>
+      <table style="width:100%; border-collapse:collapse; font-size:13px;">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border);">
+            <th style="text-align:left; padding:4px 6px; color:var(--muted); font-size:11px; text-transform:uppercase;">Pedido</th>
+            <th style="text-align:left; padding:4px 6px; color:var(--muted); font-size:11px; text-transform:uppercase;">Cliente</th>
+            <th style="text-align:right; padding:4px 6px; color:var(--muted); font-size:11px; text-transform:uppercase;">Qtd. pedida</th>
+            <th style="text-align:left; padding:4px 6px; color:var(--muted); font-size:11px; text-transform:uppercase;">Embarque</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${ordenadas.map(l => `
+            <tr>
+              <td style="padding:4px 6px; font-weight:600;">${escapeHtml(l.numero_pedido || '—')}</td>
+              <td style="padding:4px 6px;">${escapeHtml(l.nome_abreviado || '—')}</td>
+              <td style="padding:4px 6px; text-align:right;">${numeroBR(l.qt_pedido)}</td>
+              <td style="padding:4px 6px;">${escapeHtml(l.data_embarque || '—')}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
 // ---- Tela ---------------------------------------------------------------
 function renderAnalise() {
   const corpo = document.getElementById('analiseBody');
@@ -370,7 +416,7 @@ document.getElementById('analiseBody').addEventListener('click', async (e) => {
   // vez de desenhar outro aqui: é a mesma pergunta ("onde mais tem este
   // item?") e o Robson já conhece essa tela.
   const btnComparar = e.target.closest('.analise-comparar');
-  if (btnComparar) { openCompareModal(btnComparar.dataset.item); return; }
+  if (btnComparar) { openCompareModal(btnComparar.dataset.item, pedidosDoItemHtml(btnComparar.dataset.item)); return; }
 
   const btnIgnorar = e.target.closest('.analise-ignorar');
   if (btnIgnorar) { await marcarItemAnalise(btnIgnorar, btnIgnorar.dataset.item, true); return; }
