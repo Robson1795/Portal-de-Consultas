@@ -354,6 +354,53 @@ function numeroBR(valor) {
   return Number(valor || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
 }
 
+// Largura do campo de Observação: o Robson pediu "maleável" -- cresce
+// conforme o texto, com um teto pra não esticar a tabela inteira quando um
+// item tiver uma observação enorme. A tabela já rola pro lado (.scroll-area),
+// então uma coluna mais larga não quebra o layout, só empurra o resto.
+const ANALISE_OBS_LARGURA_MIN = 170;
+const ANALISE_OBS_LARGURA_MAX = 420;
+
+// Estimativa por caractere pra já nascer no tamanho certo, antes mesmo de o
+// campo entrar no DOM (ajustarLarguraObservacao, mais abaixo, refina depois
+// com a largura real do texto renderizado).
+function larguraObservacao(texto) {
+  const estimativa = String(texto || '').length * 7 + 24;
+  return Math.min(ANALISE_OBS_LARGURA_MAX, Math.max(ANALISE_OBS_LARGURA_MIN, estimativa));
+}
+
+// Elemento invisível reaproveitado pra medir o texto -- criar um novo a
+// cada chamada seria desperdício, e um só compartilhado é suficiente
+// porque a medição é síncrona (mede e já lê o resultado, sem sobrepor
+// chamadas).
+let _medidorObservacao = null;
+function medirLarguraTexto(texto, input) {
+  if (!_medidorObservacao) {
+    _medidorObservacao = document.createElement('span');
+    _medidorObservacao.style.position = 'absolute';
+    _medidorObservacao.style.left = '-9999px';
+    _medidorObservacao.style.whiteSpace = 'pre';
+    document.body.appendChild(_medidorObservacao);
+  }
+  // Copia a fonte de verdade do próprio campo (tamanho, peso, família) --
+  // sem isso a medição usaria a fonte padrão do navegador, que pode ser
+  // mais larga ou mais estreita que a da tela e sair errado.
+  _medidorObservacao.style.font = getComputedStyle(input).font;
+  _medidorObservacao.textContent = texto || '';
+  return _medidorObservacao.offsetWidth;
+}
+
+// Ajusta pela largura REAL do texto (medida com a mesma fonte do campo) --
+// `scrollWidth` de um `<input>` não é confiável pra isso em todo navegador
+// (não reflete texto que passa da largura visível, diferente de uma div).
+// Chamada ao digitar, e uma vez logo depois de desenhar a tabela (a
+// estimativa por caractere de larguraObservacao() já deixa perto, isto só
+// afina pro tamanho exato).
+function ajustarLarguraObservacao(input) {
+  const largura = medirLarguraTexto(input.value, input) + 24; // + padding do campo
+  input.style.width = Math.min(ANALISE_OBS_LARGURA_MAX, Math.max(ANALISE_OBS_LARGURA_MIN, largura)) + 'px';
+}
+
 // Onde mais a empresa tem este item, pra pedir transferência em vez de
 // comprar. Verde quando alguma unidade sozinha já cobre a falta inteira --
 // é o caso em que dá pra resolver com um pedido de transferência só.
@@ -480,7 +527,7 @@ function renderAnalise() {
       <td><input type="text" class="analise-obs-input" data-item="${escapeHtml(l.codigo_item)}"
              value="${escapeHtml(analiseNotaDoItem(l.codigo_item).observacao)}"
              placeholder="ex.: já solicitei compra"
-             style="width:170px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px;"></td>
+             style="width:${escapeHtml(String(larguraObservacao(analiseNotaDoItem(l.codigo_item).observacao)))}px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px;"></td>
       <td class="col-acoes">
         ${analiseVerIgnorados
           ? `<button class="acao-btn analise-restaurar" data-item="${escapeHtml(l.codigo_item)}" title="Voltar este item pra análise">↺</button>`
@@ -488,6 +535,11 @@ function renderAnalise() {
       </td>
     </tr>`;
   }).join('');
+
+  // Refina a largura estimada por caractere com a largura real do texto já
+  // renderizado (fonte de verdade é o próprio navegador, não uma conta por
+  // caractere) -- só depois de estar no DOM é que scrollWidth existe.
+  document.querySelectorAll('.analise-obs-input').forEach(ajustarLarguraObservacao);
 }
 
 document.getElementById('analiseBusca').addEventListener('input', renderAnalise);
@@ -564,6 +616,13 @@ document.getElementById('analiseBody').addEventListener('focusout', async (e) =>
 
 document.getElementById('analiseBody').addEventListener('keydown', (e) => {
   if (e.target.classList.contains('analise-obs-input') && e.key === 'Enter') e.target.blur();
+});
+
+// Cresce o campo em tempo real -- o Robson: "dependendo do tamanho do
+// texto aumenta o tamanho dessa coluna, tem itens que escrevo e não cabe
+// tudo".
+document.getElementById('analiseBody').addEventListener('input', (e) => {
+  if (e.target.classList.contains('analise-obs-input')) ajustarLarguraObservacao(e.target);
 });
 
 // Grava (ou atualiza) a anotação do item e só então mexe no mapa em memória.

@@ -810,3 +810,25 @@ item, letra diferente. Duas comparações diferentes, dois bugs diferentes:
     resultado é normalizado de volta na hora de juntar no mapa. Blocos
     caíram de 100 para 50 códigos: cada um agora entra até duas vezes na
     lista, e o motivo dos blocos (tamanho da URL do `in`) dobra junto.
+
+### Coluna Observação maleável (09/09/2026)
+
+O Robson: *"pode deixar aqui maleável, dependendo do tamanho do texto aumenta
+o tamanho dessa coluna, tem itens que escrevo e não cabe tudo"*.
+
+O campo cresce em tempo real conforme digita (170px a 420px), com a tabela
+já preparada pra rolar pro lado (`.scroll-area`) quando isso empurra o
+resto. Duas camadas de precisão:
+
+- **Estimativa por caractere** (`larguraObservacao()`) pro tamanho inicial,
+  antes mesmo do campo entrar no DOM (é só uma string de HTML nesse ponto).
+- **Medição real** (`ajustarLarguraObservacao()` + `medirLarguraTexto()`) —
+  um `<span>` invisível fora da tela, com a MESMA fonte do campo
+  (`getComputedStyle`), recebe o texto e `offsetWidth` dá a largura exata.
+  Refina o tamanho a cada tecla e de novo, pra todos os campos, logo depois
+  de desenhar a tabela.
+
+⚠️ **`scrollWidth` de um `<input>` não serve pra isso** — ao contrário de uma
+`<div>`, não reflete de forma confiável o texto que passa da largura visível
+em todo navegador. Foi a primeira tentativa aqui, e o teste pegou: a largura
+não crescia nunca, presa no mínimo. Daí o `<span>` de medição.
