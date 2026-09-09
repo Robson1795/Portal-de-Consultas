@@ -116,6 +116,9 @@ function render(rows, intervalo) {
                 title="${fichaFeitoSet.has(r.item) ? 'Ver foto e ficha técnica' : 'Ainda não cadastrado — clique para preencher'}">👁</button>
         ${fichaImageMap.get(r.item) ? `<img class="print-only-thumb" src="${escapeHtml(fichaImageMap.get(r.item))}" alt="">` : ''}
         <button class="acao-btn compare-btn" data-item="${escapeHtml(r.item)}" title="Comparar entre unidades">⇄</button>
+        ${parseQtd(r.quantidade) === 0
+          ? `<button class="acao-btn substituto-btn" data-item="${escapeHtml(r.item)}" title="Sugestão de item equivalente já em estoque, mesma medida e material">💡</button>`
+          : ''}
       </td>
       <td class="col-contagem" style="display:${modoContagemAtivo ? 'table-cell' : 'none'};">
         <input type="text" inputmode="decimal" class="contagem-input" data-item="${escapeHtml(r.item)}" data-loc="${escapeHtml(r.localizacao)}"
@@ -532,6 +535,78 @@ function escapeIlike(texto) {
   return String(texto).replace(/[%_]/g, '\\$&');
 }
 
+// Normaliza o código do item pra comparar/indexar sem se importar com
+// maiúscula/minúscula nem espaço a mais. Bug relatado pelo Robson em
+// 2026-09-09: o mesmo item gravado como "996613I" numa planilha e
+// "996613i" no estoque -- comparação de texto em JS/Postgres diferencia
+// maiúscula de minúscula, então o item "sumia" mesmo existindo. Usado pela
+// Análise de Compras (js/analise.js) e por sugerirSubstitutos() abaixo.
+function normalizaCodigoItem(codigo) {
+  return String(codigo || '').trim().toUpperCase();
+}
+
+// Sugestão de item EQUIVALENTE já em estoque, no lugar de comprar/procurar
+// um item difícil de achar (fornecedor raro, ou simplesmente zerado no
+// almoxarifado). O Robson (09/09/2026): um rebite inox não tinha em
+// estoque, mas tinha outro rebite inox da MESMA medida -- só que um
+// terceiro rebite, mesma medida mas não inox, não deveria ser sugerido.
+// A regra: mesma MEDIDA (a parte numérica tipo "4,0 X 15MM") e pelo menos
+// uma PALAVRA EM COMUM fora do tipo do item e da própria medida (aqui,
+// "INOX"). Compartilhada entre a Consulta de Itens (aqui) e a Análise de
+// Compras (js/analise.js, que passa currentData ou analiseEstoqueLista
+// como `listaEstoque`) -- uma regra só, não duas quase iguais.
+//
+// Por que "palavra em comum" em vez de uma lista fixa de materiais
+// (inox/alumínio/galvanizado...): a mesma lógica serve pra qualquer
+// categoria de item sem o código ter que conhecer o vocabulário de cada
+// uma -- "RAL9006" bate com "RAL9006", "316L" bate com "316L", etc.
+
+// Casa "4,0 X 15MM", "4,0X15MM", "4 X 15 MM" etc -- vírgula ou ponto
+// decimal, com ou sem espaço ao redor do X. Sempre maiúsculo antes de
+// comparar (ver normalizaCodigoItem() pro mesmo motivo com código de item).
+const MEDIDA_REGEX = /(\d+[.,]?\d*)\s*X\s*(\d+[.,]?\d*)\s*MM/;
+
+function extrairMedida(descricao) {
+  const m = String(descricao || '').toUpperCase().match(MEDIDA_REGEX);
+  return m ? `${m[1].replace(',', '.')}X${m[2].replace(',', '.')}` : null;
+}
+
+// Palavras "qualificadoras" de uma descrição: tudo, exceto a medida (já
+// extraída à parte) e a primeira palavra (o TIPO do item -- "REBITE",
+// "PARAFUSO"... -- que é sempre igual dentro da mesma busca e não ajuda a
+// diferenciar um substituto de outro).
+function palavrasQualificadoras(descricao, medida) {
+  let texto = String(descricao || '').toUpperCase();
+  if (medida) texto = texto.replace(MEDIDA_REGEX, ' ');
+  const palavras = texto.split(/[^A-Z0-9]+/).filter(p => p.length > 1);
+  palavras.shift(); // tira a primeira (o tipo do item)
+  return new Set(palavras);
+}
+
+// Varre `listaEstoque` ({item, descricao, quantidade}[]) atrás de itens com
+// a MESMA medida da descrição alvo e pelo menos uma palavra qualificadora
+// em comum -- ordenado por quantas palavras batem (mais em comum primeiro).
+// `listaEstoque` já deve vir filtrada pra só quantidade > 0 (item zerado
+// não serve de sugestão) -- quem chama decide a origem (currentData da
+// própria unidade, ou outra lista).
+function sugerirSubstitutos(codigoAlvo, descricaoAlvo, listaEstoque) {
+  const medidaAlvo = extrairMedida(descricaoAlvo);
+  if (!medidaAlvo) return [];
+  const qualAlvo = palavrasQualificadoras(descricaoAlvo, medidaAlvo);
+
+  return listaEstoque
+    .filter(r => normalizaCodigoItem(r.item) !== normalizaCodigoItem(codigoAlvo))
+    .map(r => {
+      if (extrairMedida(r.descricao) !== medidaAlvo) return null;
+      const qual = palavrasQualificadoras(r.descricao, medidaAlvo);
+      const comuns = [...qualAlvo].filter(p => qual.has(p));
+      if (!comuns.length) return null;
+      return { item: r.item, descricao: r.descricao, quantidade: parseQtd(r.quantidade), comuns };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.comuns.length - a.comuns.length);
+}
+
 // Tres formatos, conforme o que se sabe da unidade:
 //   "Unidade 106 — Araquari (SC)"   cidade e UF
 //   "Unidade 110 — Leme"            cidade sem UF confirmada
@@ -849,6 +924,8 @@ document.getElementById('tableBody').addEventListener('click', (e) => {
   if (fichaBtn) { openFichaModal(fichaBtn.dataset.item); return; }
   const compareBtn = e.target.closest('.compare-btn');
   if (compareBtn) { openCompareModal(compareBtn.dataset.item); return; }
+  const substitutoBtn = e.target.closest('.substituto-btn');
+  if (substitutoBtn) { abrirSugestoesSubstitutoEstoque(substitutoBtn.dataset.item); return; }
   const padraoBtn = e.target.closest('.padrao-btn');
   if (padraoBtn) { mostrarPadraoCaixas(padraoBtn); return; }
   const avulsoBtn = e.target.closest('.avulso-btn');
@@ -1096,6 +1173,52 @@ async function openCompareModal(itemCode, extraHtml) {
     ${extraHtml || ''}
   `;
   document.getElementById('compareCloseBtn2').addEventListener('click', closeCompareModal);
+}
+
+// Sugestão de item equivalente já em estoque (mesma medida, mesmo material)
+// pra item zerado -- o Robson pediu que a Consulta de Itens usasse a mesma
+// regra da Análise de Compras (sugerirSubstitutos(), ver js/estoque.js
+// linhas acima), só que aberta pra todo mundo (inclusive consultor), não só
+// pra quem tem acesso à Análise de Compras. Reaproveita o MESMO modal do
+// comparativo entre unidades -- muda só o conteúdo de dentro.
+function abrirSugestoesSubstitutoEstoque(itemCode) {
+  const item = currentData.find(r => r.item === itemCode);
+  if (!item) return;
+
+  const candidatos = currentData.filter(r => parseQtd(r.quantidade) > 0);
+  const sugestoes = sugerirSubstitutos(itemCode, item.descricao, candidatos);
+
+  compareModalBox.innerHTML = `
+    <button class="modal-close" id="compareCloseBtn2">✕</button>
+    <h3 style="padding-right:24px;">${escapeHtml(item.descricao || itemCode)}</h3>
+    <div class="modal-item-code">Código: ${escapeHtml(itemCode)} — sem saldo nesta unidade</div>
+    <div class="modal-text" style="margin:8px 0 4px;">
+      Itens já em estoque com a mesma medida e pelo menos uma palavra em comum
+      (ex.: material) -- confira se algum serve no lugar deste.
+    </div>
+    ${sugestoes.length ? `
+    <table style="width:100%; border-collapse:collapse; margin-top:6px; font-size:13px; table-layout:fixed;">
+      <thead>
+        <tr style="border-bottom:2px solid var(--border);">
+          <th style="width:20%; text-align:left; padding:6px 10px; color:var(--muted); font-size:11px; text-transform:uppercase;">Item</th>
+          <th style="width:50%; text-align:left; padding:6px 10px; color:var(--muted); font-size:11px; text-transform:uppercase;">Descrição</th>
+          <th style="width:15%; text-align:right; padding:6px 10px; color:var(--muted); font-size:11px; text-transform:uppercase;">Saldo</th>
+          <th style="width:15%; text-align:left; padding:6px 10px; color:var(--muted); font-size:11px; text-transform:uppercase;">Em comum</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${sugestoes.map(s => `
+          <tr>
+            <td style="padding:9px 10px; font-weight:600;">${escapeHtml(s.item)}</td>
+            <td style="padding:9px 10px;">${escapeHtml(s.descricao)}</td>
+            <td style="padding:9px 10px; text-align:right; font-weight:700; color:var(--blue-dark);">${escapeHtml(s.quantidade.toLocaleString('pt-BR'))}</td>
+            <td style="padding:9px 10px; color:#166534;">${escapeHtml(s.comuns.join(', '))}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>` : `<div class="modal-empty">Nenhum item parecido com saldo nesta unidade.</div>`}
+  `;
+  document.getElementById('compareCloseBtn2').addEventListener('click', closeCompareModal);
+  compareModal.classList.add('open');
 }
 
 compareModal.addEventListener('click', (e) => {

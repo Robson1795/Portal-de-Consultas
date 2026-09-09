@@ -44,18 +44,13 @@ async function atualizarPermissaoAnalise() {
   podeVerAnaliseCache = !error && data === true;
 }
 
-// Normaliza o código do item pra comparar/indexar sem se importar com
-// maiúscula/minúscula nem espaço a mais. Bug relatado pelo Robson em
-// 2026-09-09: o item 996613I tinha 43 no almoxarifado (conferido no TOTVS),
-// mas a análise mostrava saldo 0 e mandava comprar -- o código do estoque
-// estava gravado como "996613i" (minúsculo) e o da planilha de pedidos como
-// "996613I" (maiúsculo). Comparação de texto em JS diferencia maiúscula de
-// minúscula, então o saldo batido por `Map.get()` nunca encontrava o item.
-// Sem isso, qualquer item com essa mesma inconsistência entre as duas
-// planilhas mandava comprar o que já tinha no almoxarifado.
-function normalizaCodigoItem(codigo) {
-  return String(codigo || '').trim().toUpperCase();
-}
+// normalizaCodigoItem() mora em js/estoque.js (carregado antes deste
+// arquivo) -- é usada tanto aqui quanto por sugerirSubstitutos(), então
+// virou utilitário compartilhado em vez de duplicada. Bug que motivou:
+// Robson relatou em 2026-09-09 que o item 996613I tinha 43 no almoxarifado
+// (conferido no TOTVS), mas a análise mostrava saldo 0 e mandava comprar --
+// o código do estoque estava gravado como "996613i" (minúsculo) e o da
+// planilha de pedidos como "996613I" (maiúsculo).
 
 function analiseNotaDoItem(codigoItem) {
   return analiseNotas.get(normalizaCodigoItem(codigoItem)) || { ignorado: false, observacao: '' };
@@ -427,69 +422,15 @@ function ajustarLarguraObservacao(input) {
   input.style.width = Math.min(ANALISE_OBS_LARGURA_MAX, Math.max(ANALISE_OBS_LARGURA_MIN, largura)) + 'px';
 }
 
-// Sugestão de item EQUIVALENTE já em estoque, no lugar de comprar um item
-// difícil de achar fornecedor. O Robson (09/09/2026): um rebite inox que o
-// cliente quer não tinha em estoque, mas tinha um outro rebite inox da
-// MESMA medida -- só que um rebite da mesma medida que NÃO é inox não
-// serve de sugestão, mesmo com a medida idêntica. A regra: mesma medida
-// (a parte numérica tipo "4,0 X 15MM") E pelo menos uma palavra em comum
-// fora do tipo do item e da própria medida (aqui, "INOX").
-//
-// Por que "palavra em comum" em vez de uma lista fixa de materiais
-// (inox/alumínio/galvanizado...): a mesma lógica serve pra qualquer
-// categoria de item sem o código ter que conhecer o vocabulário de cada
-// uma -- "RAL9006" bate com "RAL9006", "316L" bate com "316L", etc.
-
-// Casa "4,0 X 15MM", "4,0X15MM", "4 X 15 MM" etc -- vírgula ou ponto
-// decimal, com ou sem espaço ao redor do X. Sempre maiúsculo antes de
-// comparar (ver normalizaCodigoItem() pro mesmo motivo com código de item).
-const ANALISE_MEDIDA_REGEX = /(\d+[.,]?\d*)\s*X\s*(\d+[.,]?\d*)\s*MM/;
-
-function extrairMedida(descricao) {
-  const m = String(descricao || '').toUpperCase().match(ANALISE_MEDIDA_REGEX);
-  return m ? `${m[1].replace(',', '.')}X${m[2].replace(',', '.')}` : null;
-}
-
-// Palavras "qualificadoras" de uma descrição: tudo, exceto a medida (já
-// extraída à parte) e a primeira palavra (o TIPO do item -- "REBITE",
-// "PARAFUSO"... -- que é sempre igual dentro da mesma busca e não ajuda a
-// diferenciar um substituto de outro).
-function palavrasQualificadoras(descricao, medida) {
-  let texto = String(descricao || '').toUpperCase();
-  if (medida) texto = texto.replace(ANALISE_MEDIDA_REGEX, ' ');
-  const palavras = texto.split(/[^A-Z0-9]+/).filter(p => p.length > 1);
-  palavras.shift(); // tira a primeira (o tipo do item)
-  return new Set(palavras);
-}
-
-// Varre o estoque local (analiseEstoqueLista) atrás de itens com a MESMA
-// medida da descrição alvo e pelo menos uma palavra qualificadora em
-// comum -- ordenado por quantas palavras batem (mais em comum primeiro).
-function sugerirSubstitutos(codigoAlvo, descricaoAlvo) {
-  const medidaAlvo = extrairMedida(descricaoAlvo);
-  if (!medidaAlvo) return [];
-  const qualAlvo = palavrasQualificadoras(descricaoAlvo, medidaAlvo);
-
-  return analiseEstoqueLista
-    .filter(r => normalizaCodigoItem(r.item) !== normalizaCodigoItem(codigoAlvo))
-    .map(r => {
-      if (extrairMedida(r.descricao) !== medidaAlvo) return null;
-      const qual = palavrasQualificadoras(r.descricao, medidaAlvo);
-      const comuns = [...qualAlvo].filter(p => qual.has(p));
-      if (!comuns.length) return null;
-      return { item: r.item, descricao: r.descricao, quantidade: parseQtd(r.quantidade), comuns };
-    })
-    .filter(Boolean)
-    .sort((a, b) => b.comuns.length - a.comuns.length);
-}
-
 // Botão da coluna Substituto -- só aparece pra quem está zerado no
 // almoxarifado (saldo <= 0) e ainda em falta: com algum saldo, o item
 // resolve sozinho ou por transferência, sugerir troca aí só complicaria.
+// sugerirSubstitutos() mora em js/estoque.js (compartilhada com a Consulta
+// de Itens -- ver lá o porquê).
 function substitutoHtml(linha) {
   if (linha.saldo > 0 || linha.comprar <= 0) return '<span style="color:var(--muted);">—</span>';
 
-  const sugestoes = sugerirSubstitutos(linha.codigo_item, linha.descricao);
+  const sugestoes = sugerirSubstitutos(linha.codigo_item, linha.descricao, analiseEstoqueLista);
   if (!sugestoes.length) return '<span style="color:var(--muted);">—</span>';
 
   return `<button class="acao-btn analise-substituto" data-item="${escapeHtml(linha.codigo_item)}"
@@ -502,7 +443,7 @@ function substitutoHtml(linha) {
 function abrirSugestoesSubstituto(codigoItem) {
   const linha = agruparAnalise().find(l => l.codigo_item === codigoItem);
   if (!linha) return;
-  const sugestoes = sugerirSubstitutos(codigoItem, linha.descricao);
+  const sugestoes = sugerirSubstitutos(codigoItem, linha.descricao, analiseEstoqueLista);
 
   compareModalBox.innerHTML = `
     <button class="modal-close" id="compareCloseBtn2">✕</button>
@@ -915,7 +856,7 @@ function linhasExportacaoAnalise() {
     // Só calcula pra quem entra no botão 💡 (zerado e ainda em falta) --
     // pros demais a sugestão não faz sentido (ver substitutoHtml()).
     (l.saldo <= 0 && l.comprar > 0)
-      ? sugerirSubstitutos(l.codigo_item, l.descricao)
+      ? sugerirSubstitutos(l.codigo_item, l.descricao, analiseEstoqueLista)
           .map(s => `${s.item} - ${s.descricao} (${numeroBR(s.quantidade)} disponível)`).join(' · ')
       : '',
     l.qtdPedidos, [...l.pedidos].join(', '), l.primeiroEmbarqueTexto || '',

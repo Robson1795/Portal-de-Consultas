@@ -919,3 +919,30 @@ tipo "REBITE"/"PARAFUSO", e a medida já extraída à parte).
 - Vai no Exportar como texto (`Substituto sugerido`), só pra quem entra no
   botão — pra quem decide comprar ou não já ver a alternativa na planilha
   mandada pro Compras.
+
+### Sugestão de substituto também na Consulta de Itens (09/09/2026)
+
+O Robson: *"use a mesma regra para os itens do ALM para que os consultores
+consigam visualizar também"* -- a sugestão de item equivalente (seção
+acima) só existia na Análise de Compras, que tem acesso restrito. Consulta
+de Itens é aberta a todo mundo, inclusive `consultor`.
+
+**Refatoração pra não duplicar a regra**: `normalizaCodigoItem()`,
+`extrairMedida()`, `palavrasQualificadoras()` e `sugerirSubstitutos()`
+saíram de `js/analise.js` e foram pra `js/estoque.js` (carregado antes,
+disponível pros dois arquivos). `sugerirSubstitutos()` ganhou um terceiro
+parâmetro (`listaEstoque`) em vez de ler `analiseEstoqueLista` direto --
+quem chama decide a origem: a Análise de Compras passa
+`analiseEstoqueLista` (estoque da unidade, já carregado por
+`carregarAnalise()`), a Consulta de Itens passa `currentData` filtrado por
+`quantidade > 0` (já carregado por `loadData()` -- nenhuma consulta nova ao
+banco).
+
+- Botão 💡 na coluna de Ações, só pra item com **quantidade zero**
+  (`parseQtd(r.quantidade) === 0`) -- mesmo critério de "zerado" já usado no
+  filtro `filtros.zerado`.
+- Reaproveita o mesmo `compareModal`/`compareModalBox` do comparativo entre
+  unidades (síncrono aqui -- `currentData` já está em memória, sem
+  "Carregando..." como o comparativo tem, que precisa buscar do banco).
+- Nenhuma trava de perfil: quem já vê Consulta de Itens (todo perfil,
+  incluindo `consultor`) vê o botão.
