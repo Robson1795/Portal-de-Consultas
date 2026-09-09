@@ -757,3 +757,64 @@ reescrever "já solicitei compra" todo santo dia.
 - ⚠️ O `upsert` pede recibo (`.select()`): sem ele, um upsert barrado pelo
   RLS volta com `error null` e nada gravado — a tela diria "salvo" e o F5
   desmentiria. Mesmo furo do item A1 da auditoria.
+
+### Solicitação de compra por item (09/09/2026)
+
+Cada item em falta ganha um botão **🛒** na coluna Ação, que abre o e-mail de
+solicitação de compra já preenchido — mesmo desenho da Requisição ALM
+(seção 8): o `mailto` entrega o rascunho ao Outlook da própria pessoa, então o
+Compras responde direto para quem pediu. Não existe servidor neste projeto.
+
+**Destinatário:** `config_unidade.email_compras`, por unidade — cada fábrica
+tem o seu comprador. Lido pela função `email_compras_da_unidade()`, no mesmo
+padrão de `emails_alm_da_unidade()` e `email_pcp_da_unidade()`: desde a Fase 7
+só admin lê `config_unidade` direto, porque a tabela guarda as senhas na mesma
+linha. Cadastra-se na aba **Configurações**. **Unidade sem e-mail deixa o botão
+desabilitado**, dizendo para procurar o administrador — falha fechado, porque
+adivinhar um endereço mandaria a solicitação para o lugar errado sem ninguém
+saber. Script: `sql/fase21-solicitacao-compra.sql`.
+
+**O e-mail leva a conta, não só o número:** quantidade a comprar, quanto os
+pedidos pedem, quanto tem no almoxarifado, a lista dos pedidos que dependem do
+item (ordenada pelo embarque), o primeiro embarque, a observação do
+almoxarifado — e, quando existe, **o aviso de que outra unidade tem saldo**,
+com quanto e onde. Esse aviso é o ponto: comprar o que a empresa já tem em
+outro galpão é dinheiro jogado fora, e o comprador precisa saber disso antes de
+comprar, não depois.
+
+- **O botão não aparece habilitado para item que não falta.** O e-mail sairia
+  com "QUANTIDADE A COMPRAR: 0", que é um pedido sem pedido. Para comprar por
+  outro motivo (estoque mínimo, reposição programada) existe a Requisição ALM,
+  que é a tela de pedir sem partir de falta. A trava vale na tela **e** na
+  ação, não só no botão.
+- ⚠️ **A marca diz "e-mail aberto", não "enviado".** `solicitado_em` e
+  `solicitado_por` em `analise_item_notas` registram que o rascunho foi
+  gerado; o portal **não tem como saber** se a pessoa clicou em enviar no
+  Outlook. A tela usa essas palavras, e existe um **↺** para tirar a marca de
+  um clique errado. Chamar isso de "solicitado" seria mentir num campo que
+  depois vira decisão de compra.
+- **Reabrir o e-mail não reescreve a data.** É ela que responde "desde quando
+  este item está pedido?" — mesma regra da primeira emissão da etiqueta no
+  Controle EXP.
+- **A lista de pedidos é cortada pelo limite real do `mailto`**, não por um
+  número fixo: `corpoEmailCompraQueCabe()` tira pedidos um a um até o endereço
+  caber em ~1900 caracteres, e o corpo termina com "e mais N pedido(s)".
+  Deixar o cliente de e-mail cortar seria pior — ele corta onde der, no meio de
+  uma linha, sem dizer que cortou.
+
+**`gravarNotaItem()` passou a gravar só os campos que mudaram**, em vez de
+remontar a linha inteira a partir do mapa em memória. Isso não foi arrumação:
+do jeito anterior, (a) se a leitura das notas tivesse falhado — o mapa fica
+vazio e a falha só vai para o console — gravar uma observação reescrevia
+`ignorado: false` e **desmarcava um "não repor"** que existia no banco; e
+(b) digitar na observação e clicar direto no 🚫 fazia a segunda gravação
+reescrever a **observação antiga**, apagando o texto recém-digitado. O `upsert`
+do PostgREST só sobrescreve as colunas que vão no payload, então mandar menos
+é mandar certo.
+
+**Trocar de unidade agora recarrega a Análise** (`trocarUnidade()` em
+`js/estoque.js`). Faltava o par do Estoque de Aço, e sem ele o admin trocava de
+unidade, continuava vendo a lista da anterior, e a partir dali a solicitação
+sairia com os dados de uma unidade e o e-mail de outra — e "Substituir análise"
+apagaria a análise da unidade **nova**. Era perda silenciosa de dado, não só
+tela desatualizada.

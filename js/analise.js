@@ -24,9 +24,15 @@ let analiseVerIgnorados = false; // mostrando a lista dos ignorados em vez da no
 // codigo_item -> [{ unidade, quantidade }] das OUTRAS unidades que têm o
 // item -- pra pedir transferência em vez de comprar.
 let analiseOutrasUnidades = new Map();
+// E-mail do Compras da unidade aberta, lido por funcao `security definer`
+// (config_unidade guarda senhas na mesma linha e so admin le a tabela
+// direto). Vazio = botao de solicitacao desabilitado: adivinhar endereco
+// mandaria a solicitacao pro lugar errado sem ninguem saber.
+let emailComprasUnidade = '';
 
 function analiseNotaDoItem(codigoItem) {
-  return analiseNotas.get(codigoItem) || { ignorado: false, observacao: '' };
+  return analiseNotas.get(codigoItem)
+      || { ignorado: false, observacao: '', solicitado_em: null, solicitado_por: '' };
 }
 
 function analiseItemIgnorado(codigoItem) {
@@ -82,10 +88,13 @@ async function carregarAnalise() {
     return;
   }
 
-  const [demanda, estoque, notas] = await Promise.all([
+  const [demanda, estoque, notas, emailCompras] = await Promise.all([
     sb.from('analise_demanda').select('*').eq('unidade', unidadeAtual),
     sb.from('estoque').select('item, quantidade').eq('unidade', unidadeAtual),
-    sb.from('analise_item_notas').select('codigo_item, ignorado, observacao').eq('unidade', unidadeAtual)
+    sb.from('analise_item_notas')
+      .select('codigo_item, ignorado, observacao, solicitado_em, solicitado_por')
+      .eq('unidade', unidadeAtual),
+    sb.rpc('email_compras_da_unidade', { uni: unidadeAtual })
   ]);
 
   if (demanda.error) {
@@ -110,7 +119,27 @@ async function carregarAnalise() {
   // só sem esconder nada e sem observação (mesmo tratamento do resto do projeto).
   if (notas.error) console.warn('Não foi possível carregar as anotações dos itens:', notas.error.message);
   analiseNotas = new Map((notas.error ? [] : (notas.data || []))
-    .map(r => [r.codigo_item, { ignorado: r.ignorado === true, observacao: r.observacao || '' }]));
+    .map(r => [r.codigo_item, {
+      ignorado: r.ignorado === true,
+      observacao: r.observacao || '',
+      solicitado_em: r.solicitado_em || null,
+      solicitado_por: r.solicitado_por || ''
+    }]));
+
+  // Falha aqui NAO e silenciosa: sem o e-mail, o botao de solicitacao fica
+  // desabilitado, e a pessoa precisa saber se e porque ninguem cadastrou ou
+  // porque a leitura falhou -- as duas se pareceriam na tela.
+  emailComprasUnidade = '';
+  if (emailCompras.error) {
+    console.warn('Nao foi possivel ler o e-mail do Compras:', emailCompras.error.message);
+    msg.textContent = 'Atenção: não foi possível ler o e-mail do Compras ('
+      + emailCompras.error.message + '). O botão de solicitação fica desabilitado.'
+      + ' Se a mensagem falar em função inexistente, sql/fase21-solicitacao-compra.sql'
+      + ' ainda não foi rodado no Supabase.';
+    msg.className = 'status-msg status-err';
+  } else {
+    emailComprasUnidade = String(emailCompras.data || '').trim();
+  }
 
   await carregarSaldoOutrasUnidades();
   renderAnalise();
@@ -326,6 +355,221 @@ function pedidosDoItemHtml(codigoItem) {
 }
 
 // ---- Tela ---------------------------------------------------------------
+// ---- Solicitacao de compra por item ---------------------------------------
+//
+// Mesmo desenho da Requisicao ALM (secao 8 do CLAUDE.md): o `mailto` abre o
+// e-mail no Outlook da propria pessoa, ja preenchido. Nao existe servidor
+// neste projeto, e o caminho tem uma vantagem real -- a solicitacao sai do
+// e-mail de quem pediu, entao o Compras responde direto pra ela.
+
+// O botao, ou a marca de que o e-mail ja foi aberto pra este item.
+function solicitacaoHtml(item) {
+  const nota = analiseNotaDoItem(item.codigo_item);
+
+  if (nota.solicitado_em) {
+    const quando = formatarDataHoraBR(nota.solicitado_em);
+    const quem = nota.solicitado_por ? ' por ' + nota.solicitado_por : '';
+    // "E-mail aberto" e nao "solicitado": o portal entrega o rascunho ao
+    // Outlook e NAO tem como saber se a pessoa clicou em enviar. Escrever
+    // "solicitado" aqui viraria decisao de compra baseada em algo que o
+    // sistema nao sabe.
+    return `<button class="acao-btn analise-solicitar" data-item="${escapeHtml(item.codigo_item)}"
+              style="color:#166534;"
+              title="E-mail de compra aberto em ${escapeHtml(quando)}${escapeHtml(quem)} — o portal não confirma o envio. Clique para abrir de novo.">✅</button>`
+         + `<button class="acao-btn analise-limpar-solicitacao" data-item="${escapeHtml(item.codigo_item)}"
+              title="Tirar a marca de solicitado (clique errado, ou o e-mail não foi enviado)">↺</button>`;
+  }
+
+  if (!emailComprasUnidade) {
+    return `<button class="acao-btn" disabled style="opacity:0.4;"
+              title="Sem e-mail do Compras cadastrado para esta unidade — peça ao administrador (aba Configurações).">🛒</button>`;
+  }
+
+  // Item que nao falta nao tem o que solicitar: o e-mail sairia com
+  // "QUANTIDADE A COMPRAR: 0", que e um pedido sem pedido. Quem quiser
+  // comprar por outro motivo (estoque minimo, reposicao programada) usa a
+  // Requisicao ALM, que e a tela de pedir sem partir de falta.
+  if (!(item.comprar > 0)) {
+    return `<button class="acao-btn" disabled style="opacity:0.4;"
+              title="O saldo cobre os pedidos: não há falta para solicitar. Para comprar por outro motivo, use a Requisição ALM.">🛒</button>`;
+  }
+
+  return `<button class="acao-btn analise-solicitar" data-item="${escapeHtml(item.codigo_item)}"
+            title="Abrir o e-mail de solicitação de compra deste item, já preenchido">🛒</button>`;
+}
+
+// Os pedidos que precisam do item, em texto puro pro corpo do e-mail. E o que
+// responde a primeira pergunta do comprador -- "pra quando?" -- sem ele ter de
+// pedir a planilha de volta.
+function pedidosDoItemTexto(codigoItem, um) {
+  const linhas = analiseDemanda
+    .filter(l => String(l.codigo_item || '').trim() === codigoItem)
+    .map(l => ({
+      pedido: l.numero_pedido || '?',
+      cliente: l.nome_abreviado || '',
+      qtd: parseQtd(l.qt_pedido) || 0,
+      embarque: l.data_embarque || '',
+      ordem: dataEmbarqueParaOrdenar(l.data_embarque)
+    }))
+    .sort((a, b) => {
+      if (a.ordem && b.ordem) return a.ordem - b.ordem;
+      if (a.ordem) return -1;
+      if (b.ordem) return 1;
+      return 0;
+    });
+
+  const unidadeMedida = um ? ' ' + um : '';
+  return linhas.map(p => `  Pedido ${p.pedido}`
+    + (p.cliente ? ` (${p.cliente})` : '')
+    + ` - ${numeroBR(p.qtd)}${unidadeMedida}`
+    + (p.embarque ? ` - embarque ${p.embarque}` : ' - sem data de embarque'));
+}
+
+function montarCorpoEmailCompra(item, maxPedidos) {
+  const nota = analiseNotaDoItem(item.codigo_item);
+  const outras = analiseOutrasUnidades.get(item.codigo_item) || [];
+
+  const pedidos = pedidosDoItemTexto(item.codigo_item, item.um);
+  // Corpo longo sai truncado no `mailto`, e o cliente corta onde der -- no
+  // meio de uma linha, sem dizer que cortou. Entao o corte e nosso: quem
+  // chama passa quantos pedidos cabem (ver corpoEmailCompraQueCabe), e a
+  // lista termina com "e mais N pedido(s)", que e informacao em vez de
+  // silencio.
+  const pedidosMostrados = pedidos.slice(0, maxPedidos === undefined ? 12 : maxPedidos);
+  const pedidosCortados = pedidos.length - pedidosMostrados.length;
+
+  return [
+    `SOLICITACAO DE COMPRA - ${rotuloUnidade(unidadeAtual)}`,
+    '',
+    `Item ........... ${item.codigo_item}`,
+    `Descricao ...... ${item.descricao || '(sem descricao)'}`,
+    `UM ............. ${item.um || '-'}`,
+    '',
+    `QUANTIDADE A COMPRAR: ${numeroBR(item.comprar)}`,
+    '',
+    'Como chegamos nesse numero:',
+    `  Pedidos em carteira pedem .. ${numeroBR(item.pedido)}`,
+    `  Saldo no almoxarifado ...... ${numeroBR(item.saldo)}`,
+    `  Falta ...................... ${numeroBR(item.comprar)}`,
+    '',
+    `Pedidos que dependem deste item (${pedidos.length}):`,
+    ...pedidosMostrados,
+    ...(pedidosCortados > 0 ? [`  ... e mais ${pedidosCortados} pedido(s) - lista completa no portal`] : []),
+    '',
+    `Primeiro embarque: ${item.primeiroEmbarqueTexto || 'sem data'}`,
+    '',
+    // Vai no e-mail de proposito: o comprador precisa saber que existe saldo
+    // em outra fabrica ANTES de comprar. Comprar o que a empresa ja tem em
+    // outro galpao e dinheiro jogado fora, e foi por isso que a coluna
+    // "Outras unidades" existe na tela.
+    ...(outras.length
+      ? ['ATENCAO - este item tem saldo em outra(s) unidade(s):',
+         ...outras.map(u => `  Unidade ${u.unidade}: ${numeroBR(u.quantidade)}`),
+         'Vale avaliar transferencia antes de comprar.',
+         '']
+      : ['Nenhuma outra unidade tem saldo deste item.', '']),
+    ...(nota.observacao ? ['OBSERVACAO DO ALMOXARIFADO', nota.observacao, ''] : []),
+    '--',
+    `Solicitado por ${nomeUsuarioAtual || '(sem nome)'} pela Analise de Compras do Portal de Estoque.`,
+    'Os numeros acima sao da planilha de pedidos carregada no portal na data deste e-mail.'
+  ].join('\n');
+}
+
+// Monta o `mailto` mais completo que ainda cabe no limite pratico de ~1900
+// caracteres, tirando pedidos da lista um a um. Devolve tambem se sobrou algo
+// de fora, pra tela poder avisar -- e o caso em que o Compras precisa abrir o
+// portal pra ver a carteira inteira.
+function corpoEmailCompraQueCabe(item, destinatario, assunto) {
+  const total = pedidosDoItemTexto(item.codigo_item, item.um).length;
+  const monta = (n) => 'mailto:' + encodeURIComponent(destinatario.replace(/;/g, ','))
+    + '?subject=' + encodeURIComponent(assunto)
+    + '&body=' + encodeURIComponent(montarCorpoEmailCompra(item, n));
+
+  for (let n = total; n >= 0; n--) {
+    const href = monta(n);
+    // Um pedido so ja estourando o limite significa que o resto do corpo e
+    // que e grande (descricao e observacao longas). Manda assim mesmo, com o
+    // aviso: cortar o "como chegamos nesse numero" seria pior.
+    if (href.length <= 1900 || n === 0) return { href, mostrados: n, total, cabe: href.length <= 1900 };
+  }
+  return { href: monta(0), mostrados: 0, total, cabe: false };
+}
+
+async function solicitarCompraItem(codigoItem) {
+  const msg = document.getElementById('analiseMsg');
+  const item = agruparAnalise().find(l => l.codigo_item === codigoItem);
+  if (!item) {
+    msg.textContent = 'Item não está mais na análise. Clique em Atualizar.';
+    msg.className = 'status-msg status-err';
+    return;
+  }
+  if (!emailComprasUnidade) {
+    msg.textContent = 'Sem e-mail do Compras cadastrado para a unidade '
+      + unidadeAtual + '. Cadastre na aba Configurações.';
+    msg.className = 'status-msg status-err';
+    return;
+  }
+  if (!(item.comprar > 0)) {
+    msg.textContent = 'O item ' + codigoItem + ' não está em falta: o saldo cobre os pedidos.'
+      + ' Nada a solicitar.';
+    msg.className = 'status-msg';
+    return;
+  }
+
+  const nota = analiseNotaDoItem(codigoItem);
+  // Marca ANTES de abrir o e-mail, e por um motivo tecnico alem do desenho da
+  // Requisicao ALM: `window.location.href` pode cancelar requisicao pendente,
+  // entao gravar depois de navegar perderia a marca as vezes -- do jeito que
+  // e dificil de reproduzir e facil de nao notar.
+  //
+  // So marca na primeira vez. Reabrir o e-mail nao reescreve a data: e ela
+  // que responde "desde quando este item esta pedido?", igual a data da
+  // primeira emissao da etiqueta no Controle EXP.
+  let marcou = true;
+  if (!nota.solicitado_em) {
+    marcou = await gravarNotaItem(codigoItem, {
+      solicitado_em: new Date().toISOString(),
+      solicitado_por: nomeUsuarioAtual
+    }, msg);
+  }
+
+  const assunto = `Solicitacao de compra - ${item.codigo_item} - ${rotuloUnidade(unidadeAtual)}`;
+  const email = corpoEmailCompraQueCabe(item, emailComprasUnidade, assunto);
+  const href = email.href;
+
+  if (!marcou) {
+    // gravarNotaItem() ja escreveu o motivo em msg. Abrir o e-mail de todo
+    // jeito: mandar a solicitacao e o objetivo, a marca e conveniencia -- e a
+    // pessoa precisa saber que o item vai aparecer como nao solicitado.
+    msg.textContent += ' O e-mail vai abrir mesmo assim, mas o item continuará aparecendo como não solicitado.';
+  } else if (!email.cabe) {
+    msg.textContent = 'Abrindo o e-mail. ATENÇÃO: ele ficou grande e pode sair cortado pelo'
+      + ' Outlook — confira antes de enviar.';
+    msg.className = 'status-msg status-err';
+  } else if (email.mostrados < email.total) {
+    msg.textContent = 'Abrindo o e-mail do item ' + codigoItem + '. São ' + email.total
+      + ' pedidos e couberam ' + email.mostrados + ' na lista — o e-mail diz quantos ficaram de fora,'
+      + ' e a carteira completa está aqui no portal.';
+    msg.className = 'status-msg status-ok';
+  } else {
+    msg.textContent = 'Abrindo o e-mail de compra do item ' + codigoItem
+      + ' — confira e clique em enviar. O portal não sabe se você enviou.';
+    msg.className = 'status-msg status-ok';
+  }
+
+  renderAnalise();
+  window.location.href = href;
+}
+
+async function limparSolicitacaoItem(codigoItem) {
+  const msg = document.getElementById('analiseMsg');
+  const ok = await gravarNotaItem(codigoItem, { solicitado_em: null, solicitado_por: null }, msg);
+  if (!ok) return;
+  renderAnalise();
+  msg.textContent = 'Marca de solicitação removida do item ' + codigoItem + '.';
+  msg.className = 'status-msg status-ok';
+}
+
 function renderAnalise() {
   const corpo = document.getElementById('analiseBody');
   const vazio = document.getElementById('analiseVazio');
@@ -385,7 +629,8 @@ function renderAnalise() {
       <td class="col-acoes">
         ${analiseVerIgnorados
           ? `<button class="acao-btn analise-restaurar" data-item="${escapeHtml(l.codigo_item)}" title="Voltar este item pra análise">↺</button>`
-          : `<button class="acao-btn analise-ignorar" data-item="${escapeHtml(l.codigo_item)}" title="Não preciso repor este item — some da análise, inclusive nas próximas planilhas">🚫</button>`}
+          : solicitacaoHtml(l)
+            + `<button class="acao-btn analise-ignorar" data-item="${escapeHtml(l.codigo_item)}" title="Não preciso repor este item — some da análise, inclusive nas próximas planilhas">🚫</button>`}
       </td>
     </tr>`;
   }).join('');
@@ -417,6 +662,19 @@ document.getElementById('analiseBody').addEventListener('click', async (e) => {
   // item?") e o Robson já conhece essa tela.
   const btnComparar = e.target.closest('.analise-comparar');
   if (btnComparar) { openCompareModal(btnComparar.dataset.item, pedidosDoItemHtml(btnComparar.dataset.item)); return; }
+
+  const btnSolicitar = e.target.closest('.analise-solicitar');
+  if (btnSolicitar) {
+    btnSolicitar.disabled = true;
+    await solicitarCompraItem(btnSolicitar.dataset.item);
+    return;   // renderAnalise() ja redesenhou o botao; nao reabilita o antigo
+  }
+  const btnLimpar = e.target.closest('.analise-limpar-solicitacao');
+  if (btnLimpar) {
+    btnLimpar.disabled = true;
+    await limparSolicitacaoItem(btnLimpar.dataset.item);
+    return;
+  }
 
   const btnIgnorar = e.target.closest('.analise-ignorar');
   if (btnIgnorar) { await marcarItemAnalise(btnIgnorar, btnIgnorar.dataset.item, true); return; }
@@ -472,11 +730,21 @@ document.getElementById('analiseBody').addEventListener('keydown', (e) => {
 // campo -- marcar "não repor" num item que já tinha observação não pode
 // apagar a observação, e vice-versa.
 async function gravarNotaItem(codigoItem, mudanca, msgEl) {
-  const atual = analiseNotaDoItem(codigoItem);
-  const novo = {
-    ignorado: mudanca.ignorado !== undefined ? mudanca.ignorado : atual.ignorado,
-    observacao: mudanca.observacao !== undefined ? mudanca.observacao : (atual.observacao || null)
-  };
+  // Grava SO os campos que mudaram, e nao a linha inteira remontada a partir
+  // do mapa em memoria. Duas razoes:
+  //
+  // - o `upsert` do PostgREST só sobrescreve as colunas que vão no payload,
+  //   então o que não foi pedido conserva o valor do banco;
+  // - remontar a linha inteira fazia dois estragos silenciosos: se a leitura
+  //   das notas tivesse falhado (o mapa fica vazio, e a falha só vai pro
+  //   console), gravar uma observação reescrevia `ignorado: false` e
+  //   DESMARCAVA um "não repor" que existia no banco; e digitar na observação
+  //   e clicar direto no 🚫 fazia a segunda gravação reescrever a observação
+  //   antiga, apagando o texto recém-digitado.
+  const campos = {};
+  ['ignorado', 'observacao', 'solicitado_em', 'solicitado_por'].forEach(c => {
+    if (mudanca[c] !== undefined) campos[c] = mudanca[c];
+  });
 
   // .select() de propósito: sem ele, um upsert barrado pelo RLS volta com
   // error null e nada gravado -- a tela diria "salvo" e o F5 desmentiria.
@@ -484,8 +752,7 @@ async function gravarNotaItem(codigoItem, mudanca, msgEl) {
     .upsert({
       unidade: unidadeAtual,
       codigo_item: codigoItem,
-      ignorado: novo.ignorado,
-      observacao: novo.observacao,
+      ...campos,
       atualizado_por: nomeUsuarioAtual,
       atualizado_em: new Date().toISOString()
     }, { onConflict: 'unidade,codigo_item' })
@@ -494,7 +761,8 @@ async function gravarNotaItem(codigoItem, mudanca, msgEl) {
   if (error) {
     msgEl.textContent = 'NÃO GRAVOU: ' + error.message
       + ' — se a mensagem falar em tabela inexistente, sql/fase20-analise-notas-item.sql'
-      + ' ainda não foi rodado no Supabase.';
+      + ' ainda não foi rodado no Supabase; se falar em coluna inexistente,'
+      + ' é o sql/fase21-solicitacao-compra.sql.';
     msgEl.className = 'status-msg status-err';
     console.error('Falha ao gravar anotação do item:', error.message);
     return false;
@@ -505,7 +773,13 @@ async function gravarNotaItem(codigoItem, mudanca, msgEl) {
     return false;
   }
 
-  analiseNotas.set(codigoItem, { ignorado: novo.ignorado, observacao: novo.observacao || '' });
+  const atual = analiseNotaDoItem(codigoItem);
+  analiseNotas.set(codigoItem, {
+    ignorado: campos.ignorado !== undefined ? campos.ignorado === true : atual.ignorado,
+    observacao: campos.observacao !== undefined ? (campos.observacao || '') : atual.observacao,
+    solicitado_em: campos.solicitado_em !== undefined ? campos.solicitado_em : atual.solicitado_em,
+    solicitado_por: campos.solicitado_por !== undefined ? (campos.solicitado_por || '') : atual.solicitado_por
+  });
   return true;
 }
 

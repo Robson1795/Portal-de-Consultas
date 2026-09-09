@@ -1660,6 +1660,7 @@ async function trocarUnidade(cod) {
   // Sem isto, quem estava no Estoque de Aco trocava de unidade e continuava
   // vendo as bobinas da anterior (bug de 08/09/2026).
   if (paginaAtual === 'bobinas') await loadBobinas();
+  if (paginaAtual === 'analise') await carregarAnalise();
   // Se a contagem estava ativa e a unidade ja foi desbloqueada nesta sessao,
   // mantem ativa sem pedir a senha de novo.
   if (estavaContando && unidadeDesbloqueada(unidadeAtual)) {
