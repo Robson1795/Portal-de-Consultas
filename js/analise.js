@@ -264,32 +264,19 @@ function numeroBR(valor) {
 // saldo unidade por unidade e a localização. O resumo aqui responde "dá pra
 // transferir?"; o modal responde "de onde exatamente, e quanto tem lá".
 function transferenciaHtml(linha) {
-  const abre = (conteudo, titulo, estilo) =>
-    `<button class="analise-comparar" data-item="${escapeHtml(linha.codigo_item)}"
-             title="${escapeHtml(titulo)}"
-             style="background:none; border:none; padding:0; cursor:pointer; text-align:left; font-size:13px; ${estilo}">`
-    + `${conteudo}</button>`;
-
-  if (linha.comprar <= 0) {
-    return abre('⇄', 'Ver o saldo deste item em todas as unidades', 'color:var(--muted);');
-  }
-
+  // Mesmo botão, mesmo ícone da Consulta de Itens (.compare-btn) -- o
+  // Robson pediu pra tirar o resumo em texto ("103: 18.337 · 105: 2.049
+  // +3") e deixar só a flecha, igual ao ALM: mais limpo, e quem já usa a
+  // outra tela reconhece o ícone na hora.
   const outras = analiseOutrasUnidades.get(linha.codigo_item) || [];
-  if (!outras.length) {
-    return abre('nenhuma ⇄', 'Nenhuma outra unidade tem saldo deste item — clique para conferir unidade por unidade',
-                'color:var(--muted);');
-  }
+  const titulo = linha.comprar <= 0
+    ? 'Comparar entre unidades'
+    : (outras.length
+        ? 'Comparar entre unidades — tem saldo em ' + outras.map(u => rotuloUnidade(u.unidade)).join(', ')
+        : 'Comparar entre unidades — nenhuma outra unidade tem saldo deste item');
 
-  const cobreSozinha = outras[0].quantidade >= linha.comprar;
-  const textoCompleto = outras.map(u => `${u.unidade}: ${numeroBR(u.quantidade)}`).join(' · ');
-  const mostradas = outras.slice(0, 2).map(u => `${u.unidade}: ${numeroBR(u.quantidade)}`).join(' · ');
-  const resto = outras.length > 2 ? ` +${outras.length - 2}` : '';
-
-  return abre(
-    `${escapeHtml(mostradas)}${resto} ⇄`,
-    `${textoCompleto} — clique para ver o saldo em todas as unidades`,
-    `font-weight:600; color:${cobreSozinha ? '#166534' : '#b45309'}; text-decoration:underline;`
-  );
+  return `<button class="acao-btn analise-comparar" data-item="${escapeHtml(linha.codigo_item)}"
+                  title="${escapeHtml(titulo)}">⇄</button>`;
 }
 
 // ---- Tela ---------------------------------------------------------------
@@ -571,7 +558,7 @@ async function gravarAnalise() {
 // ---- Exportar (pra mandar pra Compras) ----------------------------------
 const ANALISE_EXPORT_CABECALHO = ['Item', 'Descrição', 'UM', 'Qtd. pedida (total)',
                                   'Saldo almoxarifado', 'Sobra/Falta', 'Comprar',
-                                  'Tem em outra unidade', 'Qtd. pedidos', 'Pedidos',
+                                  'Outras unidades', 'Qtd. pedidos', 'Pedidos',
                                   '1º embarque', 'Observação'];
 
 function linhasExportacaoAnalise() {

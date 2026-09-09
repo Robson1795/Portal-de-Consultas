@@ -692,11 +692,12 @@ O Robson: *"quero que os itens que não tenho, ele me indique de outras
 unidades para eu pedir transferência"*. Comprar o que a empresa já tem em
 outro galpão é dinheiro jogado fora.
 
-Coluna **"Tem em outra unidade"**, só nos itens em falta: `101: 600 · 105: 50`,
-ordenado pela maior quantidade. **Verde** quando uma unidade sozinha cobre a
-falta inteira (dá pra resolver com um pedido de transferência só), **laranja**
-quando só somando várias. Vai no Exportar como texto, pra a lista ir pronta pro
-Compras.
+Coluna **"Outras unidades"**: mesmo botão ⇄ da Consulta de Itens
+(`.compare-btn`), sem texto resumido na célula -- o Robson pediu pra tirar o
+resumo (`103: 18.337 · 105: 2.049 +3`) e deixar só a flecha, "igual ao ALM".
+O detalhe (quais unidades têm saldo) vira tooltip do botão; o clique abre
+`openCompareModal()`, com saldo e localização de cada unidade. O texto
+completo continua indo pro Exportar (arquivo estático, sem botão pra clicar).
 
 - **Soma os endereços da mesma unidade**: `estoque` tem uma linha por
   endereço; sem somar, a tela ofereceria transferir só o que está na primeira
@@ -707,12 +708,6 @@ Compras.
 - **Em blocos de 100** (`carregarSaldoOutrasUnidades`): o `in` do PostgREST
   viaja na URL e uma análise cheia tem centenas de itens em falta. O sintoma
   sem isso seria "com 5 itens funciona, com 300 não".
-- **A célula é um botão**: abre o MESMO modal de comparação entre unidades da
-  Consulta de Itens (`openCompareModal`, `js/estoque.js`), com saldo e
-  localização unidade por unidade. O resumo na coluna responde "dá pra
-  transferir?"; o modal responde "de onde exatamente, e quanto tem lá".
-  Reaproveitar em vez de desenhar outro: é a mesma pergunta, e o Robson já
-  conhece essa tela.
 
 ### Anotações por item: "não repor" e observação (09/09/2026)
 
