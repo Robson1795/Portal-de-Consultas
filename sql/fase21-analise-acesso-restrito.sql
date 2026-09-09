@@ -115,6 +115,8 @@ grant execute on function public.pode_ver_analise_compras(text) to authenticated
 
 drop policy if exists "Leitura analise_demanda da unidade" on analise_demanda;
 drop policy if exists "Escrita analise_demanda da unidade" on analise_demanda;
+drop policy if exists "Leitura analise_demanda restrita" on analise_demanda;
+drop policy if exists "Escrita analise_demanda restrita" on analise_demanda;
 
 create policy "Leitura analise_demanda restrita" on analise_demanda
   for select to authenticated
@@ -127,6 +129,8 @@ create policy "Escrita analise_demanda restrita" on analise_demanda
 
 drop policy if exists "Leitura analise_notas da unidade" on analise_item_notas;
 drop policy if exists "Escrita analise_notas da unidade" on analise_item_notas;
+drop policy if exists "Leitura analise_notas restrita" on analise_item_notas;
+drop policy if exists "Escrita analise_notas restrita" on analise_item_notas;
 
 create policy "Leitura analise_notas restrita" on analise_item_notas
   for select to authenticated
