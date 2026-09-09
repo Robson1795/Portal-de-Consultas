@@ -24,15 +24,8 @@ let progItens = [];         // pedido_itens dos pedidos carregados
 let progExpControle = [];   // exp_controle_itens -- localizacao por item, pro inventario
 let expCtrlDescMap = new Map(); // codigo_item -> {descricao, um}, resolvido em cascata pra exibir a lista
 let catalogoExpItens = []; // catalogo_exp_itens -- planilha do sistema, carregada só ao entrar na página
-let expLocalizacaoStatusMap = new Map(); // localizacao (normalizada) -> {concluido_por, concluido_em}
-
-// Normaliza pra comparar/indexar localização sem se importar com espaço a
-// mais ou maiúscula/minúscula ("EXP A-03" == "exp a-03 ") -- mesma
-// localização digitada diferente por pessoas diferentes não pode virar
-// duas entradas separadas no mapa de conclusão.
-function normalizaLocalizacao(texto) {
-  return String(texto || '').trim().toLowerCase();
-}
+let expPedidoProntoMap = new Map(); // numero_pedido -> {pronto_em, pronto_por} -- ver marcarPedidoAnteriorComoPronto()
+let ultimoPedidoRegistrado = null; // último Nº Pedido gravado nesta sessão, pra detectar troca (ver gravarMovimentacaoManual)
 
 // ---- Carga da tela ---------------------------------------------------------
 async function carregarProgramacao() {
@@ -55,10 +48,10 @@ async function carregarProgramacao() {
   // que o Robson viu: item da unidade 106 aparecendo com a 105 selecionada.
   // pedido_itens não tem coluna unidade própria (só via pedidos.unidade),
   // então filtra pelos IDs dos pedidos já filtrados.
-  const [pedidos, expCtrl, locStatus] = await Promise.all([
+  const [pedidos, expCtrl, pedidoStatus] = await Promise.all([
     sb.from('vw_pedidos_prioridade').select('*').eq('unidade', unidadeAtual),
     sb.from('exp_controle_itens').select('*').eq('unidade', unidadeAtual).order('localizacao', { ascending: true }),
-    sb.from('exp_localizacao_status').select('*').eq('unidade', unidadeAtual)
+    sb.from('exp_pedido_status').select('*').eq('unidade', unidadeAtual)
   ]);
 
   let itens = { data: [], error: null };
@@ -87,13 +80,21 @@ async function carregarProgramacao() {
   // do preview antes de gravar.
   expCtrlDescMap = await buscarDescricoesItens(progExpControle.map(l => l.codigo_item));
 
-  // exp_localizacao_status e mais novo ainda (fase17) -- mesmo tratamento:
-  // se o script nao rodou, o mapa fica vazio (tudo aparece como pendente),
-  // sem travar a pagina.
-  expLocalizacaoStatusMap = new Map(
-    (locStatus.error ? [] : (locStatus.data || []))
-      .map(l => [normalizaLocalizacao(l.localizacao), l])
+  // exp_pedido_status e mais novo ainda (fase17) -- mesmo tratamento: se o
+  // script nao rodou, o mapa fica vazio, sem travar a pagina.
+  expPedidoProntoMap = new Map(
+    (pedidoStatus.error ? [] : (pedidoStatus.data || []))
+      .map(l => [l.numero_pedido, l])
   );
+
+  // Retoma de onde a digitação parou: o último pedido gravado (por
+  // criado_em) volta a ser "o pedido atual" pra detecção de troca continuar
+  // funcionando depois de um recarregamento de página no meio do trabalho.
+  if (progExpControle.length) {
+    ultimoPedidoRegistrado = progExpControle
+      .slice()
+      .sort((a, b) => new Date(b.criado_em) - new Date(a.criado_em))[0].numero_pedido || null;
+  }
 
   renderSeparacao();
   renderExp();
@@ -1152,19 +1153,6 @@ function contarPedidosNaExpedicao(linhas) {
   return pedidos.size;
 }
 
-// Selo por linha: essa localização já foi marcada como concluída (todos os
-// itens dela já foram colocados)? Sem localização (linha ainda sem local
-// definido) não tem o que concluir -- fica em branco, não "pendente", pra
-// não confundir com uma localização que já tem itens mas não foi marcada.
-function statusLocalizacaoBadge(localizacao) {
-  if (!localizacao || !localizacao.trim()) return '';
-  const status = expLocalizacaoStatusMap.get(normalizaLocalizacao(localizacao));
-  if (status) {
-    return `<span title="Localização concluída em ${escapeHtml(formatarDataHoraBR(status.concluido_em))}${status.concluido_por ? ' por ' + escapeHtml(status.concluido_por) : ''}" style="color:#166534; font-weight:700;">✓ concluída</span>`;
-  }
-  return `<span title="Ainda não marcada como concluída -- confirme com quem está alimentando antes de imprimir" style="color:#b45309; font-weight:600;">⏳ em andamento</span>`;
-}
-
 function renderExpControle(erroCarregamento) {
   const corpo = document.getElementById('expCtrlBody');
   const vazio = document.getElementById('expCtrlVazio');
@@ -1199,7 +1187,6 @@ function renderExpControle(erroCarregamento) {
       <td class="loc"><input type="text" class="expctrl-loc-input" data-id="${escapeHtml(l.id)}"
              value="${escapeHtml(l.localizacao || '')}" placeholder="—"
              style="width:90px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px;"></td>
-      <td class="loc">${statusLocalizacaoBadge(l.localizacao)}</td>
       <td class="item">${escapeHtml(l.codigo_item)}</td>
       <td>${desc && desc.descricao ? escapeHtml(desc.descricao) : '—'}</td>
       <td class="loc">${desc && desc.um ? escapeHtml(desc.um) : '—'}</td>
@@ -1292,6 +1279,11 @@ async function gravarMovimentacaoManual({ codigo, pedido, quantidadeTexto, local
     console.error('Falha ao gravar item manual do Controle EXP:', error.message);
     return { ok: false, mensagem: 'NÃO SALVOU: ' + error.message };
   }
+
+  // Só entrada participa da detecção de troca de pedido -- é o fluxo de
+  // "colocar o item na localização"; uma saída digitada aqui é outra coisa
+  // (o item já foi embora), não sinaliza nada sobre o pedido anterior.
+  if (tipo !== 'saida') await atualizarPedidoProntoAoRegistrar(linha.numero_pedido);
 
   const semDescricao = !(await buscarDescricoesItens([codigo])).get(codigo);
   const rotuloTipo = tipo === 'saida' ? 'Saída' : 'Entrada';
@@ -1760,9 +1752,11 @@ function montarHtmlExpControle(scriptAutoImprimir) {
 <title>Controle EXP — ${escapeHtml(rotuloUnidade(unidadeAtual))} — ${new Date().toLocaleDateString('pt-BR')}</title>
 <style>
   body { font-family: Arial, sans-serif; padding: 16px; box-sizing: border-box; }
-  table { border-collapse: collapse; width: 100%; font-size: 13px; }
-  th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
-  th { background: #004894; color: white; }
+  /* Letra grande de propósito (Robson: pallet no nível 3 do porta-pallet,
+     difícil de ler de baixo/de longe a folha colada nele). */
+  table { border-collapse: collapse; width: 100%; font-size: 20px; }
+  th, td { border: 1px solid #ccc; padding: 10px 12px; text-align: left; }
+  th { background: #004894; color: white; font-size: 16px; }
   tr:nth-child(even) { background: #f7f9fb; }
   .endereco-grande {
     text-align: center; page-break-before: avoid; page-break-inside: avoid;
@@ -1850,11 +1844,13 @@ async function marcarEtiquetaEmitidaEmLote(linhas, msgEl) {
   return true;
 }
 
-// Localizações distintas nas linhas dadas que AINDA NÃO foram marcadas como
-// concluídas (ignora linha sem localização -- não tem o que confirmar).
-function localizacoesPendentes(linhas) {
-  const distintas = new Set(linhas.map(l => (l.localizacao || '').trim()).filter(Boolean));
-  return [...distintas].filter(loc => !expLocalizacaoStatusMap.has(normalizaLocalizacao(loc)));
+// Pedidos distintos nas linhas dadas que AINDA NÃO foram marcados como
+// prontos (ignora linha sem pedido -- não tem o que confirmar). "Pronto" é
+// detectado sozinho quando a pessoa que alimenta a planilha passa pra um
+// pedido diferente (ver marcarPedidoAnteriorComoPronto), não por ação manual.
+function pedidosPendentes(linhas) {
+  const distintos = new Set(linhas.map(l => (l.numero_pedido || '').trim()).filter(Boolean));
+  return [...distintos].filter(p => !expPedidoProntoMap.has(p));
 }
 
 // Abre a mesma listagem numa aba nova já pronta pra impressora -- a
@@ -1868,17 +1864,18 @@ document.getElementById('expCtrlImprimirBtn').addEventListener('click', async ()
   }
 
   // A certeza que o Robson pediu (2026-09-08): antes de imprimir, avisa se
-  // alguma localização desta impressão ainda não foi confirmada como
-  // concluída por quem está alimentando a planilha. Não bloqueia (ele pode
-  // ter motivo pra imprimir mesmo assim) -- só exige um segundo clique
+  // algum pedido desta impressão ainda não foi detectado como pronto (isto
+  // é, quem alimenta a planilha ainda não passou pra um pedido diferente
+  // depois dele -- ver marcarPedidoAnteriorComoPronto). Não bloqueia (ele
+  // pode ter motivo pra imprimir mesmo assim) -- só exige um segundo clique
   // consciente em vez de imprimir por engano com a lista pela metade.
-  const pendentes = localizacoesPendentes(linhas);
+  const pendentes = pedidosPendentes(linhas);
   if (pendentes.length) {
     const confirmado = confirm(
       (pendentes.length === 1
-        ? `Atenção: esta localização ainda não foi marcada como concluída`
-        : `Atenção: estas localizações ainda não foram marcadas como concluídas`) +
-      ` por quem está alimentando o Controle EXP:\n\n` +
+        ? `Atenção: este pedido ainda não foi detectado como pronto`
+        : `Atenção: estes pedidos ainda não foram detectados como prontos`) +
+      ` (quem alimenta o Controle EXP ainda não passou pra outro pedido depois dele):\n\n` +
       pendentes.join(', ') +
       `\n\nPode ser que ainda faltem itens pra colocar. Imprimir mesmo assim?`
     );
@@ -1919,56 +1916,40 @@ document.getElementById('expCtrlMarcarEtiquetaBtn').addEventListener('click', as
   await marcarEtiquetaEmitidaEmLote(linhas, document.getElementById('expEtiquetaMsg'));
 });
 
-// Quem alimenta a planilha (item por item ou colando de uma vez) clica aqui
-// quando termina de colocar TODOS os itens de uma localização -- é o que dá
-// ao Robson a certeza de que pode imprimir sem faltar item (o aviso do botão
-// Imprimir olha pra esse mesmo registro). Exige achar exatamente UMA
-// localização na busca de propósito: marcar "A-0" (que bate com A-01, A-02,
-// A-03...) de uma vez só daria falsa certeza sobre localizações que ninguém
-// olhou de verdade.
-document.getElementById('expCtrlConcluirLocalBtn').addEventListener('click', async () => {
-  const linhas = linhasFiltradasExpControle();
-  const distintas = [...new Set(linhas.map(l => (l.localizacao || '').trim()).filter(Boolean))];
-  const msg = document.getElementById('expEtiquetaMsg');
+// Detecta sozinho quando um pedido está pronto: se o pedido que acabou de
+// ganhar um item é DIFERENTE do último pedido registrado, é sinal de que
+// quem alimenta a planilha terminou o anterior e seguiu pra outro -- então
+// o anterior vira "pronto" (pode imprimir). Pedido do Robson (2026-09-09):
+// "quando ela colocar um numero de pedido diferente ao anterior,
+// automaticamente ja e pra entender que ja posso tirar a etiqueta".
+//
+// Reabre sozinho se ela voltar: se o pedido que está recebendo o item agora
+// já tinha sido marcado pronto antes, isso significa que na verdade faltava
+// item nele -- desmarca, porque óbvio que não estava pronto de verdade.
+//
+// Só a entrada manual (item por item) passa por aqui -- colar uma planilha
+// inteira de uma vez não tem essa noção de "sequência", então não teria
+// sentido aplicar a mesma lógica lá.
+async function atualizarPedidoProntoAoRegistrar(numeroPedidoNovo) {
+  const novo = (numeroPedidoNovo || '').trim() || null;
 
-  if (!distintas.length) {
-    alert('Digite uma localização específica na busca acima antes de clicar (ex.: "EXP A-03").');
-    return;
-  }
-  if (distintas.length > 1) {
-    alert('A busca encontrou mais de uma localização: ' + distintas.join(', ') + '.\n\nDigite uma localização específica pra confirmar só ela.');
-    return;
-  }
-
-  const localizacao = distintas[0];
-  const itensDaLocal = linhas.filter(l => (l.localizacao || '').trim() === localizacao);
-  const jaConcluida = expLocalizacaoStatusMap.get(normalizaLocalizacao(localizacao));
-
-  const confirmado = confirm(
-    (jaConcluida
-      ? `A localização "${localizacao}" já estava concluída (por ${jaConcluida.concluido_por || '—'}). Atualizar a confirmação mesmo assim`
-      : `Confirmar que TODOS os itens da localização "${localizacao}" já foram colocados`) +
-    ` (${itensDaLocal.length} item(ns) cadastrado(s) nela agora)?`
-  );
-  if (!confirmado) return;
-
-  const { error } = await sb.from('exp_localizacao_status').upsert({
-    unidade: unidadeAtual, localizacao, concluido_por: nomeUsuarioAtual, concluido_em: new Date().toISOString()
-  }, { onConflict: 'unidade,localizacao' });
-
-  if (error) {
-    msg.textContent = 'Não foi possível marcar a localização como concluída: ' + error.message
-      + ' — se a mensagem falar em tabela inexistente, sql/fase17-localizacao-concluida.sql ainda não foi rodado no Supabase.';
-    msg.className = 'status-msg status-err';
-    console.error('Falha ao marcar localização concluída:', error.message);
-    return;
+  if (novo && expPedidoProntoMap.has(novo)) {
+    const { error } = await sb.from('exp_pedido_status').delete().eq('unidade', unidadeAtual).eq('numero_pedido', novo);
+    if (!error) expPedidoProntoMap.delete(novo);
   }
 
-  expLocalizacaoStatusMap.set(normalizaLocalizacao(localizacao), { concluido_por: nomeUsuarioAtual, concluido_em: new Date().toISOString() });
-  renderExpControle();
-  msg.textContent = `Localização "${localizacao}" marcada como concluída.`;
-  msg.className = 'status-msg status-ok';
-});
+  if (novo && ultimoPedidoRegistrado && novo !== ultimoPedidoRegistrado) {
+    const anterior = ultimoPedidoRegistrado;
+    const agora = new Date().toISOString();
+    const { error } = await sb.from('exp_pedido_status').upsert({
+      unidade: unidadeAtual, numero_pedido: anterior, pronto_por: nomeUsuarioAtual, pronto_em: agora
+    }, { onConflict: 'unidade,numero_pedido' });
+    if (!error) expPedidoProntoMap.set(anterior, { pronto_por: nomeUsuarioAtual, pronto_em: agora });
+    else console.error('Falha ao marcar pedido anterior como pronto:', error.message);
+  }
+
+  if (novo) ultimoPedidoRegistrado = novo;
+}
 
 // ---- Aba 4: Conferência EXP (quem retira fisicamente pro carregamento) ----
 // O Controle EXP (acima) e a ENTRADA -- onde o item foi guardado. Aqui e a
