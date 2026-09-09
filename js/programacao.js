@@ -1156,6 +1156,7 @@ function contarPedidosNaExpedicao(linhas) {
 function renderExpControle(erroCarregamento) {
   const corpo = document.getElementById('expCtrlBody');
   const vazio = document.getElementById('expCtrlVazio');
+  resetarConfirmacaoImprimir(); // a lista mudou -- o aviso de "pedido pendente" era sobre a lista anterior
 
   if (erroCarregamento) {
     vazio.style.display = 'block';
@@ -1217,6 +1218,54 @@ function renderExpControle(erroCarregamento) {
       </td>
     </tr>`;
   }).join('');
+}
+
+// Grava etiqueta em lote: `marcar = true` marca como emitida. Chamada pelo
+// Imprimir, que marca sozinho a etiqueta de tudo que sai na impressão.
+//
+// Vai em blocos de 100: o `in` do PostgREST viaja na URL e cada id e um uuid
+// de 36 caracteres. Selecionar tudo numa unidade cheia estouraria o limite de
+// tamanho da URL, e o sintoma seria "marcar 5 funciona, marcar 300 falha" --
+// dificil de ligar a causa depois.
+async function gravarEtiquetaEmLote(linhas) {
+  // So alcanca quem ainda nao tem etiqueta: reimprimir nao reescreve a data
+  // da primeira emissao, que e a que responde "desde quando este item esta
+  // etiquetado?".
+  const alvo = linhas.filter(l => !l.etiqueta_emitida_em);
+  if (!alvo.length) return { marcados: 0, naoGravados: 0, error: null };
+
+  const agora = new Date().toISOString();
+  const patch = { etiqueta_emitida_em: agora, etiqueta_emitida_por: nomeUsuarioAtual };
+  const BLOCO = 100;
+  let marcados = 0;
+  let naoGravados = 0;
+  for (let de = 0; de < alvo.length; de += BLOCO) {
+    const pedaco = alvo.slice(de, de + BLOCO);
+
+    // O `.select('id')` nao e enfeite: sem ele o update volta sem erro mesmo
+    // quando o RLS esconde a linha e nada e gravado -- PostgREST nao avisa que
+    // atualizou zero. A tela mostraria o certinho verde e o F5 desmentiria.
+    // Com o recibo, sabemos a diferenca entre "marquei 12" e "pedi 12, o banco
+    // aceitou 9".
+    const { data, error } = await sb.from('exp_controle_itens')
+      .update(patch)
+      .in('id', pedaco.map(l => l.id))
+      .select('id');
+    // Devolve quantos ja foram: depois de gravar 200 linhas, dizer so
+    // "falhou" seria mentira, e a pessoa marcaria tudo de novo.
+    if (error) return { marcados, naoGravados, error };
+
+    const gravados = new Set((data || []).map(r => r.id));
+    // So a linha que o banco confirmou muda na tela.
+    pedaco.forEach(l => {
+      if (!gravados.has(l.id)) return;
+      l.etiqueta_emitida_em = patch.etiqueta_emitida_em;
+      l.etiqueta_emitida_por = patch.etiqueta_emitida_por;
+    });
+    marcados += gravados.size;
+    naoGravados += pedaco.length - gravados.size;
+  }
+  return { marcados, naoGravados, error: null };
 }
 
 // Marca que o item saiu da localizacao pro carregamento -- nao apaga o
@@ -1813,44 +1862,29 @@ document.getElementById('expCtrlExportarBtn').addEventListener('click', async ()
   else exportarExpControleCsv(nomeBase);
 });
 
-// Marca em lote etiqueta_emitida_em/_por pras linhas passadas (só as que
-// ainda não tinham -- reimprimir/remarcar não reescreve a data da primeira
-// emissão). Compartilhada entre o clique de Imprimir (marca sozinho, junto
-// com a impressão) e o botão "Marcar como já emitida" (retroativo, pra
-// etiqueta impressa fisicamente ANTES de existir esse controle no
-// sistema -- pedido do Robson em 2026-09-08).
-async function marcarEtiquetaEmitidaEmLote(linhas, msgEl) {
-  const semEtiqueta = linhas.filter(l => !l.etiqueta_emitida_em);
-  if (!semEtiqueta.length) return true;
-
-  const agora = new Date().toISOString();
-  const { error } = await sb.from('exp_controle_itens')
-    .update({ etiqueta_emitida_em: agora, etiqueta_emitida_por: nomeUsuarioAtual })
-    .in('id', semEtiqueta.map(l => l.id));
-
-  if (error) {
-    msgEl.textContent = 'Não foi possível marcar a etiqueta como emitida: '
-      + error.message + ' — se a mensagem falar em coluna inexistente, '
-      + 'sql/fase16-etiqueta-emitida.sql ainda não foi rodado no Supabase.';
-    msgEl.className = 'status-msg status-err';
-    console.error('Falha ao marcar etiqueta emitida:', error.message);
-    return false;
-  }
-
-  semEtiqueta.forEach(l => { l.etiqueta_emitida_em = agora; l.etiqueta_emitida_por = nomeUsuarioAtual; });
-  renderExpControle();
-  msgEl.textContent = semEtiqueta.length + ' etiqueta(s) marcada(s) como emitida(s).';
-  msgEl.className = 'status-msg status-ok';
-  return true;
-}
-
 // Pedidos distintos nas linhas dadas que AINDA NÃO foram marcados como
 // prontos (ignora linha sem pedido -- não tem o que confirmar). "Pronto" é
 // detectado sozinho quando a pessoa que alimenta a planilha passa pra um
-// pedido diferente (ver marcarPedidoAnteriorComoPronto), não por ação manual.
+// pedido diferente (ver atualizarPedidoProntoAoRegistrar), não por ação manual.
 function pedidosPendentes(linhas) {
   const distintos = new Set(linhas.map(l => (l.numero_pedido || '').trim()).filter(Boolean));
   return [...distintos].filter(p => !expPedidoProntoMap.has(p));
+}
+
+// Espera um segundo clique no próprio botão Imprimir, pra confirmar mesmo
+// com pedido pendente. NÃO usa confirm() do navegador de propósito: o Chrome
+// oferece "impedir que esta página crie novos diálogos" depois de alguns
+// avisos, e marcado isso, confirm() devolve false na hora -- o clique não
+// faz nada e nenhuma mensagem aparece (ver CLAUDE.md, seção 7). Qualquer
+// busca nova cancela a confirmação pendente: o aviso era sobre outra lista.
+let expCtrlImprimirConfirmando = false;
+
+function resetarConfirmacaoImprimir() {
+  if (!expCtrlImprimirConfirmando) return;
+  expCtrlImprimirConfirmando = false;
+  const btn = document.getElementById('expCtrlImprimirBtn');
+  btn.textContent = '🖨️ Imprimir';
+  btn.classList.remove('btn-primary');
 }
 
 // Abre a mesma listagem numa aba nova já pronta pra impressora -- a
@@ -1862,25 +1896,31 @@ document.getElementById('expCtrlImprimirBtn').addEventListener('click', async ()
     alert(progExpControle.length ? 'Nenhum item bate com a busca atual.' : 'Nenhum item no Controle EXP para imprimir.');
     return;
   }
+  const btnImprimir = document.getElementById('expCtrlImprimirBtn');
+  const msg = document.getElementById('expEtiquetaMsg');
 
   // A certeza que o Robson pediu (2026-09-08): antes de imprimir, avisa se
   // algum pedido desta impressão ainda não foi detectado como pronto (isto
   // é, quem alimenta a planilha ainda não passou pra um pedido diferente
-  // depois dele -- ver marcarPedidoAnteriorComoPronto). Não bloqueia (ele
+  // depois dele -- ver atualizarPedidoProntoAoRegistrar). Não bloqueia (ele
   // pode ter motivo pra imprimir mesmo assim) -- só exige um segundo clique
   // consciente em vez de imprimir por engano com a lista pela metade.
   const pendentes = pedidosPendentes(linhas);
-  if (pendentes.length) {
-    const confirmado = confirm(
+  if (pendentes.length && !expCtrlImprimirConfirmando) {
+    expCtrlImprimirConfirmando = true;
+    msg.textContent =
       (pendentes.length === 1
-        ? `Atenção: este pedido ainda não foi detectado como pronto`
-        : `Atenção: estes pedidos ainda não foram detectados como prontos`) +
-      ` (quem alimenta o Controle EXP ainda não passou pra outro pedido depois dele):\n\n` +
+        ? 'Atenção: este pedido ainda não foi detectado como pronto '
+        : 'Atenção: estes pedidos ainda não foram detectados como prontos ') +
+      '(quem alimenta o Controle EXP ainda não passou pra outro pedido depois dele): ' +
       pendentes.join(', ') +
-      `\n\nPode ser que ainda faltem itens pra colocar. Imprimir mesmo assim?`
-    );
-    if (!confirmado) return;
+      '. Pode ser que ainda faltem itens pra colocar. Clique em Imprimir de novo pra confirmar mesmo assim.';
+    msg.className = 'status-msg';
+    btnImprimir.textContent = '🖨️ Confirmar: imprimir mesmo assim';
+    btnImprimir.classList.add('btn-primary');
+    return;
   }
+  resetarConfirmacaoImprimir();
 
   const aba = window.open('', '_blank');
   if (!aba) { alert('O navegador bloqueou a nova aba. Libere pop-ups pra este site e tente de novo.'); return; }
@@ -1889,31 +1929,33 @@ document.getElementById('expCtrlImprimirBtn').addEventListener('click', async ()
 
   // Imprimir aqui É o ato de emitir a etiqueta, então a marcação sai junto:
   // marcar num segundo clique seria mais um passo para esquecer, e a lista
-  // passaria a mentir sobre o que já foi etiquetado. Só as linhas desta
-  // impressão (respeita a busca).
-  await marcarEtiquetaEmitidaEmLote(linhas, document.getElementById('expEtiquetaMsg'));
-});
+  // passaria a mentir sobre o que já foi etiquetado.
+  //
+  // Só as linhas desta impressão (respeita a busca) e só as que ainda não
+  // tinham etiqueta -- reimprimir não reescreve a data da primeira emissão,
+  // que é a que responde "desde quando este item está etiquetado?".
+  const { marcados, naoGravados, error } = await gravarEtiquetaEmLote(linhas);
+  if (!marcados && !naoGravados && !error) return;
 
-// Retroativo: etiqueta impressa fisicamente ANTES de existir esse controle
-// (fase16), então o sistema nunca marcou etiqueta_emitida_em. Pedido do
-// Robson em 2026-09-08: "todos esses já imprimi, foi antes de mandarmos o
-// comando de ser automático, pode deixar com o certo em verde". Respeita a
-// busca (mesmo escopo do Imprimir/Exportar) -- pra marcar só uma localização
-// ou pedido, digita na busca antes de clicar.
-document.getElementById('expCtrlMarcarEtiquetaBtn').addEventListener('click', async () => {
-  const linhas = linhasFiltradasExpControle();
-  const semEtiqueta = linhas.filter(l => !l.etiqueta_emitida_em);
-  if (!semEtiqueta.length) {
-    alert('Nenhum item sem etiqueta na lista atual (ou a busca não bateu com nada).');
+  if (error) {
+    // A impressão já saiu -- dizer isso importa, senão a pessoa acha que nada
+    // aconteceu e imprime de novo.
+    msg.textContent = 'A impressão saiu'
+      + (marcados ? ', e marcou ' + marcados + ' etiqueta(s), mas parou no resto: '
+                  : ', mas NÃO foi possível marcar a etiqueta como emitida: ')
+      + error.message + ' — se a mensagem falar em coluna inexistente, '
+      + 'sql/fase16-etiqueta-emitida.sql ainda não foi rodado no Supabase.';
+    msg.className = 'status-msg status-err';
+    console.error('Falha ao marcar etiqueta emitida:', error.message);
+    renderExpControle();
     return;
   }
-  const confirmado = confirm(
-    `Marcar ${semEtiqueta.length} item(ns) como etiqueta já emitida, sem imprimir nada agora?\n\n` +
-    `Use só quando a etiqueta física já foi impressa antes (por fora do sistema).`
-  );
-  if (!confirmado) return;
-
-  await marcarEtiquetaEmitidaEmLote(linhas, document.getElementById('expEtiquetaMsg'));
+  renderExpControle();
+  msg.textContent = naoGravados
+    ? 'A impressão saiu e ' + marcados + ' etiqueta(s) foram marcadas, mas o banco recusou '
+      + naoGravados + ' — recarregue a página para ver quais valeram.'
+    : marcados + ' etiqueta(s) marcada(s) como emitida(s).';
+  msg.className = naoGravados ? 'status-msg status-err' : 'status-msg status-ok';
 });
 
 // Detecta sozinho quando um pedido está pronto: se o pedido que acabou de

@@ -3,7 +3,7 @@
 Contexto do projeto para qualquer agente de IA ou pessoa que for mexer neste repositório.
 Sempre em **português do Brasil**.
 
-**Atualizado:** 08/09/2026
+**Atualizado:** 09/09/2026
 **Mantenedores:** Robson (dono do projeto e admin geral) · Victor Dobner (colaborador)
 
 > Este arquivo é lido automaticamente pelo Claude Code ao abrir a pasta do projeto.
@@ -548,3 +548,51 @@ esquecer, e a lista passaria a mentir.
 
 **Exportar não marca**, só Imprimir. Se a etiqueta passar a sair também do
 Excel, isto precisa mudar junto.
+
+**Marcar/desmarcar à mão, com caixa de seleção (08/09/2026 — removido em
+09/09/2026):** existiu uma versão com caixa de seleção por linha e botões
+"✓ Marcar como impresso" / "✗ Desmarcar", só para admin, pensada para etiqueta
+que saiu por fora do portal ou lista impressa antes de a coluna existir. O
+Robson pediu para tirar assim que a detecção automática de pedido pronto (ver
+abaixo) entrou: com o pedido anterior marcado sozinho, a marcação manual
+parou de fazer falta. `gravarEtiquetaEmLote(linhas)` (o `.select('id')` como
+recibo, os blocos de 100 por causa do tamanho da URL) continua existindo e é
+usada só pelo Imprimir — se a marcação manual precisar voltar um dia, a lógica
+de gravação em lote já está pronta, só falta a UI de novo.
+
+### Pedido pronto pra etiqueta, detectado sozinho (09/09/2026)
+
+Antes de imprimir, o Robson precisa ter certeza que quem alimenta o Controle
+EXP já terminou de colocar todos os itens de um pedido — senão a folha sai
+pela metade sem ninguém perceber. Duas tentativas anteriores, as duas
+substituídas:
+
+1. Botão manual "Concluir localização" — o Robson pediu para tirar: dava
+   trabalho demais precisar clicar toda vez.
+2. Caixa de seleção + "Marcar como impresso" (ver acima) — resolvia um
+   problema um pouco diferente (etiqueta impressa fora do sistema), não este.
+
+**A solução: detectar a troca de Nº Pedido na própria digitação.** Quem
+alimenta o Controle EXP digita item por item para o MESMO pedido — pedido e
+localização continuam preenchidos entre um item e o próximo (ver "Duas
+interfaces" acima). No instante em que aparece um Nº Pedido **diferente** do
+último que ela registrou, dá para concluir sozinho que o pedido anterior
+acabou de ficar pronto — ninguém precisa clicar em nada.
+
+- `atualizarPedidoProntoAoRegistrar()`, chamada de dentro de
+  `gravarMovimentacaoManual()` (só entrada — uma saída digitada ali é outra
+  coisa, não sinaliza nada sobre o pedido anterior nem sobre a planilha
+  colada de uma vez, que não tem essa noção de sequência).
+- Guarda o resultado em `exp_pedido_status` (`sql/fase17-pedido-pronto-para-
+  etiqueta.sql`): uma linha por `(unidade, numero_pedido)`, com quem estava
+  logado e quando.
+- **Reabre sozinho:** se ela voltar e registrar mais um item para um pedido
+  que já tinha sido marcado pronto, a marca é desfeita — óbvio que não estava
+  pronto de verdade.
+- O botão Imprimir avisa (não bloqueia) se algum pedido da impressão atual
+  ainda não foi detectado como pronto, com a lista de quais — mesmo padrão do
+  aviso de etiqueta: um segundo clique consciente, não confirm() do
+  navegador transformado em trava.
+- `ultimoPedidoRegistrado` é reconstruído ao carregar a página (o último
+  `criado_em` de `exp_controle_itens`), para a detecção continuar funcionando
+  depois de um F5 no meio do trabalho.
