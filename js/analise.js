@@ -25,6 +25,20 @@ let analiseVerIgnorados = false; // mostrando a lista dos ignorados em vez da no
 // item -- pra pedir transferência em vez de comprar.
 let analiseOutrasUnidades = new Map();
 
+// Acesso restrito (sql/fase21-analise-acesso-restrito.sql): admin, quem
+// está na lista analise_compras_acesso, ou o responsável (gerentes_unidade)
+// desta unidade especifica -- NÃO é sobre qual unidade (isso é minha_unidade(),
+// que já filtra tudo há muito tempo e não muda aqui), é sobre "posso ver esta
+// aba, pra começo de conversa". Ver js/navegacao.js (montarMenu) pra onde isso
+// esconde/mostra o item do menu.
+let podeVerAnaliseCache = false;
+
+async function atualizarPermissaoAnalise() {
+  if (!unidadeAtual) { podeVerAnaliseCache = false; return; }
+  const { data, error } = await sb.rpc('pode_ver_analise_compras', { uni: unidadeAtual });
+  podeVerAnaliseCache = !error && data === true;
+}
+
 // Normaliza o código do item pra comparar/indexar sem se importar com
 // maiúscula/minúscula nem espaço a mais. Bug relatado pelo Robson em
 // 2026-09-09: o item 996613I tinha 43 no almoxarifado (conferido no TOTVS),

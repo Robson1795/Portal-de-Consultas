@@ -60,7 +60,13 @@ function rotuloDoPerfil() {
 // ---- Menu lateral -----------------------------------------------------------
 function montarMenu() {
   const nav = document.getElementById('sidebarNav');
-  const visiveis = (PERFIS[perfilAtual] || PERFIS.consultor).paginas;
+  // 'analise' tem uma segunda trava, além do perfil: acesso restrito por
+  // pessoa/responsável de unidade (podeVerAnaliseCache, atualizada em
+  // js/auth.js antes de chamar montarMenu -- ver atualizarPermissaoAnalise()
+  // em js/analise.js). Perfil decide o SETOR (Estoque ALM vê a página, aço
+  // não vê); esta trava decide QUEM dentro do setor. Não mistura as duas.
+  const visiveis = (PERFIS[perfilAtual] || PERFIS.consultor).paginas
+    .filter(id => id !== 'analise' || podeVerAnaliseCache);
 
   nav.innerHTML = visiveis.map(id => {
     const p = PAGINAS[id];
@@ -84,6 +90,7 @@ function marcarItemAtivo() {
 // ---- Troca de pagina --------------------------------------------------------
 function mostrarPagina(id) {
   if (!PAGINAS[id] || !podeVer(id)) return;
+  if (id === 'analise' && !podeVerAnaliseCache) return; // mesma trava do menu, ver montarMenu()
 
   const indoParaSesmt = (id === 'sesmt');
   const saindoDoSesmt = (paginaAtual === 'sesmt' && id !== 'sesmt');

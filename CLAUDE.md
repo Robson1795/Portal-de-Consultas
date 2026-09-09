@@ -832,3 +832,57 @@ resto. Duas camadas de precisão:
 `<div>`, não reflete de forma confiável o texto que passa da largura visível
 em todo navegador. Foi a primeira tentativa aqui, e o teste pegou: a largura
 não crescia nunca, presa no mínimo. Daí o `<span>` de medição.
+
+### Análise de Compras: acesso restrito, sem senha (09/09/2026)
+
+O RLS original (Fase 19/20) deixava qualquer conta aprovada ver a análise da
+própria unidade -- mais aberto do que devia pra dado comercial (o que falta
+comprar, pra quem, com que urgência). O Robson: *"quero limitar o acesso
+desse para o Joel, eu, Victor, Maiko e Gian do PCP"* + *"essa tela só quero
+pra eles"* + *"deixe liberado sem senha pra eles"* (diferente do Controle
+EXP Acessórios, que usa senha por unidade).
+
+E, no meio do pedido: *"E os responsáveis de cada unidade"* + *"cada unidade
+terá essa aba, só que não misture as coisas"* -- **dois conceitos
+separados**, cada um resolvendo uma pergunta diferente:
+
+1. **De qual unidade você vê a análise?** A sua (`minha_unidade()`), ou
+   todas se for admin. Isso já existia e não mudou.
+2. **Você pode ver a aba, pra começo de conversa?** Só quem está numa lista,
+   OU é o responsável daquela unidade específica. É o que esta fase
+   adiciona -- `pode_ver_analise_compras(uni)`
+   (`sql/fase21-analise-acesso-restrito.sql`): `eh_admin()` OU está em
+   `analise_compras_acesso` OU está em `gerentes_unidade` **daquela
+   unidade**.
+
+**Por que reaproveitar `gerentes_unidade` em vez de duplicar nomes:** "o
+responsável de cada unidade" já é exatamente o que essa tabela guarda (hoje
+Joel-106, David-101, João Ricardo-105, Edvaldo-104...). Copiar pra uma lista
+nova criaria duas listas pra manter sincronizadas -- cadastrar um novo
+responsável de unidade exigiria lembrar de mexer nas duas. `analise_compras
+_acesso` é só pra quem precisa ver **sem ser** responsável de unidade
+nenhuma (hoje: Joel — já também é gerente da 106, então essa entrada é
+redundante mas inofensiva —, Victor e Robson — já são super admin, também
+redundante; Maiko e Gian entram aqui quando os e-mails de login deles
+chegarem).
+
+- **Sem tela de admin pra editar a lista** — mesmo padrão de
+  `gerentes_unidade`/`editores_bobinas`: adiciona por SQL direto no
+  Supabase quando precisar. Confirmado com o Explore desta sessão: não
+  existe (e nunca existiu) uma UI de "adicionar e-mail" pra nenhuma dessas
+  listas neste projeto.
+- **`podeVerAnaliseCache`** (`js/analise.js`) é buscado uma vez, em
+  `js/auth.js` logo depois de `montarCabecalho()` (que já resolveu
+  `unidadeAtual`) e antes de `montarMenu()` — o menu é síncrono e precisa do
+  resultado já pronto. `montarMenu()` filtra `'analise'` da lista de
+  páginas visíveis se a cache for falsa; `mostrarPagina('analise')` repete a
+  checagem como cinto e suspensório.
+- A trava por PERFIL (`PERFIS[perfil].paginas`, decide o SETOR — Estoque
+  ALM vê a página, Estoque Aço não) e a trava por PESSOA
+  (`podeVerAnaliseCache`, decide QUEM dentro do setor) são independentes —
+  as duas precisam passar.
+- `substituir_analise_demanda()` trocou a checagem de `pode_atualizar_estoque
+  (uni)` pra `pode_ver_analise_compras(uni)`: o RLS da tabela só protege
+  escrita/leitura direta, não uma função `security definer` chamada por RPC
+  — sem trocar ali, alguém sem acesso à aba ainda conseguiria gravar dados
+  nela.
