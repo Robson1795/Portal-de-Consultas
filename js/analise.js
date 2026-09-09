@@ -258,12 +258,26 @@ function numeroBR(valor) {
 // Onde mais a empresa tem este item, pra pedir transferência em vez de
 // comprar. Verde quando alguma unidade sozinha já cobre a falta inteira --
 // é o caso em que dá pra resolver com um pedido de transferência só.
+//
+// A célula inteira é um botão: abre o MESMO modal de comparação entre
+// unidades da Consulta de Itens (openCompareModal, js/estoque.js), com o
+// saldo unidade por unidade e a localização. O resumo aqui responde "dá pra
+// transferir?"; o modal responde "de onde exatamente, e quanto tem lá".
 function transferenciaHtml(linha) {
-  if (linha.comprar <= 0) return '<span style="color:var(--muted);">—</span>';
+  const abre = (conteudo, titulo, estilo) =>
+    `<button class="analise-comparar" data-item="${escapeHtml(linha.codigo_item)}"
+             title="${escapeHtml(titulo)}"
+             style="background:none; border:none; padding:0; cursor:pointer; text-align:left; font-size:13px; ${estilo}">`
+    + `${conteudo}</button>`;
+
+  if (linha.comprar <= 0) {
+    return abre('⇄', 'Ver o saldo deste item em todas as unidades', 'color:var(--muted);');
+  }
 
   const outras = analiseOutrasUnidades.get(linha.codigo_item) || [];
   if (!outras.length) {
-    return '<span style="color:var(--muted);" title="Nenhuma outra unidade tem saldo deste item">nenhuma</span>';
+    return abre('nenhuma ⇄', 'Nenhuma outra unidade tem saldo deste item — clique para conferir unidade por unidade',
+                'color:var(--muted);');
   }
 
   const cobreSozinha = outras[0].quantidade >= linha.comprar;
@@ -271,8 +285,11 @@ function transferenciaHtml(linha) {
   const mostradas = outras.slice(0, 2).map(u => `${u.unidade}: ${numeroBR(u.quantidade)}`).join(' · ');
   const resto = outras.length > 2 ? ` +${outras.length - 2}` : '';
 
-  return `<span title="${escapeHtml(textoCompleto)}" style="font-weight:600; color:${cobreSozinha ? '#166534' : '#b45309'};">`
-    + `${escapeHtml(mostradas)}${resto}</span>`;
+  return abre(
+    `${escapeHtml(mostradas)}${resto} ⇄`,
+    `${textoCompleto} — clique para ver o saldo em todas as unidades`,
+    `font-weight:600; color:${cobreSozinha ? '#166534' : '#b45309'}; text-decoration:underline;`
+  );
 }
 
 // ---- Tela ---------------------------------------------------------------
@@ -362,6 +379,12 @@ document.getElementById('analiseVerIgnoradosBtn').addEventListener('click', () =
 // item só e é reversível ali mesmo, no botão "Ver não repor" -- pedir
 // confirmação a cada clique numa limpeza de lista seria só atrito.
 document.getElementById('analiseBody').addEventListener('click', async (e) => {
+  // Reaproveita o modal de comparação entre unidades da Consulta de Itens em
+  // vez de desenhar outro aqui: é a mesma pergunta ("onde mais tem este
+  // item?") e o Robson já conhece essa tela.
+  const btnComparar = e.target.closest('.analise-comparar');
+  if (btnComparar) { openCompareModal(btnComparar.dataset.item); return; }
+
   const btnIgnorar = e.target.closest('.analise-ignorar');
   if (btnIgnorar) { await marcarItemAnalise(btnIgnorar, btnIgnorar.dataset.item, true); return; }
   const btnRestaurar = e.target.closest('.analise-restaurar');

@@ -707,6 +707,12 @@ Compras.
 - **Em blocos de 100** (`carregarSaldoOutrasUnidades`): o `in` do PostgREST
   viaja na URL e uma análise cheia tem centenas de itens em falta. O sintoma
   sem isso seria "com 5 itens funciona, com 300 não".
+- **A célula é um botão**: abre o MESMO modal de comparação entre unidades da
+  Consulta de Itens (`openCompareModal`, `js/estoque.js`), com saldo e
+  localização unidade por unidade. O resumo na coluna responde "dá pra
+  transferir?"; o modal responde "de onde exatamente, e quanto tem lá".
+  Reaproveitar em vez de desenhar outro: é a mesma pergunta, e o Robson já
+  conhece essa tela.
 
 ### Anotações por item: "não repor" e observação (09/09/2026)
 
