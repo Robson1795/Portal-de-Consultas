@@ -1079,6 +1079,40 @@ banco (sobra do preenchimento antigo por linha): unifica as localizações do
 mesmo item para o **maior** valor de `estoque_minimo` já cadastrado entre elas
 — não inventa número novo, só copia o que já existia pra quem ficou pra trás.
 
+## Compartilhar o modal de comparação/sugestão (09/09/2026)
+
+O Robson, vendo o comparativo entre unidades com a lista de pedidos que
+precisam do item: *"preciso de um esquema pra mim copiar essa tabela, isso
+facilita eu enviar para o pessoal de outra unidade quando eu estiver
+precisando de transferência, até mesmo para eu enviar para compras para eu
+justificar que preciso repor o estoque"* — depois, direto: *"um botão de
+compartilhar"*.
+
+Botão **📤 Compartilhar** logo abaixo do código do item, presente nos **três**
+usos do modal (`compareModalBox` é a mesma caixa reaproveitada por
+`openCompareModal` — comparativo + pedidos —, `abrirSugestoesSubstituto` na
+Análise de Compras e `abrirSugestoesSubstitutoEstoque` na Consulta de Itens):
+
+- **No celular, `navigator.share()`** abre a caixa nativa de compartilhamento
+  (WhatsApp, e-mail, o que estiver instalado) — é o caminho mais direto pro
+  que o Robson pediu.
+- **Sem isso (a maioria dos navegadores de computador), cai para copiar**
+  (`navigator.clipboard.writeText`) e o próprio botão avisa "✓ Copiado! Cole
+  onde precisar" por 2 segundos — sem `alert()`, que travaria a tela à toa
+  pra uma ação que não precisa de confirmação.
+- **Cancelar a caixa de compartilhamento não é erro** (`AbortError`) e não cai
+  no fallback de copiar — a pessoa decidiu não compartilhar, ponto.
+
+**`textoDoModal()` lê o próprio HTML já renderizado**, em vez de remontar o
+texto a partir dos dados de novo em cada uma das três telas — percorre os
+filhos do modal na ordem em que aparecem: título e código viram linha; uma
+`<table>` vira um bloco de texto (colunas separadas por tabulação, cola
+certo numa planilha); um `<div>` com filhos (o envelope do bloco de "pedidos
+que precisam deste item") é aberto por dentro, pra o rótulo da seção sair
+antes da tabela dela. Assim o botão funciona nos três usos do modal sem
+duplicar a lógica de montagem de cada um — e se o conteúdo do modal mudar um
+dia, o texto compartilhado muda junto sozinho.
+
 ## Etiqueta de localização — só na Trading (09/09/2026)
 
 O Robson: *"agora só para o estoque da trading, pode colocar no lugar de estoque

@@ -1177,6 +1177,92 @@ function closeCompareModal() {
   compareModal.classList.remove('open');
 }
 
+// ---- Compartilhar o conteúdo do modal (comparativo, pedidos, sugestão) ----
+//
+// O Robson: "preciso de um esquema pra eu copiar essa tabela, isso facilita
+// eu enviar para o pessoal de outra unidade quando eu estiver precisando de
+// transferência, até mesmo para eu enviar para compras pra eu justificar que
+// preciso repor o estoque" -- depois: "um botão de compartilhar".
+//
+// Lê o PRÓPRIO conteúdo já renderizado do modal (em vez de remontar o texto
+// a partir dos dados) de propósito: o modal é a MESMA caixa reaproveitada
+// pelas três telas (comparativo entre unidades, "pedidos que precisam deste
+// item" e sugestão de substituto -- ver openCompareModal/
+// abrirSugestoesSubstituto/abrirSugestoesSubstitutoEstoque), então ler o DOM
+// funciona pras três sem duplicar a lógica de cada uma aqui.
+function celulasDaLinha(tr) {
+  return [...tr.children].map(td => td.textContent.replace(/\s+/g, ' ').trim());
+}
+
+function tabelaParaTexto(tabela) {
+  const linhas = [];
+  const cabecalho = tabela.querySelector('thead tr');
+  if (cabecalho) linhas.push(celulasDaLinha(cabecalho).join('\t'));
+  tabela.querySelectorAll('tbody tr').forEach(tr => linhas.push(celulasDaLinha(tr).join('\t')));
+  const rodape = tabela.querySelector('tfoot tr');
+  if (rodape) linhas.push(celulasDaLinha(rodape).filter(Boolean).join('\t'));
+  return linhas.join('\n');
+}
+
+// Percorre o conteúdo do modal na ordem em que aparece na tela. Um elemento
+// SEM filho-elemento (título, código do item, texto explicativo, rótulo de
+// seção) vira uma linha; uma <table> vira um bloco de texto; um <div> com
+// filhos (o envelope do bloco de "pedidos que precisam deste item", ver
+// pedidosDoItemHtml em js/analise.js) é aberto e percorrido por dentro --
+// assim o rótulo da seção sai antes da tabela dela, na ordem certa.
+function textoDoModal(container) {
+  const partes = [];
+  const percorrer = (el) => {
+    [...el.children].forEach(filho => {
+      if (filho.tagName === 'BUTTON') return; // fechar/compartilhar, não faz parte do conteúdo
+      if (filho.tagName === 'TABLE') { partes.push(tabelaParaTexto(filho)); return; }
+      if (filho.children.length === 0) {
+        const texto = filho.textContent.replace(/\s+/g, ' ').trim();
+        if (texto) partes.push(texto);
+        return;
+      }
+      percorrer(filho);
+    });
+  };
+  percorrer(container);
+  return partes.filter(Boolean).join('\n\n');
+}
+
+async function compartilharConteudoModal() {
+  const texto = textoDoModal(compareModalBox);
+  if (!texto.trim()) return;
+
+  // No celular, o compartilhamento nativo já oferece WhatsApp, e-mail etc.
+  // direto -- é o caminho mais curto pro que o Robson pediu. Sem isso (a
+  // maioria dos navegadores de computador), cai pra copiar: menos direto,
+  // mas resolve o mesmo problema de colar em outro lugar.
+  if (navigator.share) {
+    try {
+      await navigator.share({ text: texto });
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') return; // a pessoa cancelou a caixa de compartilhamento -- não é erro
+      // segue pro fallback de copiar, abaixo
+    }
+  }
+
+  const botao = document.getElementById('compareShareBtn');
+  try {
+    await navigator.clipboard.writeText(texto);
+    if (botao) {
+      const textoOriginal = botao.textContent;
+      botao.textContent = '✓ Copiado! Cole onde precisar';
+      setTimeout(() => { botao.textContent = textoOriginal; }, 2000);
+    }
+  } catch (e) {
+    alert('Não foi possível compartilhar nem copiar: ' + e.message);
+  }
+}
+
+compareModalBox.addEventListener('click', (e) => {
+  if (e.target.closest('#compareShareBtn')) compartilharConteudoModal();
+});
+
 // `extraHtml` é opcional: um bloco de HTML pronto pra entrar depois da
 // tabela de unidades. Hoje só a Análise de Compras usa (lista de pedidos
 // que precisam do item, ver js/analise.js) -- o Robson: "quero que apareça
@@ -1270,6 +1356,7 @@ async function openCompareModal(itemCode, extraHtml) {
     <button class="modal-close" id="compareCloseBtn2">✕</button>
     <h3 style="padding-right:24px;">${escapeHtml(nomeItem || itemCode)}</h3>
     <div class="modal-item-code">Código: ${escapeHtml(itemCode)}</div>
+    <button type="button" class="btn" id="compareShareBtn" style="margin-bottom:6px;" title="Compartilhar ou copiar esta tabela — pra pedir transferência a outra unidade, ou justificar reposição pro compras">📤 Compartilhar</button>
     <table style="width:100%; border-collapse:collapse; margin-top:10px; font-size:13px; table-layout:fixed;">
       <thead>
         <tr style="border-bottom:2px solid var(--border);">
@@ -1309,6 +1396,7 @@ function abrirSugestoesSubstitutoEstoque(itemCode) {
     <button class="modal-close" id="compareCloseBtn2">✕</button>
     <h3 style="padding-right:24px;">${escapeHtml(item.descricao || itemCode)}</h3>
     <div class="modal-item-code">Código: ${escapeHtml(itemCode)} — sem saldo nesta unidade</div>
+    <button type="button" class="btn" id="compareShareBtn" style="margin-bottom:6px;" title="Compartilhar ou copiar">📤 Compartilhar</button>
     <div class="modal-text" style="margin:8px 0 4px;">
       Itens já em estoque com a mesma medida e pelo menos uma palavra em comum
       (ex.: material) -- confira se algum serve no lugar deste.

@@ -485,6 +485,7 @@ function abrirSugestoesSubstituto(codigoItem) {
     <button class="modal-close" id="compareCloseBtn2">✕</button>
     <h3 style="padding-right:24px;">${escapeHtml(linha.descricao || codigoItem)}</h3>
     <div class="modal-item-code">Código: ${escapeHtml(codigoItem)} — sem saldo no almoxarifado</div>
+    <button type="button" class="btn" id="compareShareBtn" style="margin-bottom:6px;" title="Compartilhar ou copiar">📤 Compartilhar</button>
     <div class="modal-text" style="margin:8px 0 4px;">
       Itens já em estoque com a mesma medida e pelo menos uma palavra em comum
       (ex.: material) -- confira se algum serve no lugar de comprar o original.
