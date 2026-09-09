@@ -83,29 +83,69 @@ create index if not exists idx_estoque_unidade_deposito
 
 
 -- ---------------------------------------------------------------------
--- PARTE 2 — as chaves únicas passam a incluir o depósito
+-- PARTE 2 — as chaves passam a incluir o depósito
 --
--- `contagem_fisica` e `atribuicoes_corredor` são anteriores aos scripts deste
--- repositório (foram criadas pelo painel), então o nome da restrição não está
--- em lugar nenhum do código. Por isso o bloco procura a restrição pelas
--- COLUNAS que ela cobre, em vez de chutar um nome.
+-- ⚠️ TEM DE SER RECRIADA COMO PRIMARY KEY, e não como `unique`.
+--
+-- A primeira versão deste script derrubava a PRIMARY KEY e criava uma `unique`
+-- no lugar. `contagem_fisica` e `atribuicoes_corredor` estão publicadas no
+-- tempo real, e o Postgres exige IDENTIDADE DE RÉPLICA para replicar um
+-- `delete` -- identidade que, por padrão, É a chave primária. Sem PK, o
+-- `delete` da PARTE 3 foi recusado com:
+--
+--     55000: cannot delete from table "contagem_fisica" because it does not
+--            have a replica identity and publishes deletes
+--
+-- O editor do Supabase roda o script numa transação, então aquele erro desfez
+-- tudo -- conferido pela API em 09/09/2026: a coluna `deposito` não havia
+-- ficado em nenhuma das três tabelas. Nada de meio aplicado para limpar.
+--
+-- As duas tabelas são anteriores aos scripts deste repositório (foram criadas
+-- pelo painel), então o nome da restrição não está em lugar nenhum do código:
+-- o bloco procura pelas COLUNAS que ela cobre, em vez de chutar um nome. E
+-- recria com o MESMO TIPO que encontrou -- PK vira PK, unique vira unique --
+-- para não repetir o erro em outra tabela um dia.
 -- ---------------------------------------------------------------------
 
 do $$
 declare
-  alvo record;
-  nome text;
+  alvo    record;
+  nome    text;
+  tipo    "char";
+  desejadas text[];
+  ja_ok   boolean;
 begin
   for alvo in
-    select 'contagem_fisica'::text      as tabela,
-           array['item','unidade','localizacao'] as colunas,
-           'contagem_fisica_deposito_unico'::text as novo
+    select 'contagem_fisica'::text                       as tabela,
+           array['item','unidade','localizacao']          as colunas,
+           'contagem_fisica_deposito_pk'::text            as novo
     union all
     select 'atribuicoes_corredor', array['unidade','corredor'],
-           'atribuicoes_corredor_deposito_unico'
+           'atribuicoes_corredor_deposito_pk'
   loop
-    -- Acha a restrição única/PK cujo conjunto de colunas é exatamente o antigo.
-    select c.conname into nome
+    desejadas := alvo.colunas || array['deposito'];
+
+    -- Já está do jeito certo? Então não mexe (o script pode ser rodado de novo).
+    select exists (
+      select 1
+        from pg_constraint c
+        join pg_class t on t.oid = c.conrelid
+       where t.relname = alvo.tabela
+         and c.contype = 'p'
+         and (select array_agg(a.attname::text order by a.attname)
+                from unnest(c.conkey) k
+                join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k)
+             = (select array_agg(x order by x) from unnest(desejadas) x)
+    ) into ja_ok;
+
+    if ja_ok then
+      raise notice '%: a chave ja inclui o deposito, nada a fazer', alvo.tabela;
+      continue;
+    end if;
+
+    -- Acha a restrição atual: a antiga (sem depósito) ou uma `unique` com as
+    -- colunas certas, que é o que a primeira versão deste script criava.
+    select c.conname, c.contype into nome, tipo
       from pg_constraint c
       join pg_class t on t.oid = c.conrelid
      where t.relname = alvo.tabela
@@ -113,23 +153,37 @@ begin
        and (select array_agg(a.attname::text order by a.attname)
               from unnest(c.conkey) k
               join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k)
-           = (select array_agg(x order by x) from unnest(alvo.colunas) x)
+           in ((select array_agg(x order by x) from unnest(alvo.colunas) x),
+               (select array_agg(x order by x) from unnest(desejadas) x))
      limit 1;
 
-    if nome is not null then
-      execute format('alter table %I drop constraint %I', alvo.tabela, nome);
-      raise notice 'removida a restricao antiga %.%', alvo.tabela, nome;
+    if nome is null then
+      raise exception 'Nao achei a restricao de % cobrindo (%) -- rode o sql/diagnostico-chaves-contagem.sql antes de seguir.',
+                      alvo.tabela, array_to_string(alvo.colunas, ', ');
     end if;
 
-    begin
-      execute format('alter table %I add constraint %I unique (%s, deposito)',
-                     alvo.tabela, alvo.novo, array_to_string(alvo.colunas, ', '));
-    exception
-      when duplicate_table or duplicate_object then null;   -- já rodou antes
-    end;
+    execute format('alter table %I drop constraint %I', alvo.tabela, nome);
+    raise notice '%: removida a restricao % (tipo %)', alvo.tabela, nome, tipo;
+
+    -- PRIMARY KEY se era PK -- é o que devolve a identidade de réplica.
+    -- `deposito` é NOT NULL com default, e as outras colunas já eram NOT NULL
+    -- por estarem na PK, então a chave nova é válida sem tocar em dado nenhum.
+    if tipo = 'p' then
+      execute format('alter table %I add constraint %I primary key (%s)',
+                     alvo.tabela, alvo.novo, array_to_string(desejadas, ', '));
+      raise notice '%: criada a PRIMARY KEY %', alvo.tabela, alvo.novo;
+    else
+      execute format('alter table %I add constraint %I unique (%s)',
+                     alvo.tabela, alvo.novo, array_to_string(desejadas, ', '));
+      -- Sem PK, a identidade de réplica tem de ser dita na mão, senão o
+      -- `delete` volta a ser recusado.
+      execute format('alter table %I replica identity using index %I',
+                     alvo.tabela, alvo.novo);
+      raise notice '%: criada a UNIQUE % e a identidade de replica aponta pra ela',
+                   alvo.tabela, alvo.novo;
+    end if;
   end loop;
 end $$;
-
 
 -- ---------------------------------------------------------------------
 -- PARTE 3 — fora as linhas da unidade falsa
@@ -269,13 +323,28 @@ select table_name, column_name, data_type, column_default
    and table_name in ('estoque', 'contagem_fisica', 'atribuicoes_corredor')
  order by table_name;
 
-select t.relname as tabela, c.conname as restricao,
+-- Esperado: uma PRIMARY KEY por tabela, JÁ COM `deposito` na lista, e
+-- tem_primary_key = 1. Se aparecer 0, o `delete` volta a ser recusado nessas
+-- tabelas (elas publicam no tempo real) -- me mande o resultado.
+select t.relname                   as tabela,
+       c.conname                   as restricao,
+       case c.contype when 'p' then 'PRIMARY KEY' else 'UNIQUE' end as tipo,
        pg_get_constraintdef(c.oid) as definicao
   from pg_constraint c
   join pg_class t on t.oid = c.conrelid
  where t.relname in ('contagem_fisica', 'atribuicoes_corredor')
    and c.contype in ('u', 'p')
- order by t.relname, c.conname;
+ order by t.relname, c.contype, c.conname;
+
+select c.relname      as tabela,
+       c.relreplident as identidade_replica,
+       (select count(*) from pg_constraint k
+         where k.conrelid = c.oid and k.contype = 'p') as tem_primary_key
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+ where n.nspname = 'public'
+   and c.relname in ('contagem_fisica', 'atribuicoes_corredor')
+ order by c.relname;
 
 select unidade, deposito, count(*) as linhas
   from estoque
