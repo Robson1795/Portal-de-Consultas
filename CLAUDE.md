@@ -757,3 +757,56 @@ reescrever "já solicitei compra" todo santo dia.
 - ⚠️ O `upsert` pede recibo (`.select()`): sem ele, um upsert barrado pelo
   RLS volta com `error null` e nada gravado — a tela diria "salvo" e o F5
   desmentiria. Mesmo furo do item A1 da auditoria.
+
+### Observação desaparece sozinha quando o item volta a ter saldo (09/09/2026)
+
+O Robson: *"quero que deixe salvo as observações mesmo que eu atualize a
+planilha, só sair quando o item estiver em estoque"*. A observação já
+sobrevivia à troca de planilha (seção acima) — faltava o outro lado: ela não
+podia ficar pra sempre grudada num item que já foi resolvido.
+
+`limparObservacoesResolvidas()` roda a cada carga da tela (depois de saldo e
+demanda frescos), acha os itens com `comprar <= 0` que ainda têm observação,
+e apaga só a observação (mantém `ignorado` como estava — "não repor" não
+depende do estoque estar baixo). Um `upsert` em lote, silencioso: é limpeza
+de fundo, não uma ação que a pessoa pediu, então erro de rede aqui vira
+`console.warn`, não uma mensagem pra ela.
+
+### Bug: código do item com maiúscula/minúscula diferente entre planilhas (09/09/2026)
+
+O Robson relatou: item `996613I` (2 pedidos, precisa de 2) aparecia com saldo
+**0** e mandando comprar, mas o TOTVS mostrava **43** no almoxarifado (print
+em anexo). *"Esse item eu tenho, a conta não está certo, favor verificar pra
+todos os itens."*
+
+**Causa:** o código estava gravado como `996613I` (maiúsculo) na planilha de
+pedidos colada, e como `996613i` (minúsculo) na tabela `estoque` — mesmo
+item, letra diferente. Duas comparações diferentes, dois bugs diferentes:
+
+1. **No cliente** (`analiseSaldoMap.get(codigo)`): `Map` do JavaScript
+   diferencia maiúscula de minúscula, então o saldo carregado (a tabela
+   inteira da unidade, sem filtro por item) nunca era encontrado na hora de
+   somar por item.
+2. **No banco** (`.eq('item', codigo)` / `.in('item', [...])`): o Postgres
+   também diferencia, então uma busca filtrada por código (outras unidades,
+   `openCompareModal`) também não achava a linha.
+
+**Correção, nos dois lados:**
+
+- `normalizaCodigoItem()` (`js/analise.js`) — maiúsculo + sem espaço — vira a
+  chave de `analiseSaldoMap`, do agrupamento em `agruparAnalise()` e de
+  `analiseOutrasUnidades`. Resolve o problema nº 1 por completo: a tabela
+  `estoque` é lida inteira (sem filtro por item), então o dado já chega
+  certo, só a comparação em JS precisava ignorar a caixa.
+- Para buscas **filtradas** no banco (problema nº 2), não dá pra normalizar
+  no JS e pronto — o filtro roda no Postgres. Duas soluções, conforme o caso:
+  - **Um item só** (`openCompareModal`): trocou `.eq('item', cod)` por
+    `.ilike('item', escapeIlike(cod))` — sem `%`/`_`, `ilike` é uma
+    comparação exata que ignora maiúscula/minúscula.
+  - **Lista de itens** (`carregarSaldoOutrasUnidades`, `.in('item', [...])`):
+    não existe um `.in` case-insensitive pronto no PostgREST. A lista de
+    busca ganhou a variante minúscula de cada código
+    (`[...new Set(pedaco.flatMap(c => [c, c.toLowerCase()]))]`), e o
+    resultado é normalizado de volta na hora de juntar no mapa. Blocos
+    caíram de 100 para 50 códigos: cada um agora entra até duas vezes na
+    lista, e o motivo dos blocos (tamanho da URL do `in`) dobra junto.

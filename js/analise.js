@@ -25,8 +25,21 @@ let analiseVerIgnorados = false; // mostrando a lista dos ignorados em vez da no
 // item -- pra pedir transferência em vez de comprar.
 let analiseOutrasUnidades = new Map();
 
+// Normaliza o código do item pra comparar/indexar sem se importar com
+// maiúscula/minúscula nem espaço a mais. Bug relatado pelo Robson em
+// 2026-09-09: o item 996613I tinha 43 no almoxarifado (conferido no TOTVS),
+// mas a análise mostrava saldo 0 e mandava comprar -- o código do estoque
+// estava gravado como "996613i" (minúsculo) e o da planilha de pedidos como
+// "996613I" (maiúsculo). Comparação de texto em JS diferencia maiúscula de
+// minúscula, então o saldo batido por `Map.get()` nunca encontrava o item.
+// Sem isso, qualquer item com essa mesma inconsistência entre as duas
+// planilhas mandava comprar o que já tinha no almoxarifado.
+function normalizaCodigoItem(codigo) {
+  return String(codigo || '').trim().toUpperCase();
+}
+
 function analiseNotaDoItem(codigoItem) {
-  return analiseNotas.get(codigoItem) || { ignorado: false, observacao: '' };
+  return analiseNotas.get(normalizaCodigoItem(codigoItem)) || { ignorado: false, observacao: '' };
 }
 
 function analiseItemIgnorado(codigoItem) {
@@ -99,11 +112,13 @@ async function carregarAnalise() {
 
   // O mesmo item aparece em VÁRIAS linhas do estoque (uma por localização) --
   // somar é obrigatório, senão o saldo sairia só o do primeiro endereço e a
-  // tela mandaria comprar o que já tem.
+  // tela mandaria comprar o que já tem. Chave normalizada (maiúsculo, sem
+  // espaço): ver normalizaCodigoItem().
   analiseSaldoMap = new Map();
   (estoque.error ? [] : (estoque.data || [])).forEach(r => {
-    const atual = analiseSaldoMap.get(r.item) || 0;
-    analiseSaldoMap.set(r.item, atual + parseQtd(r.quantidade));
+    const chave = normalizaCodigoItem(r.item);
+    const atual = analiseSaldoMap.get(chave) || 0;
+    analiseSaldoMap.set(chave, atual + parseQtd(r.quantidade));
   });
 
   // Se a fase20 ainda não rodou, o mapa fica vazio e a tela funciona igual --
@@ -112,8 +127,57 @@ async function carregarAnalise() {
   analiseNotas = new Map((notas.error ? [] : (notas.data || []))
     .map(r => [r.codigo_item, { ignorado: r.ignorado === true, observacao: r.observacao || '' }]));
 
+  await limparObservacoesResolvidas();
   await carregarSaldoOutrasUnidades();
   renderAnalise();
+}
+
+// A observação ("já solicitei compra", "RESSUPRIMENTO"...) sobrevive à
+// troca da planilha de propósito -- mora em analise_item_notas, separada da
+// analise_demanda (ver o SQL). Mas o Robson: "quero que deixe salvo as
+// observações mesmo que eu atualize a planilha, só sair quando o item
+// estiver em estoque" -- ela deve DESAPARECER sozinha quando o saldo
+// finalmente cobrir o pedido de novo, senão ficaria uma anotação velha
+// grudada num item que já foi resolvido, pra sempre.
+//
+// Roda a cada carga (fresh saldo + fresh demanda), depois de agruparAnalise()
+// já poder calcular `comprar` -- não mexe em "não repor" (`ignorado`), que é
+// característica do item e não do estoque estar baixo ou não.
+//
+// Uma chamada só (upsert em lote) em vez de uma por item: pode resolver
+// dezenas de itens de uma vez (reposição grande chegando), e isso é limpeza
+// de fundo, não uma ação que a pessoa pediu -- não faz sentido nem esperar
+// uma rodada de chamadas nem mostrar erro de rede pra ela por causa disso.
+async function limparObservacoesResolvidas() {
+  const resolvidos = agruparAnalise().filter(l =>
+    l.comprar <= 0 && analiseNotaDoItem(l.codigo_item).observacao);
+  if (!resolvidos.length) return;
+
+  const agora = new Date().toISOString();
+  const linhas = resolvidos.map(item => ({
+    unidade: unidadeAtual,
+    codigo_item: item.codigo_item,
+    ignorado: analiseNotaDoItem(item.codigo_item).ignorado,
+    observacao: null,
+    atualizado_por: nomeUsuarioAtual,
+    atualizado_em: agora
+  }));
+
+  const { data, error } = await sb.from('analise_item_notas')
+    .upsert(linhas, { onConflict: 'unidade,codigo_item' })
+    .select('codigo_item');
+
+  if (error) {
+    console.warn('Não foi possível limpar observações de itens já resolvidos:', error.message);
+    return;
+  }
+
+  const limpos = new Set((data || []).map(r => r.codigo_item));
+  resolvidos.forEach(item => {
+    if (!limpos.has(item.codigo_item)) return;
+    const atual = analiseNotaDoItem(item.codigo_item);
+    analiseNotas.set(item.codigo_item, { ignorado: atual.ignorado, observacao: '' });
+  });
 }
 
 // Pros itens em falta, procura saldo nas OUTRAS unidades: o Robson pediu pra
@@ -129,32 +193,67 @@ async function carregarSaldoOutrasUnidades() {
   const emFalta = agruparAnalise().filter(l => l.comprar > 0).map(l => l.codigo_item);
   if (!emFalta.length) return;
 
-  // Em blocos de 100: o `in` do PostgREST viaja na URL e uma análise cheia
-  // tem centenas de itens em falta. Sem os blocos, o sintoma seria "com 5
-  // itens funciona, com 300 não" -- difícil de ligar à causa depois.
-  const BLOCO = 100;
+  // Item que termina em "I" tem um código PRÓPRIO no estoque da Trading (ver
+  // codigoTradingDoItem, js/estoque.js) -- sem tratar à parte, a busca acima
+  // (que casa o código exato) nunca acharia a Trading pra esses itens, mesmo
+  // com saldo lá. Mapa código-da-trading -> código original, pra devolver o
+  // resultado já com o código que o resto da tela reconhece.
+  const codigoOriginalPorCodigoTrading = new Map();
+  emFalta.forEach(codigo => {
+    const codTrading = codigoTradingDoItem(codigo);
+    if (codTrading) codigoOriginalPorCodigoTrading.set(codTrading, codigo);
+  });
+
+  const juntarResultado = (itemBruto, unidade, qtd) => {
+    if (qtd <= 0) return; // unidade zerada não serve pra transferência
+    const item = normalizaCodigoItem(itemBruto); // ver normalizaCodigoItem: mesmo bug do saldo valia aqui
+    if (!analiseOutrasUnidades.has(item)) analiseOutrasUnidades.set(item, []);
+    const lista = analiseOutrasUnidades.get(item);
+    // Mesmo item pode estar em vários endereços da mesma unidade -- soma,
+    // senão a tela ofereceria transferir só o que tem no primeiro endereço.
+    const jaTem = lista.find(u => u.unidade === unidade);
+    if (jaTem) jaTem.quantidade += qtd;
+    else lista.push({ unidade, quantidade: qtd });
+  };
+
+  // `.in()` do Postgres é sensível a maiúscula/minúscula (diferente do
+  // `Map.get()` do JS, que já normalizamos acima) -- sem incluir as duas
+  // variantes na busca, um item gravado em minúsculo em OUTRA unidade nunca
+  // apareceria aqui, mesmo com saldo lá. Em blocos menores (50 códigos, 100
+  // variantes) porque cada código agora entra duas vezes na lista: o `in`
+  // do PostgREST viaja na URL, e o mesmo estouro que blocos de 100 evitam
+  // pra uma variante por código valeria em dobro pra duas.
+  const BLOCO = 50;
   for (let de = 0; de < emFalta.length; de += BLOCO) {
     const pedaco = emFalta.slice(de, de + BLOCO);
+    const variantes = [...new Set(pedaco.flatMap(c => [c, c.toLowerCase()]))];
     const { data, error } = await sb.from('estoque')
       .select('item, unidade, quantidade')
-      .in('item', pedaco)
+      .in('item', variantes)
       .neq('unidade', unidadeAtual);
 
     if (error) {
       console.warn('Não foi possível checar o saldo das outras unidades:', error.message);
       return;
     }
-    (data || []).forEach(r => {
-      const qtd = parseQtd(r.quantidade);
-      if (qtd <= 0) return; // unidade zerada não serve pra transferência
-      if (!analiseOutrasUnidades.has(r.item)) analiseOutrasUnidades.set(r.item, []);
-      const lista = analiseOutrasUnidades.get(r.item);
-      // Mesmo item pode estar em vários endereços da mesma unidade -- soma,
-      // senão a tela ofereceria transferir só o que tem no primeiro endereço.
-      const jaTem = lista.find(u => u.unidade === r.unidade);
-      if (jaTem) jaTem.quantidade += qtd;
-      else lista.push({ unidade: r.unidade, quantidade: qtd });
-    });
+    (data || []).forEach(r => juntarResultado(r.item, r.unidade, parseQtd(r.quantidade)));
+  }
+
+  const codigosTrading = [...codigoOriginalPorCodigoTrading.keys()];
+  for (let de = 0; de < codigosTrading.length; de += BLOCO) {
+    const pedaco = codigosTrading.slice(de, de + BLOCO);
+    const variantes = [...new Set(pedaco.flatMap(c => [c, c.toLowerCase()]))];
+    const { data, error } = await sb.from('estoque')
+      .select('item, quantidade')
+      .in('item', variantes)
+      .eq('unidade', UNIDADE_TRADING);
+
+    if (error) {
+      console.warn('Não foi possível checar o saldo da Trading:', error.message);
+      continue;
+    }
+    (data || []).forEach(r => juntarResultado(
+      codigoOriginalPorCodigoTrading.get(normalizaCodigoItem(r.item)), UNIDADE_TRADING, parseQtd(r.quantidade)));
   }
 
   analiseOutrasUnidades.forEach(lista => lista.sort((a, b) => b.quantidade - a.quantidade));
@@ -168,7 +267,7 @@ function agruparAnalise() {
   const porItem = new Map();
 
   analiseDemanda.forEach(l => {
-    const chave = String(l.codigo_item || '').trim();
+    const chave = normalizaCodigoItem(l.codigo_item);
     if (!chave) return;
     if (!porItem.has(chave)) {
       porItem.set(chave, {

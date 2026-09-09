@@ -508,6 +508,30 @@ const UNIDADES = {
 // entrada propria no menu lateral (ver js/navegacao.js).
 const UNIDADE_SESMT = 'SESMT';
 
+const UNIDADE_TRADING = '1101';
+
+// Item que termina em "I" tem um código PRÓPRIO dentro do estoque da
+// Trading: o mesmo item, só que com "T" a mais no final (ex.: "131556I" no
+// resto do sistema, "131556IT" só no estoque da Trading). O Robson (2026-
+// 09-09): "Esses itens com i no final é da Trading, ele fica com IT na
+// trading, então puxa o estoque deles pra eu ver se eles tem lá".
+//
+// Sem isso, comparar entre unidades (openCompareModal) ou checar saldo pra
+// transferência (Análise de Compras) nunca achava a Trading pra esses
+// itens -- o código simplesmente não batia, mesmo o material existindo lá.
+function codigoTradingDoItem(codigoItem) {
+  const cod = String(codigoItem || '').trim();
+  return /i$/i.test(cod) ? cod + 'T' : null;
+}
+
+// Escapa os curingas do ilike (% e _) antes de usar um valor digitado/vindo
+// de outra tabela como padrão de busca -- sem isso, um código de item que
+// por acaso tivesse um "_" viraria um curinga de verdade em vez de texto
+// literal.
+function escapeIlike(texto) {
+  return String(texto).replace(/[%_]/g, '\\$&');
+}
+
 // Tres formatos, conforme o que se sabe da unidade:
 //   "Unidade 106 — Araquari (SC)"   cidade e UF
 //   "Unidade 110 — Leme"            cidade sem UF confirmada
@@ -973,11 +997,27 @@ async function openCompareModal(itemCode, extraHtml) {
   compareModal.classList.add('open');
   document.getElementById('compareCloseBtn').addEventListener('click', closeCompareModal);
 
-  const { data, error } = await sb.from('estoque').select('*').eq('item', itemCode);
+  // ilike (não eq) de propósito: o mesmo item às vezes está gravado com
+  // maiúscula/minúscula diferente entre unidades (bug relatado pelo Robson
+  // em 2026-09-09 -- item existia com 43 no almoxarifado e a tela dizia que
+  // não tinha em unidade nenhuma). `eq` é sensível a isso; `ilike` sem
+  // curinga faz a mesma comparação exata, só que ignorando a caixa.
+  const { data, error } = await sb.from('estoque').select('*').ilike('item', escapeIlike(itemCode));
+
+  // A Trading guarda este item com um código próprio (ver codigoTradingDoItem) --
+  // busca à parte, e junta no mesmo grupo de linhas antes de somar por unidade.
+  const codigoTrading = codigoTradingDoItem(itemCode);
+  let dadosTrading = [];
+  if (codigoTrading) {
+    const { data: dt } = await sb.from('estoque').select('*')
+      .ilike('item', escapeIlike(codigoTrading)).eq('unidade', UNIDADE_TRADING);
+    dadosTrading = dt || [];
+  }
+  const todasAsLinhas = [...(data || []), ...dadosTrading];
 
   // Agrupa por unidade, somando a quantidade de TODOS os endereços daquela unidade
   const porUnidade = {};
-  (data || []).forEach(r => {
+  todasAsLinhas.forEach(r => {
     if (!porUnidade[r.unidade]) {
       porUnidade[r.unidade] = { totalQtd: 0, locais: [], descricao: r.descricao };
     }
@@ -1003,27 +1043,34 @@ async function openCompareModal(itemCode, extraHtml) {
     if (ehMaior) estilo = 'background:#fff8e6;';
     else if (ehAtual) estilo = 'background:var(--row-alt);';
 
+    // Nota discreta só na Trading, e só quando o código de lá é diferente --
+    // pra quem for conferir na mão saber qual código procurar no sistema
+    // deles, sem estranhar o número batendo diferente do resto da tela.
+    const notaCodigo = (cod === UNIDADE_TRADING && codigoTrading)
+      ? ` <span style="color:var(--muted); font-weight:400;">(código lá: ${escapeHtml(codigoTrading)})</span>`
+      : '';
+
     if (r) {
       const localTexto = r.locais.length > 1
         ? `${r.locais.length} locais`
         : (r.locais[0] || '-');
       return `
         <tr style="${estilo}">
-          <td style="padding:9px 10px; font-weight:600;">${ehMaior ? '🏆 ' : ''}${escapeHtml(cod)} · ${escapeHtml(u.cidade)}</td>
+          <td style="padding:9px 10px; font-weight:600;">${ehMaior ? '🏆 ' : ''}${escapeHtml(cod)} · ${escapeHtml(u.cidade)}${notaCodigo}</td>
           <td style="padding:9px 10px; text-align:right; font-weight:700; color:var(--blue-dark); white-space:nowrap;">${escapeHtml(r.totalQtd.toLocaleString('pt-BR'))}</td>
           <td style="padding:9px 10px; color:var(--muted); white-space:nowrap;" title="${escapeHtml(r.locais.join(', '))}">${escapeHtml(localTexto)}</td>
         </tr>`;
     }
     return `
       <tr style="${estilo}">
-        <td style="padding:9px 10px; font-weight:600;">${escapeHtml(cod)} · ${escapeHtml(u.cidade)}</td>
+        <td style="padding:9px 10px; font-weight:600;">${escapeHtml(cod)} · ${escapeHtml(u.cidade)}${notaCodigo}</td>
         <td style="padding:9px 10px; text-align:right; color:var(--muted);" colspan="2">Não encontrado nessa unidade</td>
       </tr>`;
   }).join('');
 
   const totalGeral = codigosOrdenados.reduce((soma, cod) => soma + (porUnidade[cod] ? porUnidade[cod].totalQtd : 0), 0);
 
-  const nomeItem = data && data[0] ? data[0].descricao : '';
+  const nomeItem = todasAsLinhas[0] ? todasAsLinhas[0].descricao : '';
 
   compareModalBox.innerHTML = `
     <button class="modal-close" id="compareCloseBtn2">✕</button>
