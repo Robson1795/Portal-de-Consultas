@@ -1802,8 +1802,26 @@ async function exportarExpControleXlsx(nomeBase) {
 // sozinho toda vez que a pessoa só quer abrir o arquivo pra olhar.
 function montarHtmlExpControle(scriptAutoImprimir) {
   const linhasFiltradas = linhasFiltradasExpControle();
-  const linhasHtml = linhasExportacaoExpControle().map(linha =>
-    `<tr>${linha.map(v => `<td>${escapeHtml(v != null ? v : '')}</td>`).join('')}</tr>`).join('');
+  // Uma FICHA por item, e não uma linha de tabela. A folha vai colada no
+  // pallet no nível 3 do porta-pallet e é lida do chão (Robson, 09/09/2026:
+  // "preciso que aumente a letra para visualizar até 03 metros de altura").
+  // Numa tabela de doze colunas não cabe letra desse tamanho -- a largura da
+  // folha é dividida entre todas, e sobra pouco pro que importa de longe. Na
+  // ficha, código do item e quantidade ficam sozinhos na primeira linha e usam
+  // a largura inteira; OP, lote, referência e datas continuam na folha, miúdos,
+  // porque esses só são lidos de perto, na conferência.
+  const detalhe = (rotulo, valor) => (valor !== null && valor !== undefined && String(valor).trim())
+    ? `<span><b>${rotulo}</b> ${escapeHtml(valor)}</span>` : '';
+  const fichasHtml = linhasExportacaoExpControle().map(
+    ([localizacao, item, descricao, um, pedido, qtd, op, lote, referencia, status, entrada, saida]) =>
+    `<article class="ficha">
+      <div class="ficha-topo">
+        <span class="ficha-item">${escapeHtml(item)}</span>
+        <span class="ficha-qtd">${escapeHtml(qtd != null ? qtd : '')}${um ? ` <small>${escapeHtml(um)}</small>` : ''}</span>
+      </div>
+      <div class="ficha-desc">${escapeHtml(descricao || '')}</div>
+      <div class="ficha-detalhes">${detalhe('Local', localizacao)}${detalhe('Pedido', pedido)}${detalhe('OP', op)}${detalhe('Lote', lote)}${detalhe('Ref.', referencia)}${detalhe('Status', status)}${detalhe('Entrada', entrada)}${detalhe('Saída', saida)}</div>
+    </article>`).join('');
   const busca = document.getElementById('expCtrlBusca').value.trim();
   // Mostra o filtro no papel: se a folha vai pro pallet (o Robson: "essa
   // folha coloco no pallet"), precisa deixar claro que é só daquela
@@ -1823,27 +1841,47 @@ function montarHtmlExpControle(scriptAutoImprimir) {
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
 <title>Controle EXP — ${escapeHtml(rotuloUnidade(unidadeAtual))} — ${new Date().toLocaleDateString('pt-BR')}</title>
 <style>
-  body { font-family: Arial, sans-serif; padding: 16px; box-sizing: border-box; }
-  /* Letra grande de propósito (Robson: pallet no nível 3 do porta-pallet,
-     difícil de ler de baixo/de longe a folha colada nele). Item e Descrição
-     (colunas 2 e 3) maiores ainda que o resto -- são o que precisa ler de
-     mais longe pra identificar o material; Nº OP/Lote/Referência/datas só
-     precisam ser legíveis de perto, na conferência. */
-  table { border-collapse: collapse; width: 100%; font-size: 22px; }
-  th, td { border: 1px solid #ccc; padding: 14px 16px; text-align: left; }
-  th { background: #004894; color: white; font-size: 17px; }
-  td:nth-child(2), td:nth-child(3) { font-size: 32px; font-weight: 700; }
-  tr:nth-child(even) { background: #f7f9fb; }
+  /* Tamanhos em MILÍMETROS, não em px: aqui o papel é a medida, e a conta que
+     importa é a da distância de leitura. Regra de sinalização: altura da letra
+     maiúscula ≈ distância / 200. Para os 3 metros do nível 3 do porta-pallet
+     isso dá 15 mm de altura de maiúscula, que na Arial (maiúscula ≈ 0,72 do
+     corpo) pede corpo de ~21 mm. É por isso que o código do item está em 21mm
+     e não num número redondo qualquer. */
+  @page { size: A4 portrait; margin: 8mm; }
+  body { font-family: Arial, sans-serif; margin: 0; padding: 8mm; box-sizing: border-box; }
+  h2 { font-size: 5mm; margin: 0 0 1mm; }
+  .impresso-por { font-size: 3.5mm; color: #333; margin: 0 0 4mm; }
+  .ficha {
+    border: 0.6mm solid #000; border-radius: 2mm; padding: 3mm 4mm; margin-bottom: 3mm;
+    page-break-inside: avoid; break-inside: avoid;
+  }
+  /* flex-wrap em vez de encolher a letra: com item de 8 dígitos e quantidade de
+     6 (ex.: 120918iT + 1284.5 Kg) a linha dá 183mm e no A4 só cabem 178mm --
+     sem o wrap o navegador quebraria o CÓDIGO DO ITEM no meio, que é
+     justamente o que não pode ficar ilegível. Assim a quantidade desce
+     inteira pra linha de baixo, e o item mantém os 21mm. */
+  .ficha-topo { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 4mm; }
+  /* 21mm = os 3 metros pedidos. */
+  .ficha-item { font-size: 21mm; font-weight: 900; line-height: 1; letter-spacing: 0.02em; overflow-wrap: anywhere; }
+  /* Quantidade um pouco menor: quem está no chão confere QUAL material é;
+     quanto tem se lê chegando perto, junto com OP e lote. */
+  .ficha-qtd { font-size: 15mm; font-weight: 800; line-height: 1; white-space: nowrap; margin-left: auto; }
+  .ficha-qtd small { font-size: 0.45em; font-weight: 700; }
+  .ficha-desc { font-size: 9mm; font-weight: 700; line-height: 1.15; margin-top: 2mm; }
+  .ficha-detalhes {
+    font-size: 3.5mm; margin-top: 2.5mm; color: #222;
+    display: flex; flex-wrap: wrap; gap: 1mm 6mm;
+  }
+  .ficha-detalhes b { color: #555; font-weight: 700; }
   .endereco-grande {
     text-align: center; page-break-before: avoid; page-break-inside: avoid;
     font-size: 15vw; line-height: 1; font-weight: 900; letter-spacing: 0.05em;
-    padding: 40px 0 10px; word-break: break-word;
+    padding: 10mm 0 3mm; word-break: break-word;
   }
-  @media print { body { padding: 0; } }
 </style></head><body>
 <h2>Controle EXP Acessórios — ${escapeHtml(rotuloUnidade(unidadeAtual))} — ${new Date().toLocaleDateString('pt-BR')}${subtitulo}</h2>
-<table><thead><tr>${EXP_EXPORT_CABECALHO.map(c => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead>
-<tbody>${linhasHtml}</tbody></table>
+<div class="impresso-por">Impresso por ${escapeHtml(nomeUsuarioAtual || emailUsuarioAtual || '—')} — ${new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</div>
+${fichasHtml}
 ${enderecoGrande}
 ${scriptAutoImprimir ? '<script>window.onload = () => window.print();<' + '/script>' : ''}
 </body></html>`;

@@ -527,6 +527,38 @@ sozinho em tela pequena, e a escolha fica salva.
 Imprimir e exportar (Excel, CSV, HTML) **respeitam a busca**: para tirar só uma
 localização, digite ela na busca antes de clicar.
 
+#### A folha impressa é uma ficha por item, não uma tabela (09/09/2026)
+
+O Robson: *"preciso que aumente a letra para visualizar até 03 metros de
+altura"* — a folha vai colada no pallet no nível 3 do porta-pallet e é lida do
+chão. Numa tabela de doze colunas não cabe letra desse tamanho: a largura da
+folha é dividida entre todas as colunas, e sobra pouco justamente para o que
+precisa ser lido de longe. Então `montarHtmlExpControle()` passou a gerar **uma
+ficha por item** (Imprimir e Exportar HTML usam a mesma função):
+
+- **Código do item em 21 mm**, sozinho na primeira linha, com a quantidade à
+  direita em 15 mm. Os tamanhos estão em **milímetros, não em px** — aqui o
+  papel é a medida. A conta é a regra de sinalização: altura da maiúscula ≈
+  distância ÷ 200, então 3 m pedem 15 mm de maiúscula, que na Arial (maiúscula
+  ≈ 0,72 do corpo) dá corpo de 21 mm. O número não é redondo por acaso.
+- Descrição em 9 mm; **OP, lote, referência, pedido, status e datas continuam
+  na folha**, miúdos (3,5 mm) — esses só são lidos de perto, na conferência.
+- `.ficha-topo` usa `flex-wrap`, e não letra menor: item de 8 caracteres mais
+  quantidade de 6 dá 183 mm, e na área útil do A4 cabem 178 mm. Sem o wrap o
+  navegador quebraria **o código do item** no meio, que é exatamente o que não
+  pode ficar ilegível; com ele, a quantidade desce inteira para a linha de
+  baixo e o item mantém os 21 mm.
+- `page-break-inside: avoid` por ficha: item nenhum é partido entre duas
+  páginas. Cabem 3 a 5 fichas por folha A4.
+- O endereço gigante no fim da folha (quando a busca deixou **uma** localização
+  só) continua igual.
+
+**A folha diz quem imprimiu**: `Impresso por <nome> — <data e hora>`, logo
+abaixo do título (Robson: *"quando imprimir quero que deixe registrado o
+usuario que imprimiu"*). No banco isso já existia — `etiqueta_emitida_por`,
+abaixo — mas só da **primeira** emissão e só no tooltip da tela; na folha
+colada no pallet não havia nada. Agora o papel carrega a identificação.
+
 ### Indicador de etiqueta emitida (08/09/2026)
 
 Coluna **Etiqueta** na aba Entrada: ✓ verde para o item cuja etiqueta já saiu,
