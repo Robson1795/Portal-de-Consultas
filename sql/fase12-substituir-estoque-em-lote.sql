@@ -54,12 +54,14 @@ create or replace function public.substituir_estoque(payload jsonb)
 returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
-  bloco      jsonb;
-  uni        text;
-  itens      jsonb;
-  quem       text;
-  resumo     jsonb := '[]'::jsonb;
-  minimo_bkp jsonb;
+  bloco         jsonb;
+  uni           text;
+  itens         jsonb;
+  quem          text;
+  resumo        jsonb := '[]'::jsonb;
+  minimo_bkp    jsonb;
+  minimo_antes  int;
+  minimo_depois int;
 begin
   if jsonb_typeof(payload) <> 'array' then
     raise exception 'O payload precisa ser uma lista de blocos { unidade, itens }.';
@@ -102,11 +104,16 @@ begin
     -- Sem isso, colar uma planilha nova apagava tudo que a pessoa tinha
     -- configurado manualmente ali -- a planilha colada nunca trouxe essa
     -- coluna, e o delete+insert abaixo não tem como recriar o que já não
-    -- existe mais. Casa por `item`, não por `id` (o id é novo a cada
-    -- substituição). Bug relatado pelo Robson em 2026-09-08: editou o
-    -- Estoque Seguro de vários itens e, ao colar uma planilha nova depois,
-    -- os valores voltaram como se nunca tivessem sido salvos.
-    select jsonb_object_agg(item, estoque_minimo) into minimo_bkp
+    -- existe mais. Casa por `item` (não por `id`, que é novo a cada
+    -- substituição), usando btrim() dos dois lados -- um espaço a mais/a
+    -- menos copiado do Excel (comum: célula com espaço à direita) já fazia
+    -- o casamento falhar em silêncio pra aquele item, mesmo com o resto da
+    -- planilha preservado certinho. Bug relatado pelo Robson em 2026-09-08
+    -- (perda geral) e de novo em 2026-09-09 (perda de item avulso depois de
+    -- editar e colar planilha nova -- este segundo caso é o que btrim()
+    -- corrige).
+    select jsonb_object_agg(btrim(item), estoque_minimo), count(*)
+      into minimo_bkp, minimo_antes
       from estoque where unidade = uni and estoque_minimo is not null;
 
     delete from estoque where unidade = uni;
@@ -118,14 +125,22 @@ begin
       from jsonb_array_elements(itens) i,
            jsonb_populate_record(null::estoque, i) r;
 
+    minimo_depois := 0;
     if minimo_bkp is not null then
       update estoque e
-         set estoque_minimo = (minimo_bkp ->> e.item)::numeric
-       where e.unidade = uni and minimo_bkp ? e.item;
+         set estoque_minimo = (minimo_bkp ->> btrim(e.item))::numeric
+       where e.unidade = uni and minimo_bkp ? btrim(e.item);
+      get diagnostics minimo_depois = row_count;
     end if;
 
+    -- Devolve a contagem de antes/depois pro app poder avisar se algum item
+    -- ficou pra trás no casamento (ex.: código de item que mudou de
+    -- formatação entre uma planilha e outra) -- sem isso a perda é
+    -- silenciosa, e só aparece quando alguém repara dias depois.
     resumo := resumo || jsonb_build_object('unidade', uni,
-                                           'itens', jsonb_array_length(itens));
+                                           'itens', jsonb_array_length(itens),
+                                           'estoque_minimo_existia_antes', coalesce(minimo_antes, 0),
+                                           'estoque_minimo_preservado', minimo_depois);
   end loop;
 
   return jsonb_build_object('ok', true, 'unidades', resumo);

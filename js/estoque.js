@@ -1600,7 +1600,7 @@ document.getElementById('saveDataBtn').addEventListener('click', async () => {
   // falhasse depois de o delete passar, a unidade ficava SEM ESTOQUE e não
   // havia rollback (AUDITORIA.md, item A2). Agora o delete e o insert vivem
   // dentro de substituir_estoque() no banco: falha qualquer linha, nada muda.
-  const { error } = await sb.rpc('substituir_estoque', {
+  const { data, error } = await sb.rpc('substituir_estoque', {
     payload: [{ unidade: unidadeAtual, atualizado_por: nomeUsuarioAtual, itens }]
   });
 
@@ -1611,10 +1611,27 @@ document.getElementById('saveDataBtn').addEventListener('click', async () => {
     console.error('Falha ao substituir o estoque da unidade:', error.message);
     return;
   }
-  saveMsg.textContent = `Atualizado! ${itens.length} itens da Unidade ${unidadeAtual} publicados para todos que abrirem o link.`;
+  saveMsg.textContent = `Atualizado! ${itens.length} itens da Unidade ${unidadeAtual} publicados para todos que abrirem o link.`
+    + avisoEstoqueMinimoNaoPreservado(data);
   saveMsg.className = 'status-msg status-ok';
   await loadData();
 });
+
+// Se algum item tinha Estoque Seguro configurado e não achou par na
+// planilha nova (código de item com formatação diferente entre uma
+// exportação e outra, por exemplo), o casamento em substituir_estoque()
+// (sql/fase12) fica pra trás pra aquele item -- sem isso o app fica calado
+// e a perda só aparece dias depois, quando alguém reparar. Ver
+// estoque_minimo_existia_antes/estoque_minimo_preservado no retorno da RPC.
+function avisoEstoqueMinimoNaoPreservado(resultadoRpc) {
+  const unidades = (resultadoRpc && resultadoRpc.unidades) || [];
+  const comPerda = unidades.filter(u =>
+    (u.estoque_minimo_existia_antes || 0) > (u.estoque_minimo_preservado || 0));
+  if (!comPerda.length) return '';
+  return ' ⚠️ ATENÇÃO: ' + comPerda.map(u =>
+    `${u.estoque_minimo_existia_antes - u.estoque_minimo_preservado} item(ns) da unidade ${u.unidade} tinha(m) Estoque Seguro configurado e não achou par na planilha nova (código de item pode ter mudado de formatação) — precisa reconferir.`
+  ).join(' ');
+}
 
 // Chamada pelo seletor de unidade do cabecalho (js/navegacao.js). Antes era
 // um listener nos botoes de unidade, que sairam do layout na Fase 2b.

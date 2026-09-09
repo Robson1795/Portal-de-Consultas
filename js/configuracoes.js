@@ -613,7 +613,8 @@ async function aplicarLote() {
       + ((data && data.unidades) ? data.unidades.length : '?') + ' unidade(s): '
       + ((data && data.bobinas) || 0) + ' linha(s).'
     : 'Estoque substituído em '
-      + ((data && data.unidades) ? data.unidades.length : '?') + ' unidade(s).';
+      + ((data && data.unidades) ? data.unidades.length : '?') + ' unidade(s).'
+      + avisoEstoqueMinimoNaoPreservado(data);
   msg.className = 'status-msg status-ok';
 
   lotePreparado = null;

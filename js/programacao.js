@@ -1156,7 +1156,6 @@ function contarPedidosNaExpedicao(linhas) {
 function renderExpControle(erroCarregamento) {
   const corpo = document.getElementById('expCtrlBody');
   const vazio = document.getElementById('expCtrlVazio');
-  resetarConfirmacaoImprimir(); // a lista mudou -- o aviso de "pedido pendente" era sobre a lista anterior
 
   if (erroCarregamento) {
     vazio.style.display = 'block';
@@ -1862,31 +1861,6 @@ document.getElementById('expCtrlExportarBtn').addEventListener('click', async ()
   else exportarExpControleCsv(nomeBase);
 });
 
-// Pedidos distintos nas linhas dadas que AINDA NÃO foram marcados como
-// prontos (ignora linha sem pedido -- não tem o que confirmar). "Pronto" é
-// detectado sozinho quando a pessoa que alimenta a planilha passa pra um
-// pedido diferente (ver atualizarPedidoProntoAoRegistrar), não por ação manual.
-function pedidosPendentes(linhas) {
-  const distintos = new Set(linhas.map(l => (l.numero_pedido || '').trim()).filter(Boolean));
-  return [...distintos].filter(p => !expPedidoProntoMap.has(p));
-}
-
-// Espera um segundo clique no próprio botão Imprimir, pra confirmar mesmo
-// com pedido pendente. NÃO usa confirm() do navegador de propósito: o Chrome
-// oferece "impedir que esta página crie novos diálogos" depois de alguns
-// avisos, e marcado isso, confirm() devolve false na hora -- o clique não
-// faz nada e nenhuma mensagem aparece (ver CLAUDE.md, seção 7). Qualquer
-// busca nova cancela a confirmação pendente: o aviso era sobre outra lista.
-let expCtrlImprimirConfirmando = false;
-
-function resetarConfirmacaoImprimir() {
-  if (!expCtrlImprimirConfirmando) return;
-  expCtrlImprimirConfirmando = false;
-  const btn = document.getElementById('expCtrlImprimirBtn');
-  btn.textContent = '🖨️ Imprimir';
-  btn.classList.remove('btn-primary');
-}
-
 // Abre a mesma listagem numa aba nova já pronta pra impressora -- a
 // própria caixa de impressão do navegador tem "Salvar como PDF", então
 // cobre o PDF de graça, sem precisar de outra biblioteca.
@@ -1896,31 +1870,6 @@ document.getElementById('expCtrlImprimirBtn').addEventListener('click', async ()
     alert(progExpControle.length ? 'Nenhum item bate com a busca atual.' : 'Nenhum item no Controle EXP para imprimir.');
     return;
   }
-  const btnImprimir = document.getElementById('expCtrlImprimirBtn');
-  const msg = document.getElementById('expEtiquetaMsg');
-
-  // A certeza que o Robson pediu (2026-09-08): antes de imprimir, avisa se
-  // algum pedido desta impressão ainda não foi detectado como pronto (isto
-  // é, quem alimenta a planilha ainda não passou pra um pedido diferente
-  // depois dele -- ver atualizarPedidoProntoAoRegistrar). Não bloqueia (ele
-  // pode ter motivo pra imprimir mesmo assim) -- só exige um segundo clique
-  // consciente em vez de imprimir por engano com a lista pela metade.
-  const pendentes = pedidosPendentes(linhas);
-  if (pendentes.length && !expCtrlImprimirConfirmando) {
-    expCtrlImprimirConfirmando = true;
-    msg.textContent =
-      (pendentes.length === 1
-        ? 'Atenção: este pedido ainda não foi detectado como pronto '
-        : 'Atenção: estes pedidos ainda não foram detectados como prontos ') +
-      '(quem alimenta o Controle EXP ainda não passou pra outro pedido depois dele): ' +
-      pendentes.join(', ') +
-      '. Pode ser que ainda faltem itens pra colocar. Clique em Imprimir de novo pra confirmar mesmo assim.';
-    msg.className = 'status-msg';
-    btnImprimir.textContent = '🖨️ Confirmar: imprimir mesmo assim';
-    btnImprimir.classList.add('btn-primary');
-    return;
-  }
-  resetarConfirmacaoImprimir();
 
   const aba = window.open('', '_blank');
   if (!aba) { alert('O navegador bloqueou a nova aba. Libere pop-ups pra este site e tente de novo.'); return; }
