@@ -1079,6 +1079,41 @@ banco (sobra do preenchimento antigo por linha): unifica as localizações do
 mesmo item para o **maior** valor de `estoque_minimo` já cadastrado entre elas
 — não inventa número novo, só copia o que já existia pra quem ficou pra trás.
 
+## Etiqueta de localização — só na Trading (09/09/2026)
+
+O Robson: *"agora só para o estoque da trading, pode colocar no lugar de estoque
+seguro um botão para impressão de cada item por localização (…) um botão para eu
+flegar caso eu queira imprimir a localização de todos de uma vez, aí sai a folha
+de cada item"*.
+
+Na unidade **1101 (Trading)** — e só nela — a coluna **Estoque Seguro** vira
+**Etiqueta**: caixa de marcação + 🖨️ por linha, e um botão
+`🖨️ Etiquetas (N)` na barra. Reaproveita a coluna em vez de criar mais uma
+porque a tabela já avisa "arraste para o lado para ver todas as colunas"; e
+na Trading o Estoque Seguro não é usado. Fora da Trading nada muda.
+
+- **`etiquetasTrading` é um `Set` de ids**, não um atributo no DOM: a tabela é
+  redesenhada inteira a cada filtro, ordenação e troca de página, e o que foi
+  marcado na página 1 tem de continuar marcado na volta da página 3.
+- **"Marcar todas" age sobre o filtro inteiro, não sobre a página visível** —
+  por isso `applyFilterAndSort()` guarda o resultado em `linhasFiltradasAtual`
+  (o `render()` só recebe a fatia da página).
+- **Trocar de unidade limpa a marcação** (`loadData()`): id de linha é da
+  unidade e do depósito; o de antes imprimiria item de outro galpão.
+- **Acima de 10 folhas o portal pergunta antes.** Sai uma folha por item, e
+  marcar a lista inteira é resma — quem clicou merece saber pela tela, não
+  pela impressora.
+
+A folha usa o mesmo desenho da do Controle EXP (milímetros, não px): **TRADING**
+no topo, item em 26 mm, descrição em 8 mm, quantidade em 14 mm e a
+**localização em 28 mm** entre dois filetes, com `Impresso por <nome> — <data
+hora>` no rodapé. Só entram os dados que a planilha da Trading tem.
+
+Os 28 mm da localização são medidos, não chutados: `B-01-01-01` neste peso
+ocupa 5,98 em (o hífen é ponto de quebra natural), e nos 178 mm úteis do A4
+qualquer corpo acima de ~29 mm parte o endereço em duas linhas — `B-01-01-`
+numa e `01` na outra, que é pior que letra menor. Em 28 mm lê-se a 4 metros.
+
 ---
 
 ## 15. Depósitos: Almoxarifado e SESMT (09/09/2026)

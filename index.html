@@ -169,6 +169,10 @@
       <button class="btn" id="filterBtn" style="position:relative;">Filtros <span id="filterCount" style="display:none;"></span></button>
       <button class="btn" id="clearBtn">Limpar filtros</button>
       <button class="btn btn-primary" id="printBtn">Exportar PDF</button>
+      <!-- Só aparece na Trading (unidade 1101): imprime uma folha por item
+           marcado na coluna Etiqueta. Ver atualizarBotaoEtiquetas(). -->
+      <button class="btn" id="etiquetaTradingBtn" style="display:none;"
+              title="Imprime uma folha por item marcado, com a localização em letra grande">🖨️ Etiquetas (0)</button>
       <button class="btn" id="contagemBtn" title="Planilha para contagem física de estoque" style="font-size:16px; padding:9px 12px;">📋</button>
       <button class="btn" id="quemContouBtn" style="display:none;">Quem já contou</button>
     </div>

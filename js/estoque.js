@@ -16,6 +16,15 @@ let fichaBoxMap = new Map();
 let fichaFeitoSet = new Set();
 let sortKey = null;
 let sortDir = 1;
+// Ids das linhas marcadas pra sair etiqueta na Trading. Set (e não um
+// atributo no DOM) porque a tabela é redesenhada inteira a cada filtro,
+// ordenação e troca de página -- o que estava marcado na página 1 tem de
+// continuar marcado quando a pessoa volta da página 3. Guarda o id como
+// string: o data-id do HTML sempre volta string, e o r.id do banco é number.
+let etiquetasTrading = new Set();
+// O que o filtro deixou na tela (todas as páginas), preenchido por
+// applyFilterAndSort(): é sobre isso que o "marcar todas" age.
+let linhasFiltradasAtual = [];
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({
@@ -73,7 +82,23 @@ function render(rows, intervalo) {
   // Coluna e card do Estoque Mínimo são só do Robson -- ver
   // podeVerEstoqueMinimo(). Sincroniza o cabeçalho da coluna aqui (a
   // célula de cada linha já se ajusta sozinha no template abaixo).
-  document.querySelector('.col-estmin').style.display = podeVerEstoqueMinimo() ? 'table-cell' : 'none';
+  //
+  // Na Trading essa MESMA coluna vira a de etiquetas: lá o Estoque Seguro
+  // não é usado, e o que se faz na tela é imprimir a etiqueta de localização
+  // item a item (Robson, 09/09/2026: "agora só para o estoque da trading,
+  // pode colocar no lugar de estoque seguro um botão para impressão de cada
+  // item por localização"). Coluna nova custaria mais uma coluna de rolagem
+  // horizontal numa tabela que já avisa "arraste para o lado".
+  const cabecalhoEstmin = document.querySelector('.col-estmin');
+  cabecalhoEstmin.style.display = (ehTrading() || podeVerEstoqueMinimo()) ? 'table-cell' : 'none';
+  cabecalhoEstmin.innerHTML = ehTrading()
+    ? `<label style="display:flex; align-items:center; gap:6px; cursor:pointer; white-space:nowrap;" title="Marcar todos os itens do filtro atual">
+         <input type="checkbox" id="etqTodos" ${marcouTodasAsEtiquetas(rows) ? 'checked' : ''}> Etiqueta
+       </label>`
+    : 'Estoque Seguro';
+  // Antes do return de "nenhum item": o botão da barra some ao trocar de
+  // unidade mesmo quando o filtro não achou nada.
+  atualizarBotaoEtiquetas();
 
   // O card e a paginacao mostram o total FILTRADO, nao o da unidade toda.
   const total = rows.length;
@@ -129,11 +154,17 @@ function render(rows, intervalo) {
         ? `<button class="padrao-btn" data-item="${escapeHtml(r.item)}" data-qtd="${escapeHtml(r.quantidade)}" title="Ver padrão de caixas esperado">📦</button>`
         : (podeEditarEmbalagem() ? `<button class="avulso-btn" data-item="${escapeHtml(r.item)}" title="Marcar como item avulso, sem padrão de caixa">AVULSO</button>` : '')}</td>
       <td class="num">${escapeHtml(r.quantidade)}</td>
-      <td class="col-estmin" style="display:${podeVerEstoqueMinimo() ? 'table-cell' : 'none'};">
-        <input type="text" inputmode="decimal" class="estmin-input" data-id="${escapeHtml(r.id)}" data-item="${escapeHtml(r.item)}"
+      <td class="col-estmin" style="display:${(ehTrading() || podeVerEstoqueMinimo()) ? 'table-cell' : 'none'};">
+        ${ehTrading()
+          ? `<div style="display:flex; align-items:center; gap:6px;">
+               <input type="checkbox" class="etq-check" data-id="${escapeHtml(r.id)}" ${etiquetasTrading.has(String(r.id)) ? 'checked' : ''}
+                      title="Marcar para imprimir junto com os outros">
+               <button class="acao-btn etq-btn" data-id="${escapeHtml(r.id)}" title="Imprimir a etiqueta deste item agora">🖨️</button>
+             </div>`
+          : `<input type="text" inputmode="decimal" class="estmin-input" data-id="${escapeHtml(r.id)}" data-item="${escapeHtml(r.item)}"
                value="${r.estoque_minimo != null ? escapeHtml(r.estoque_minimo) : ''}" placeholder="—"
                title="Vale pro item inteiro, somando todas as localizações desta unidade — não só esta prateleira"
-               style="width:70px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px; text-align:right;">
+               style="width:70px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px; text-align:right;">`}
       </td>
       <td class="col-acoes" style="display:${modoContagemAtivo ? 'none' : 'table-cell'};">
         <button class="acao-btn ficha-btn${fichaFeitoSet.has(r.item) ? '' : ' pendente'}" data-item="${escapeHtml(r.item)}"
@@ -310,6 +341,10 @@ function applyFilterAndSort() {
     // Sem ordenação manual escolhida: agrupa por localização, pra impressão sair separada por corredor
     rows = [...rows].sort((a, b) => String(a.localizacao).localeCompare(String(b.localizacao)));
   }
+  // Guardado porque "marcar todas as etiquetas" (Trading) age sobre o que o
+  // filtro deixou na tela, e não só sobre a página visível -- render() recebe
+  // a fatia da página, não dá pra reaproveitar de lá.
+  linhasFiltradasAtual = rows;
   render(rows, intervalo);
 }
 
@@ -711,6 +746,10 @@ async function loadData() {
   // ressuscitar dados congelados por cima do estoque real. Carga inicial e
   // tarefa de script SQL, rodado uma vez no Supabase.
   currentData = data || [];
+  // Etiquetas marcadas são ids de linha desta unidade/depósito -- depois de
+  // trocar, os ids de antes não querem dizer nada aqui (e imprimiriam item de
+  // outro galpão).
+  etiquetasTrading.clear();
   await Promise.all([loadFichaImageMap(), atualizarPermissaoEstoqueMinimo()]);
   updateStats();
   applyFilterAndSort();
@@ -999,6 +1038,14 @@ document.getElementById('tableBody').addEventListener('click', (e) => {
   if (padraoBtn) { mostrarPadraoCaixas(padraoBtn); return; }
   const avulsoBtn = e.target.closest('.avulso-btn');
   if (avulsoBtn) { marcarAvulsoRapido(avulsoBtn.dataset.item); return; }
+  // Etiqueta de uma linha só (Trading), sem passar pela marcação: o caso
+  // comum é imprimir a do item que está na mão.
+  const etqBtn = e.target.closest('.etq-btn');
+  if (etqBtn) {
+    const linha = currentData.find(r => String(r.id) === String(etqBtn.dataset.id));
+    if (linha) imprimirEtiquetasTrading([linha]);
+    return;
+  }
 });
 
 const padraoModal = document.getElementById('padraoModal');
@@ -1742,6 +1789,134 @@ document.getElementById('printBtn').addEventListener('click', () => {
   window.print();
   imprimindoTudo = false;
   applyFilterAndSort();
+});
+
+
+// ===========================================================================
+// ETIQUETA DE LOCALIZAÇÃO — só da Trading (unidade 1101)
+//
+// Uma folha por item, com o endereço em letra de longe, no mesmo desenho da
+// folha do Controle EXP (js/programacao.js): tamanhos em MILÍMETROS, porque a
+// medida aqui é o papel, e altura de maiúscula ≈ distância de leitura ÷ 200.
+// Só entram os dados que a planilha da Trading tem (item, descrição, UM,
+// quantidade e localização) -- Robson: "só com os dados que aparece na
+// planilha da trading".
+// ===========================================================================
+
+function ehTrading() {
+  return unidadeAtual === UNIDADE_TRADING;
+}
+
+function marcouTodasAsEtiquetas(rows) {
+  return rows.length > 0 && rows.every(r => etiquetasTrading.has(String(r.id)));
+}
+
+// O botão diz quantas folhas vão sair ANTES de sair: "Etiquetas (12)" é a
+// diferença entre conferir e descobrir no meio da resma.
+function atualizarBotaoEtiquetas() {
+  const botao = document.getElementById('etiquetaTradingBtn');
+  if (!botao) return;
+  botao.style.display = ehTrading() ? 'inline-block' : 'none';
+  botao.textContent = `🖨️ Etiquetas (${etiquetasTrading.size})`;
+  botao.disabled = etiquetasTrading.size === 0;
+}
+
+function montarHtmlEtiquetasTrading(linhas) {
+  const impressoEm = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+  const quem = nomeUsuarioAtual || emailUsuarioAtual || '—';
+  const etiquetas = linhas.map(r => `
+    <section class="etiqueta">
+      <div class="etq-topo">
+        <span class="etq-marca">TRADING</span>
+        <span class="etq-unidade">${escapeHtml(rotuloUnidade(unidadeAtual))}</span>
+      </div>
+      <div class="etq-item">${escapeHtml(r.item)}</div>
+      <div class="etq-desc">${escapeHtml(r.descricao || '')}</div>
+      <div class="etq-qtd">${escapeHtml(r.quantidade != null ? r.quantidade : '')}${r.um ? ` <small>${escapeHtml(r.um)}</small>` : ''}</div>
+      <div class="etq-local">${escapeHtml(r.localizacao || '—')}</div>
+      <div class="etq-rodape">Impresso por ${escapeHtml(quem)} — ${escapeHtml(impressoEm)}</div>
+    </section>`).join('');
+
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+<title>Etiquetas Trading — ${new Date().toLocaleDateString('pt-BR')}</title>
+<style>
+  /* Milímetros, não px: o papel é a medida. Altura de maiúscula ≈ distância
+     ÷ 200 -- 21mm de corpo na Arial dá ~15mm de maiúscula, que se lê a 3
+     metros. Mesma conta da folha do Controle EXP. */
+  @page { size: A4 portrait; margin: 10mm; }
+  body { font-family: Arial, sans-serif; margin: 0; }
+  .etiqueta {
+    box-sizing: border-box; padding: 6mm; text-align: center;
+    /* Uma folha por item: é etiqueta de prateleira, duas na mesma folha
+       viram uma folha que ninguém pode colar em lugar nenhum. */
+    page-break-after: always; break-after: page;
+  }
+  .etiqueta:last-child { page-break-after: auto; break-after: auto; }
+  .etq-topo {
+    display: flex; justify-content: space-between; align-items: baseline;
+    border-bottom: 0.8mm solid #000; padding-bottom: 2mm; margin-bottom: 6mm;
+  }
+  .etq-marca { font-size: 12mm; font-weight: 900; letter-spacing: 0.08em; }
+  .etq-unidade { font-size: 4mm; color: #333; }
+  .etq-item { font-size: 26mm; font-weight: 900; line-height: 1; overflow-wrap: anywhere; }
+  .etq-desc { font-size: 8mm; font-weight: 700; line-height: 1.15; margin-top: 4mm; }
+  .etq-qtd { font-size: 14mm; font-weight: 800; margin-top: 4mm; }
+  .etq-qtd small { font-size: 0.45em; font-weight: 700; }
+  /* O endereço é o que se procura de longe na estante -- é o maior de todos.
+     28mm e não mais: medido no navegador, "B-01-01-01" nesta fonte/peso ocupa
+     5,98em (o hífen é ponto de quebra natural), e nos 178mm úteis do A4
+     qualquer corpo acima de ~29mm parte o endereço em duas linhas -- "B-01-01-"
+     numa e "01" na outra, que é pior que letra menor. Em 28mm se lê a 4
+     metros, com folga sobre os 3 pedidos. */
+  .etq-local {
+    font-size: 28mm; font-weight: 900; line-height: 1.05; letter-spacing: 0.02em;
+    margin-top: 6mm; padding: 4mm 0; border-top: 0.8mm solid #000;
+    border-bottom: 0.8mm solid #000; overflow-wrap: anywhere;
+  }
+  .etq-rodape { font-size: 3.5mm; color: #333; margin-top: 5mm; }
+</style></head><body>
+${etiquetas}
+${'<script>window.onload = () => window.print();<' + '/script>'}
+</body></html>`;
+}
+
+function imprimirEtiquetasTrading(linhas) {
+  if (!linhas.length) return;
+  const aba = window.open('', '_blank');
+  if (!aba) { alert('O navegador bloqueou a nova aba. Libere pop-ups pra este site e tente de novo.'); return; }
+  aba.document.write(montarHtmlEtiquetasTrading(linhas));
+  aba.document.close();
+}
+
+// Marcar/desmarcar linha e "marcar todas" mexem só no Set e redesenham --
+// nada vai pro banco: etiqueta é papel, não é estado do item.
+document.getElementById('tableBody').addEventListener('change', (e) => {
+  const check = e.target.closest('.etq-check');
+  if (!check) return;
+  if (check.checked) etiquetasTrading.add(check.dataset.id);
+  else etiquetasTrading.delete(check.dataset.id);
+  atualizarBotaoEtiquetas();
+  const todas = document.getElementById('etqTodos');
+  if (todas) todas.checked = marcouTodasAsEtiquetas(linhasFiltradasAtual);
+});
+
+document.querySelector('#dataTable thead').addEventListener('change', (e) => {
+  if (e.target.id !== 'etqTodos') return;
+  const filtradas = linhasFiltradasAtual;
+  if (e.target.checked) filtradas.forEach(r => etiquetasTrading.add(String(r.id)));
+  else filtradas.forEach(r => etiquetasTrading.delete(String(r.id)));
+  atualizarBotaoEtiquetas();
+  applyFilterAndSort();
+});
+
+document.getElementById('etiquetaTradingBtn').addEventListener('click', () => {
+  const linhas = currentData.filter(r => etiquetasTrading.has(String(r.id)));
+  if (!linhas.length) return;
+  // Sai UMA folha por item -- com a lista inteira marcada isso é resma, e
+  // quem clicou merece saber disso antes, não pela impressora.
+  if (linhas.length > 10 &&
+      !confirm(`Vão sair ${linhas.length} folhas, uma por item. Continuar?`)) return;
+  imprimirEtiquetasTrading(linhas);
 });
 
 // ---- Painel de Filtros ----
