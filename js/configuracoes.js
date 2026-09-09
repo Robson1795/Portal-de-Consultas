@@ -286,9 +286,9 @@ const LOTE_FORMATOS = {
        + 'almoxarifado. Colunas lidas: Unidade (ou Estab), Item, Descrição, UM, Localização, '
        + 'Quantidade. Vai para o depósito SESMT (EPI) de cada unidade.',
   exp: 'Precisa de cabeçalho, e uma das colunas tem de ser a unidade. Colunas lidas: '
-     + 'Unidade (ou Estab), Item, Quantidade, Localização, Nº Pedido, Nº OP, Lote, '
-     + 'Referência — em qualquer ordem. Substitui o que está NA EXPEDIÇÃO de cada '
-     + 'unidade; o que já foi retirado não é tocado.',
+     + 'Unidade (ou Estab), Item, Descrição, UM, Depósito, Referência, Lote, '
+     + 'Quantidade — em qualquer ordem. Substitui o Catálogo EXP de cada unidade '
+     + '(a lista de referência), e não os itens guardados na expedição.',
   aco: 'As oito colunas da planilha de bobinas, nesta ordem: Item, Descrição Item, Est, Dep, '
      + 'Localizacao, Lote, Un, Qtd Liquida. A coluna Est diz a unidade de cada bobina, e '
      + 'só as unidades que aparecerem na planilha são substituídas.'
@@ -309,6 +309,10 @@ const LOTE_SINONIMOS = {
                 'quantidade atual', 'qtd liquida', 'estoque'],
   // Só o Controle EXP usa estas três. Nº do pedido e Nº da OP aparecem
   // com meia dúzia de grafias diferentes na planilha do PCP.
+  // `deposito` aqui e o codigo de deposito do Datasul que vem na planilha do
+  // sistema (DEP, EXP...), e NAO o deposito do portal (alm/sesmt, secao 15).
+  // Sao coisas diferentes com o mesmo nome; a coluna do catalogo e so texto.
+  deposito:      ['deposito', 'dep', 'depósito', 'armazem', 'armazém', 'cod deposito'],
   lote:          ['lote', 'lote item', 'n lote', 'nº lote', 'numero lote', 'no lote'],
   numero_pedido: ['numero pedido','n pedido','no pedido','nº pedido','pedido','num pedido','numero do pedido'],
   numero_os_op:  ['numero os','n os','nº os','os','op','n op','nº op','numero op','os op','n os op','nº os/op','os/op'],
@@ -419,19 +423,24 @@ function prepararLote(texto) {
              porEst: [...porEst.entries()].sort((a, b) => a[0].localeCompare(b[0])) };
   }
 
-  // ---------------------------------------- Controle EXP
+  // ---------------------------------------- Catálogo EXP
   //
-  // Fica ANTES do ramo de estoque porque as colunas são outras: aqui não há
-  // descrição nem UM (a tabela não guarda -- decisão do sql/programacao-03), e
-  // há número de pedido, OP, lote e referência.
+  // Fica ANTES do ramo de estoque porque as colunas são outras: o catálogo tem
+  // depósito, referência e lote, que o estoque não tem.
+  //
+  // ⚠️ É o CATÁLOGO (`catalogo_exp_itens`, a lista de referência do sistema), e
+  // NÃO `exp_controle_itens`, que é o registro de movimentação da expedição.
+  // Confundir os dois foi o meu erro na primeira versão desta aba: a segunda é
+  // append-only e guarda quem retirou o quê, então substituí-la apagaria
+  // trabalho de gente.
   if (loteAba === 'exp') {
     if (!pareceCabecalho(linhas[0])) {
       return { erro: 'Esta planilha precisa de cabeçalho: é nele que eu encontro a coluna da '
                    + 'unidade. Cole incluindo a primeira linha, com os nomes das colunas.' };
     }
     const cabecalho = linhas[0];
-    const mapa = mapearColunas(cabecalho, ['um', 'unidade', 'item', 'quantidade', 'localizacao',
-                                           'numero_pedido', 'numero_os_op', 'lote', 'referencia']);
+    const mapa = mapearColunas(cabecalho, ['um', 'unidade', 'item', 'descricao', 'deposito',
+                                           'referencia', 'lote', 'quantidade']);
     if (mapa.item === undefined) {
       return { erro: 'Não encontrei a coluna do item. Cabeçalho lido: ' + cabecalho.join(' · ') };
     }
@@ -457,12 +466,12 @@ function prepararLote(texto) {
       if (!porUnidade.has(uni)) porUnidade.set(uni, []);
       porUnidade.get(uni).push({
         codigo_item: item,
-        quantidade: pega('quantidade').trim() || null,
-        localizacao: pega('localizacao').trim() || null,
-        numero_pedido: pega('numero_pedido').trim() || null,
-        numero_os_op: pega('numero_os_op').trim() || null,
+        descricao: pega('descricao').trim() || null,
+        um: pega('um').trim() || null,
+        deposito: pega('deposito').trim() || null,
+        referencia: pega('referencia').trim() || null,
         lote: pega('lote').trim() || null,
-        referencia: pega('referencia').trim() || null
+        quantidade: pega('quantidade').trim() || null
       });
     });
 
@@ -479,8 +488,7 @@ function prepararLote(texto) {
 
     const blocos = [...porUnidade.entries()]
       .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([unidade, itens]) => ({ unidade, itens, setor: 'exp',
-                                    registrado_por: nomeUsuarioAtual }));
+      .map(([unidade, itens]) => ({ unidade, itens, atualizado_por: nomeUsuarioAtual }));
 
     return { tipo: 'exp', blocos, avisos, mapa, cabecalho };
   }
@@ -663,15 +671,16 @@ function cancelarConfirmacaoLote() {
 }
 
 // ---- Gravar ---------------------------------------------------------------
-// Diz quantos registros JÁ RETIRADOS ficaram de fora da substituição. Sem
-// esse número, "substituído" soa como "apaguei tudo" -- e no EXP a tabela
-// guarda o histórico de quem retirou o quê (ver sql/fase26-exp-em-lote.sql).
-function avisoHistoricoExp(data) {
-  const guardados = ((data && data.blocos) || [])
-    .reduce((s, b) => s + (b.historico_preservado || 0), 0);
-  return guardados
-    ? ' ' + guardados.toLocaleString('pt-BR') + ' registro(s) já retirado(s) não foram tocados.'
-    : '';
+// Diz quantas linhas o catálogo TINHA antes, somando as unidades da planilha.
+// Serve de conferência na hora: substituir 4.000 linhas por 12 é quase sempre
+// planilha colada pela metade, e o número na frente da pessoa é o que faz ela
+// reparar antes de fechar a tela.
+function avisoCatalogoAnterior(data) {
+  const antes = ((data && data.blocos) || []).reduce((s, b) => s + (b.antes || 0), 0);
+  const agora = ((data && data.blocos) || []).reduce((s, b) => s + (b.itens || 0), 0);
+  if (!antes) return '';
+  return ' O catálogo dessas unidades tinha ' + antes.toLocaleString('pt-BR')
+    + ' linha(s) e passou a ter ' + agora.toLocaleString('pt-BR') + '.';
 }
 
 
@@ -694,7 +703,7 @@ async function aplicarLote() {
   const { data, error } = (lotePreparado.tipo === 'aco')
     ? await sb.rpc('substituir_bobinas', { linhas: lotePreparado.registros, quem: nomeUsuarioAtual })
     : (lotePreparado.tipo === 'exp')
-      ? await sb.rpc('substituir_exp_controle', { payload: lotePreparado.blocos })
+      ? await sb.rpc('substituir_catalogo_exp', { payload: lotePreparado.blocos })
       : await sb.rpc('substituir_estoque', { payload: lotePreparado.blocos });
 
   if (botao) botao.disabled = false;
@@ -714,9 +723,9 @@ async function aplicarLote() {
       + ((data && data.unidades) ? data.unidades.length : '?') + ' unidade(s): '
       + ((data && data.bobinas) || 0) + ' linha(s).'
     : (lotePreparado.tipo === 'exp')
-      ? 'Controle EXP substituído em '
+      ? 'Catálogo EXP substituído em '
         + ((data && data.blocos) ? data.blocos.length : '?') + ' unidade(s).'
-        + avisoHistoricoExp(data)
+        + avisoCatalogoAnterior(data)
     : 'Estoque substituído em '
       + ((data && data.unidades) ? data.unidades.length : '?') + ' unidade(s).'
       + avisoEstoqueMinimoNaoPreservado(data);

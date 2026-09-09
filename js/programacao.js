@@ -2291,15 +2291,13 @@ document.getElementById('catalogoExpImportarBtn').addEventListener('click', asyn
   // Substitui tudo -- a planilha do sistema é a fonte da verdade agora;
   // mesclar com o que tinha antes deixaria lote de item que já saiu do
   // estoque. Mesmo padrão da Planilha A da Programação de Separação.
-  const { error: erroDelete } = await sb.from('catalogo_exp_itens').delete().eq('unidade', unidadeAtual);
-  if (erroDelete) {
-    btn.disabled = false;
-    msg.textContent = 'NÃO IMPORTOU: ' + erroDelete.message;
-    msg.className = 'status-msg status-err';
-    return;
-  }
-
-  const { error: erroInsert } = await sb.from('catalogo_exp_itens').insert(registros);
+  // UMA chamada, numa transação: era delete + insert em duas, e uma falha no
+  // meio deixava a unidade SEM catálogo nenhum -- item A2 da AUDITORIA.md, já
+  // fechado no estoque e nas bobinas e esquecido aqui. A mesma função serve a
+  // aba de lote das Configurações: uma regra de substituição, um lugar.
+  const { error: erroInsert } = await sb.rpc('substituir_catalogo_exp', {
+    payload: [{ unidade: unidadeAtual, itens: linhas, atualizado_por: nomeUsuarioAtual }]
+  });
   btn.disabled = false;
 
   if (erroInsert) {

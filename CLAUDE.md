@@ -1126,41 +1126,47 @@ custo passou a ser **validado contra a lista** (mesma regra do item: código
 inventado só gera retrabalho para o ALM) e o campo fica com a borda laranja
 enquanto o que está escrito não bate com nenhum cadastrado.
 
-### Controle EXP em lote (09/09/2026)
+### Catálogo EXP em lote (09/09/2026)
 
-Quarta aba do "Atualizar estoques em lote": cola uma planilha com o Controle
-EXP de **todas** as unidades e o portal separa por unidade sozinho, como já
-fazia com almoxarifado, SESMT e bobinas. Colunas lidas por sinônimo: Unidade
-(ou Estab), Item, Quantidade, Localização, Nº Pedido, Nº OP, Lote, Referência —
-em qualquer ordem. Script: `sql/fase26-exp-em-lote.sql`.
+Quarta aba do "Atualizar estoques em lote": cola uma planilha com o **Catálogo
+EXP** de todas as unidades e o portal separa por unidade sozinho, como já fazia
+com almoxarifado, SESMT e bobinas. Colunas lidas por sinônimo: Unidade (ou
+Estab), Item, Descrição, UM, Depósito, Referência, Lote, Quantidade — em
+qualquer ordem. Script: `sql/fase27-catalogo-exp-em-lote.sql`.
 
-⚠️ **"Substituir" aqui não quer dizer a mesma coisa que nas outras três abas.**
-`estoque` e `bobinas_aco` são retratos: a planilha da empresa é a verdade, e
-substituir a unidade inteira é o certo. `exp_controle_itens` é o contrário — o
-portal é o sistema de registro, e a tabela é **append-only de propósito**: item
-retirado não é apagado, muda de status e vira o histórico pesquisável por
-pedido (seção 13). Na mesma tabela moram a marca de etiqueta emitida e o que
-alimenta a detecção de pedido pronto.
+⚠️ **Catálogo EXP e Controle EXP são tabelas diferentes, e a confusão entre as
+duas é fácil de fazer — eu fiz.** A primeira versão desta aba substituía
+`exp_controle_itens`, porque "estoque exp" soa como os itens guardados na
+expedição. O pedido era `catalogo_exp_itens`.
 
-Substituir "igual aos outros" apagaria tudo isso — quem retirou, quando, e as
-etiquetas emitidas — sem erro na tela e sem volta. Então o recorte é mais
-estreito:
+| | O que é | Substituir é |
+|---|---|---|
+| `catalogo_exp_itens` | A **lista de referência** do sistema, que ajuda a preencher item, referência e lote | **Certo.** A planilha do sistema é a verdade, e mesclar deixaria lote de item que já saiu |
+| `exp_controle_itens` | O **registro de movimentação**: o que está guardado e o que já foi retirado | **Errado.** É append-only de propósito; guarda quem retirou o quê, mais a marca de etiqueta emitida |
 
-```
-delete ... where unidade = X and setor = Y and status = 'na_expedicao'
-```
+A função `substituir_exp_controle()` do `fase26` foi **derrubada** pelo
+`fase27`: nunca foi chamada, e função destrutiva que sobra no banco é pior que
+código morto — na próxima leitura ela parece parte do desenho, e alguém a
+chama. O `fase26` fica no histórico do repositório se algum dia a substituição
+em lote do Controle EXP fizer sentido, mas que seja decisão tomada de novo.
 
-Substitui **o que está na expedição agora**, que é o que a planilha descreve, e
-não toca no que já saiu. A mensagem de sucesso diz quantos registros retirados
-ficaram de fora (`historico_preservado` no retorno da função), porque sem esse
-número "substituído" soa como "apaguei tudo". Se algum dia a intenção for
-apagar o histórico junto, é uma linha no SQL — mas tem de ser decisão
-consciente, não efeito colateral de uma aba nova.
+**De quebra, fechou o A2 neste caminho.** A importação do catálogo pela aba
+Catálogo do Controle EXP sempre foi duas chamadas do navegador
+(`delete` e depois `insert`): caindo a rede no meio, a unidade ficava **sem
+catálogo nenhum**. As duas telas — a aba de lote e a importação por unidade —
+agora passam pela mesma função transacional. Uma regra de substituição, um
+lugar.
 
-- `setor` é fixo em `'exp'`: o **Depósito Benchmark** não tem aba de lote. A
-  função aceita `benchmark` no payload, então o dia que precisar é só a UI.
-- A permissão é `pode_atualizar_estoque(uni)`, igual às outras — admin, ou
-  gerente daquela unidade. Quem colar a planilha da empresa toda sendo gerente
-  de uma unidade só recebe erro na primeira unidade que não é dele, **antes de
-  qualquer `delete`** (Passo 1 da função, mesmo desenho de
+- A mensagem de sucesso diz **quantas linhas o catálogo tinha antes**.
+  Substituir 4.000 linhas por 12 é quase sempre planilha colada pela metade, e
+  o número na frente da pessoa é o que faz ela reparar antes de fechar a tela.
+- A permissão é `pode_atualizar_estoque(uni)`, conferida para **todas** as
+  unidades antes do primeiro `delete` (Passo 1, mesmo desenho de
   `substituir_estoque`).
+- ⚠️ A coluna `deposito` do catálogo é o código de depósito **do Datasul** que
+  vem na planilha (DEP, EXP…), e **não** o depósito do portal (`alm`/`sesmt`,
+  seção 15). Mesmo nome, coisas diferentes.
+- ⚠️ A importação por unidade ainda usa `confirm()`, que o projeto evita
+  (seção 7): marcado "impedir que esta página crie novos diálogos", o clique
+  não faz nada e nenhuma mensagem aparece. Fica como pendência — a aba de lote
+  já usa a confirmação na própria tela.
