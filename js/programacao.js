@@ -1801,10 +1801,14 @@ function montarHtmlExpControle(scriptAutoImprimir) {
 <style>
   body { font-family: Arial, sans-serif; padding: 16px; box-sizing: border-box; }
   /* Letra grande de propósito (Robson: pallet no nível 3 do porta-pallet,
-     difícil de ler de baixo/de longe a folha colada nele). */
-  table { border-collapse: collapse; width: 100%; font-size: 20px; }
-  th, td { border: 1px solid #ccc; padding: 10px 12px; text-align: left; }
-  th { background: #004894; color: white; font-size: 16px; }
+     difícil de ler de baixo/de longe a folha colada nele). Item e Descrição
+     (colunas 2 e 3) maiores ainda que o resto -- são o que precisa ler de
+     mais longe pra identificar o material; Nº OP/Lote/Referência/datas só
+     precisam ser legíveis de perto, na conferência. */
+  table { border-collapse: collapse; width: 100%; font-size: 22px; }
+  th, td { border: 1px solid #ccc; padding: 14px 16px; text-align: left; }
+  th { background: #004894; color: white; font-size: 17px; }
+  td:nth-child(2), td:nth-child(3) { font-size: 32px; font-weight: 700; }
   tr:nth-child(even) { background: #f7f9fb; }
   .endereco-grande {
     text-align: center; page-break-before: avoid; page-break-inside: avoid;
