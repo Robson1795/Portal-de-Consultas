@@ -6,9 +6,12 @@
 -- Rode DEPOIS do sql/fase23-sesmt-deposito.sql (a coluna `deposito`
 -- precisa já existir em `estoque`).
 --
--- Renumerado pra fase25 em 09/09/2026: o Victor já tinha usado fase23
--- (sql/fase23-sesmt-deposito.sql) e fase24 (sql/fase24-requisicao-
--- concluida.sql) no mesmo dia.
+-- Renumerado pra fase27 em 09/09/2026 (primeiro pra fase23, depois pra
+-- fase25 -- o Victor foi usando os números no mesmo dia mais rápido do
+-- que dava pra verificar): fase23 é
+-- sql/fase23-sesmt-deposito.sql, fase24 é sql/fase24-requisicao-
+-- concluida.sql, fase25 é sql/fase25-status-concluida.sql, fase26 é
+-- sql/fase26-exp-em-lote.sql.
 --
 -- POR QUÊ
 --

@@ -1042,7 +1042,7 @@ Ajuste em `js/estoque.js`:
   (dois depósitos, mesma unidade) ficaria com um só Estoque Seguro para os
   dois — editar na Consulta de Itens vazaria para o Depósito SESMT.
 
-`sql/fase25-estoque-seguro-por-item.sql` arruma o que já estava divergente no
+`sql/fase27-estoque-seguro-por-item.sql` arruma o que já estava divergente no
 banco (sobra do preenchimento antigo por linha): unifica as localizações do
 mesmo item para o **maior** valor de `estoque_minimo` já cadastrado entre elas
 — não inventa número novo, só copia o que já existia pra quem ficou pra trás.
