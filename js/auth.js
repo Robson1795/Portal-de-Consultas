@@ -53,6 +53,17 @@ tabLoginBtn.addEventListener('click', () => setAuthMode('login'));
 tabSignupBtn.addEventListener('click', () => setAuthMode('signup'));
 setAuthMode('login');
 
+// ENTER confirma, em qualquer um dos campos de texto do cartao de acesso
+// (usuario, senha e, no cadastro, o nome completo). Digitar a senha e ter
+// de ir com o mouse ate o botao e o tipo de atrito que faz a pessoa achar
+// que a tela travou. Os <select> de unidade e cargo ficam de fora: ali o
+// Enter e do proprio menu do navegador.
+[authEmail, authPassword, authNomeCompleto].forEach(campo => {
+  campo.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') authSubmitBtn.click();
+  });
+});
+
 authSubmitBtn.addEventListener('click', async () => {
   const valorDigitado = authEmail.value.trim();
   const email = resolverIdentificador(valorDigitado);
@@ -223,6 +234,9 @@ async function mostrarTelaCorreta(session) {
     await atualizarPermissaoAnalise(); // precisa rodar antes do menu, pra saber se mostra "Análise de Compras"
     montarMenu();           // ja abre a primeira pagina permitida
     await atualizarBotaoEditar();
+    // Depois do menu: os passos do tour apontam pros itens do menu, que
+    // antes de montarMenu() nem existem no DOM (ver js/tour.js).
+    iniciarTourSePrimeiraVez();
   } else {
     authScreen.style.display = 'none';
     pendingScreen.style.display = 'block';

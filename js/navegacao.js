@@ -345,18 +345,25 @@ function montarCabecalho() {
 function aplicarTema(tema) {
   const escuro = tema === 'escuro';
   document.documentElement.setAttribute('data-tema', escuro ? 'escuro' : 'claro');
-  const b = document.getElementById('temaToggle');
-  if (b) {
+  // Os DOIS botoes recebem o icone: o do cabecalho do portal e o do hero
+  // do login. So um deles esta na tela em cada momento, mas quem troca o
+  // tema no login ja entra no portal com o botao certo.
+  ['temaToggle', 'temaToggleLogin'].forEach(id => {
+    const b = document.getElementById(id);
+    if (!b) return;
     b.textContent = escuro ? '\u2600\uFE0F' : '\u{1F319}';
     b.title = escuro ? 'Voltar para o modo claro' : 'Alternar para o modo escuro';
-  }
+  });
   try { localStorage.setItem('portal_tema', escuro ? 'escuro' : 'claro'); }
   catch (e) { /* sem localStorage: vale so nesta aba */ }
 }
 
-document.getElementById('temaToggle').addEventListener('click', () => {
-  const escuroAgora = document.documentElement.getAttribute('data-tema') === 'escuro';
-  aplicarTema(escuroAgora ? 'claro' : 'escuro');
+['temaToggle', 'temaToggleLogin'].forEach(id => {
+  const b = document.getElementById(id);
+  if (b) b.addEventListener('click', () => {
+    const escuroAgora = document.documentElement.getAttribute('data-tema') === 'escuro';
+    aplicarTema(escuroAgora ? 'claro' : 'escuro');
+  });
 });
 
 // Acerta o icone na carga: o <head> ja aplicou o tema, mas o botao ainda nao
