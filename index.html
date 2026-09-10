@@ -608,6 +608,11 @@
         <div id="expAbas" style="display:flex; gap:8px; flex-wrap:wrap;">
           <button class="btn btn-primary" data-exp-aba="entrada">Entrada</button>
           <button class="btn" data-exp-aba="saida">Saída / Conferência</button>
+          <!-- "Conferir" e "Saída / Conferência" são coisas diferentes, e os nomes se
+               parecem: a Saída registra a retirada item por item; esta confronta o
+               SISTEMA (Catálogo EXP) com o FÍSICO (o que está registrado na
+               expedição) e aponta as diferenças. -->
+          <button class="btn" data-exp-aba="conferir" title="Confronta o Catálogo EXP (sistema) com o que está registrado na expedição (físico)">⚖️ Conferir</button>
           <button class="btn" data-exp-aba="catalogo">Catálogo</button>
         </div>
         <button class="btn" id="expAtualizarBtn" style="margin-left:auto;">Atualizar</button>
@@ -831,6 +836,102 @@
         </div>
         <div class="empty-msg" id="catalogoExpVazio" style="display:none;">
           Nenhum item no Catálogo EXP ainda -- cole a relação do sistema acima.
+        </div>
+      </div>
+
+      <!-- ================= ABA CONFERIR: SISTEMA x FÍSICO =================
+           O Victor, 10/09/2026: "A ideia é que o app faça um confronto do que
+           existe no sistema e o que tem no fisico, faça uma comparação e retorne
+           indicadores. Quais tem diferença, quanto é, se ta no sistema ou nao."
+
+           SISTEMA = `catalogo_exp_itens` (a planilha do Datasul, colada na aba
+           Catálogo). FÍSICO = `exp_controle_itens` com status `na_expedicao` --
+           item já retirado saiu da expedição e não é estoque presente. -->
+      <div id="expConferirAba" class="prog-aba" style="display:none;">
+        <div class="stat-cards">
+          <div class="stat-card">
+            <div class="stat-icone azul">⚖️</div>
+            <div class="stat-texto">
+              <div class="stat-rotulo">Itens confrontados</div>
+              <div class="stat-valor" id="conf-total">-</div>
+              <div class="stat-nota">num lado ou nos dois</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icone roxo">≠</div>
+            <div class="stat-texto">
+              <div class="stat-rotulo">Com diferença</div>
+              <div class="stat-valor" id="conf-diferenca">-</div>
+              <div class="stat-nota">está nos dois, com saldo diferente</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icone roxo">📄</div>
+            <div class="stat-texto">
+              <div class="stat-rotulo">Só no sistema</div>
+              <div class="stat-valor" id="conf-so-sistema">-</div>
+              <div class="stat-nota">o sistema tem, ninguém registrou</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icone roxo">📦</div>
+            <div class="stat-texto">
+              <div class="stat-rotulo">Só no físico</div>
+              <div class="stat-valor" id="conf-so-fisico">-</div>
+              <div class="stat-nota">está guardado, não está no sistema</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icone verde">✓</div>
+            <div class="stat-texto">
+              <div class="stat-rotulo">Conferem</div>
+              <div class="stat-valor" id="conf-ok">-</div>
+              <div class="stat-nota">mesmo saldo nos dois</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="cfg-barra">
+            <input type="text" id="confBusca" placeholder="Buscar por item ou descrição..."
+                   style="flex:1; min-width:200px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+            <!-- Nasce em "só divergências" de propósito: o catálogo do sistema tem o
+                 depósito INTEIRO (milhares de linhas numa unidade cheia), e abrir
+                 mostrando tudo enterraria a divergência no meio do que está certo. -->
+            <select id="confFiltroSituacao" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px; background:var(--panel); color:var(--ink);">
+              <option value="divergentes">Só divergências</option>
+              <option value="">Tudo</option>
+              <option value="diferenca">Com diferença</option>
+              <option value="so_sistema">Só no sistema</option>
+              <option value="so_fisico">Só no físico</option>
+              <option value="ok">Conferem</option>
+            </select>
+            <button class="btn" id="confRecarregar">Recarregar</button>
+            <span class="status-msg" id="confMsg"></span>
+            <span class="status-msg" id="confContagem" style="margin-left:auto;"></span>
+          </div>
+          <div class="scroll-hint">Arraste para o lado para ver todas as colunas →</div>
+          <div class="scroll-area">
+            <table>
+              <thead>
+                <tr>
+                  <th>Item</th><th>Descrição</th><th>UM</th>
+                  <th>Sistema</th><th>Físico</th><th>Diferença</th>
+                  <th>Situação</th><th>Onde está</th>
+                </tr>
+              </thead>
+              <tbody id="confCorpo"></tbody>
+            </table>
+          </div>
+          <div class="empty-msg" id="confVazio" style="display:none;"></div>
+          <div class="cfg-nota">
+            <b>Sistema</b> é o Catálogo EXP desta unidade (a planilha do Datasul, colada
+            na aba Catálogo) e <b>Físico</b> é o que está registrado na expedição, somado
+            por item. Item já retirado <b>não</b> conta como físico — ele saiu.
+            A conferência é <b>por item, somando todos os lotes e endereços</b>: o mesmo
+            código aparece em vários dos dois lados, e comparar linha a linha acusaria
+            diferença onde só há material espalhado.
+          </div>
         </div>
       </div>
     </div>
