@@ -1178,6 +1178,15 @@ function linhasFiltradasExpControle() {
   return linhas;
 }
 
+// Item que já saiu p/ carregamento não entra em "marcar todos" nem sai de
+// novo na impressora -- Robson, 10/09/2026: "itens que ja carregou bloqueie
+// para impressao". Já foi retirado fisicamente; reimprimir a etiqueta dele
+// não faz sentido (o material não está mais na expedição pra colar nada) e
+// só confundiria quem conferisse a pilha de folhas depois.
+function linhasImprimiveisExpControle() {
+  return linhasFiltradasExpControle().filter(l => l.status !== 'retirado');
+}
+
 // Conta pedidos DISTINTOS ainda na expedição (não retirados) -- um pedido
 // vira várias linhas (uma por item), então contar linhas contaria o mesmo
 // pedido várias vezes. Respeita a busca (#expCtrlBusca) igual à tabela,
@@ -1203,7 +1212,7 @@ function contarPedidosNaExpedicao(linhas) {
 // isso ela apareceria vazia com itens marcados na lista, e o proximo clique
 // pareceria "marcar tudo" quando na verdade limpa.
 function atualizarSelecaoExpControle() {
-  const naBusca = linhasFiltradasExpControle();
+  const naBusca = linhasImprimiveisExpControle();
   const marcadosNaBusca = naBusca.filter(l => expCtrlSelecionadas.has(String(l.id))).length;
 
   const botao = document.getElementById('expCtrlImprimirBtn');
@@ -1233,14 +1242,23 @@ function renderExpControle(erroCarregamento) {
   }
 
   // Tira da selecao o que nao esta mais nesta tela: registro excluido, troca
-  // de unidade (a lista e recarregada) e troca de setor (Controle EXP <->
-  // Deposito Benchmark). Sem isso, marcar na Benchmark e voltar pro EXP
-  // imprimiria item do outro deposito. A BUSCA nao poda nada -- filtrar e
-  // desfiltrar tem de devolver o que estava marcado.
-  const idsDaTela = new Set(linhasDoSetorAtual().map(l => String(l.id)));
+  // de unidade (a lista e recarregada), troca de setor (Controle EXP <->
+  // Deposito Benchmark) e item que acabou de sair p/ carregamento (nao
+  // imprime mais, ver linhasImprimiveisExpControle()). Sem isso, marcar na
+  // Benchmark e voltar pro EXP imprimiria item do outro deposito, ou
+  // confirmar a saida de um item marcado o deixaria "preso" selecionado
+  // sem nunca poder imprimir. A BUSCA nao poda nada -- filtrar e desfiltrar
+  // tem de devolver o que estava marcado.
+  const idsDaTela = new Set(linhasDoSetorAtual().filter(l => l.status !== 'retirado').map(l => String(l.id)));
   expCtrlSelecionadas.forEach(id => { if (!idsDaTela.has(id)) expCtrlSelecionadas.delete(id); });
 
-  const linhas = linhasFiltradasExpControle();
+  // Só o que ainda está fisicamente na expedição -- Robson, 10/09/2026: "os
+  // itens marcado como saida deixe só nessa aba" / "só quero na aba entrada
+  // o que realmente tem lá no físico". Quem já saiu tem histórico completo
+  // (pedido, item, quantidade, local, quem retirou, desfazer) na aba Saída/
+  // Conferência -- renderHistoricoRetiradas() -- então sair daqui não perde
+  // registro nenhum, só limpa a lista do que precisa ser conferido agora.
+  const linhas = linhasImprimiveisExpControle();
   const totalPedidos = contarPedidosNaExpedicao(linhas);
   document.getElementById('expCtrlPedidosCount').textContent =
     `${totalPedidos} pedido${totalPedidos === 1 ? '' : 's'} na expedição`;
@@ -1260,7 +1278,8 @@ function renderExpControle(erroCarregamento) {
     return `
     <tr${retirado ? ' style="opacity:0.6;"' : ''}>
       <td><input type="checkbox" class="expctrl-marcar" data-id="${escapeHtml(l.id)}"
-                   ${expCtrlSelecionadas.has(String(l.id)) ? 'checked' : ''}
+                   ${!retirado && expCtrlSelecionadas.has(String(l.id)) ? 'checked' : ''}
+                   ${retirado ? 'disabled title="Já saiu para carregamento -- não imprime de novo"' : ''}
                    aria-label="Marcar este item para imprimir"></td>
       <td class="loc"><input type="text" class="expctrl-loc-input" data-id="${escapeHtml(l.id)}"
              value="${escapeHtml(l.localizacao || '')}" placeholder="—"
@@ -1386,7 +1405,7 @@ document.getElementById('expCtrlBody').addEventListener('change', (e) => {
 // "Marcar todos" vale pra tudo o que esta NA BUSCA, e nao so pro trecho
 // visivel da rolagem -- e o mesmo criterio que o Imprimir sempre usou.
 document.getElementById('expCtrlMarcarTodos').addEventListener('change', (e) => {
-  const naBusca = linhasFiltradasExpControle();
+  const naBusca = linhasImprimiveisExpControle();
   if (e.target.checked) naBusca.forEach(l => expCtrlSelecionadas.add(String(l.id)));
   else naBusca.forEach(l => expCtrlSelecionadas.delete(String(l.id)));
   renderExpControle(null);
@@ -1835,7 +1854,7 @@ const EXP_EXPORT_CABECALHO = ['Localização', 'Item', 'Descrição', 'UM', 'Nº
 // marcado que a busca escondeu nao sai na folha, senao a folha traria
 // item que a pessoa nao esta vendo na tela.
 function linhasParaImprimirExpControle() {
-  const linhas = linhasFiltradasExpControle();
+  const linhas = linhasImprimiveisExpControle();
   if (!expCtrlSelecionadas.size) return linhas;
   return linhas.filter(l => expCtrlSelecionadas.has(String(l.id)));
 }
