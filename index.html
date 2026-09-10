@@ -868,12 +868,41 @@
           <div class="stat-nota">acesso total</div>
         </div>
       </div>
+      <div class="stat-card">
+        <div class="stat-icone azul">🔎</div>
+        <div class="stat-texto">
+          <div class="stat-rotulo">Consultores</div>
+          <div class="stat-valor" id="cfg-consultores">-</div>
+          <div class="stat-nota">só consultam</div>
+        </div>
+      </div>
     </div>
 
     <div class="panel">
       <div class="cfg-barra">
+        <!-- FILTROS. Antes não existia nenhum: só os títulos das colunas, que
+             pareciam clicáveis por causa do ordenador global (hoje recortado pro
+             #dataTable). Quem administra oito unidades precisa achar UMA pessoa
+             na lista, e rolar não é achar. -->
+        <input type="text" id="cfgBusca" placeholder="Buscar por nome ou e-mail..."
+               style="flex:1; min-width:180px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+        <select id="cfgFiltroStatus" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px; background:var(--panel); color:var(--ink);">
+          <option value="">Status: todos</option>
+          <option value="ativo">Ativos</option>
+          <option value="pendente">Aguardando aprovação</option>
+        </select>
+        <!-- Preenchido por js/configuracoes.js a partir de PERFIS e UNIDADES: uma
+             lista escrita à mão aqui sairia de sincronia no dia em que um perfil
+             ou uma unidade entrasse. -->
+        <select id="cfgFiltroPerfil" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px; background:var(--panel); color:var(--ink);"></select>
+        <select id="cfgFiltroUnidade" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px; background:var(--panel); color:var(--ink);"></select>
+        <button class="btn" id="cfgLimparFiltros">Limpar filtros</button>
         <button class="btn" id="cfgRecarregar">Recarregar lista</button>
         <span class="status-msg" id="cfgMsg"></span>
+        <!-- Os cards contam TODO mundo; esta linha diz quantos o filtro deixou
+             na tela. Sem ela, filtrar e ver 2 linhas com o card dizendo 40
+             parece dado errado. -->
+        <span class="status-msg" id="cfgContagem" style="margin-left:auto;"></span>
       </div>
       <div class="scroll-hint">Arraste para o lado para ver todas as colunas →</div>
       <div class="scroll-area">
@@ -890,6 +919,9 @@
           <tbody id="cfgCorpo"></tbody>
         </table>
       </div>
+        <div class="empty-msg" id="cfgVazio" style="display:none;">
+          Nenhum usuário bate com os filtros.
+        </div>
     </div>
 
     <div class="req-secao">Configuração por unidade</div>
