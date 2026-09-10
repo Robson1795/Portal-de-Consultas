@@ -1609,6 +1609,122 @@ outro texto que a planilha tiver. O botão "Aplicar filtros" continua
 funcionando (ainda é ele que aplica UM, Padrão e as caixas de status), só
 deixou de ser obrigatório para a Localização.
 
+## Depósito Benchmark vira saldo simples (10/09/2026)
+
+Até aqui, "Depósito Benchmark" era o **mesmo modelo do Controle EXP
+Acessórios**: mesma tabela (`exp_controle_itens`), mesmo fluxo de
+Entrada/Saída-Conferência com pedido, etiqueta e status — filtrado pela
+coluna `setor` (ver `sql/fase18-deposito-benchmark.sql`). O Robson, vendo a
+tela de "Atualizar estoques em lote" (que já tem Almoxarifado, SESMT,
+Catálogo EXP e Aço) com uma planilha de saldo do Benchmark pronta pra
+colar: *"deposito benchmark quero usar por aqui, quero que mude a estrutura
+igual como é do almoxarifado"*.
+
+Perguntado se a aba antiga (Entrada/Saída/Catálogo do Benchmark, em
+Programação) deveria sair ou conviver com a nova, a resposta foi **tirar a
+antiga** — não tinha nenhum pedido registrado nela.
+
+**Agora Benchmark é o terceiro depósito**, no mesmo modelo do SESMT
+(09/09/2026): item + localização + quantidade, substituído inteiro ao colar
+planilha nova, mesma tela de Consulta de Itens.
+
+- `DEPOSITOS.benchmark` em `js/estoque.js`, ao lado de `alm`/`sesmt`.
+- `PAGINAS.expbenchmark` (`js/navegacao.js`) passou a apontar pro elemento
+  `estoqueContent` (era `expAcessoriosContent`) — o **id da página continua
+  `expbenchmark`** de propósito, pra não mexer nas listas de `PERFIS`.
+  `mostrarPagina()` ganhou `PAGINA_PARA_DEPOSITO` (`estoque`→`alm`,
+  `sesmt`→`sesmt`, `expbenchmark`→`benchmark`) e `expbenchmark` **saiu** do
+  bloco que trocava `setorExpAtual` — não é mais a mesma tela do Controle
+  EXP Acessórios.
+- Aba **Benchmark** nova em "Atualizar estoques em lote" (`index.html` +
+  `js/configuracoes.js`): mesmas colunas do Almoxarifado/SESMT (Unidade,
+  Item, Descrição, UM, Localização, Quantidade), substitui por
+  `(unidade, deposito='benchmark')`.
+- `sql/fase29-benchmark-deposito.sql` troca a restrição de `deposito` em
+  `estoque`/`contagem_fisica`/`atribuicoes_corredor` (criada no fase23, só
+  aceitava `'alm'`/`'sesmt'`) pra aceitar `'benchmark'` também. Coluna,
+  índice e chave primária já existiam desde o fase23 — não precisou de mais
+  nada estrutural.
+
+**O código antigo (`setorExpAtual === 'benchmark'`) fica no histórico** em
+`js/programacao.js`, comentado como obsoleto: nada no menu grava mais
+`'benchmark'` ali, então esse caminho nunca mais roda sozinho. Mesmo
+princípio já registrado sobre o `sql/fase26-exp-em-lote.sql` do Victor:
+função/caminho que sobra é pior que código morto só se alguém ainda o
+chamar sem querer — aqui ninguém mais chama. Remover de vez é decisão pra
+tomar separada, se confirmar que não faz falta nenhuma.
+
+**A senha por unidade saiu do Benchmark** (achada só ao mesclar com o "Tour
+guiado" logo abaixo, que trouxe pra dentro deste arquivo o trecho de
+`js/navegacao.js` com o "gate" de senha — antes vivia numa parte do arquivo
+que eu ainda não tinha lido nesta sessão). Entrar em "Controle EXP
+Acessórios" **ou** "Depósito Benchmark" pedia a mesma senha por unidade
+(`abrirGateExp`, `sql/fase9-senha-exp.sql`) antes de abrir a tela — fazia
+sentido proteger o registro de pedido/etiqueta do modelo antigo, mas o
+Almoxarifado e o SESMT nunca pediram senha nenhuma para o mesmo tipo de
+tela. Perguntado, o Robson confirmou tirar a senha do Benchmark:
+
+- O clique no menu ("🏭 Depósito Benchmark") não abre mais `abrirGateExp` —
+  vai direto para `mostrarPagina('expbenchmark')`, igual a `estoque`/`sesmt`.
+- Trocar de unidade pelo seletor do topo estando no Benchmark também não
+  reabre o gate — antes, o `if` que decidia isso incluía `'expbenchmark'`
+  ao lado de `'expacessorios'`; sem tirar dali, trocar de unidade pelo
+  seletor pediria senha mesmo depois de entrar sem ela, uma inconsistência
+  dentro da própria tela.
+- `Controle EXP Acessórios` continua pedindo a senha normalmente — só o
+  Benchmark saiu do gate.
+- A permissão de verdade continua sendo o RLS por unidade/perfil
+  (`pode_atualizar_estoque`), igual ao Almoxarifado/SESMT — a senha nunca
+  foi a proteção real, só um atrito a mais que deixou de fazer sentido
+  quando a tela virou saldo simples.
+
+Conferido no navegador (mocks de `sb.from`/`sb.rpc`, clique real no item do
+menu — não chamada direta a `mostrarPagina`): o menu mostra "🏭 Depósito
+Benchmark" pros perfis certos (Estoque ALM e Admin, não Consultor — igual
+ao SESMT); clicar nele abre a tela direto, sem o modal de senha, com crachá
+"🏭 Depósito Benchmark" e `depositoAtual = 'benchmark'`; clicar em Controle
+EXP Acessórios ainda abre o modal de senha, pedindo a unidade certa; trocar
+de unidade pelo seletor do topo estando no Benchmark também não reabre o
+modal; Controle EXP Acessórios continua intacto (`setorExpAtual` fica
+`'exp'`, tela própria); colar uma planilha na aba Benchmark do lote monta
+blocos com `deposito: 'benchmark'`, e Almoxarifado/SESMT continuam com o
+depósito certo (sem regressão). Zero erro de console.
+
+### Referência e Lote, só no Benchmark (10/09/2026)
+
+O Robson, com a planilha real na mão: *"benchmark é um pouco diferente tem
+referencia e lote"*. O desenho acima tratou o Benchmark como saldo idêntico
+ao Almoxarifado/SESMT (item, descrição, UM, localização, quantidade) — a
+planilha real tem duas colunas a mais.
+
+- `estoque` ganhou `referencia` e `lote`, **nullable** — mesmo princípio do
+  `deposito`: quem não usa (Almoxarifado, SESMT) fica em branco, sem mudar
+  nada pra quem não pediu.
+- `prepararLote()` reconhece as duas colunas nas **três** abas (Almoxarifado,
+  SESMT, Benchmark), não só na do Benchmark — coluna que a planilha não tem
+  simplesmente não aparece no mapa, então não muda nada pra quem não a usa.
+- **As colunas Referência e Lote só aparecem na tabela quando
+  `depositoAtual === 'benchmark'`** (`mostraColunasBenchmark()`) — mesmo
+  padrão do Estoque Seguro/Etiqueta da Trading: mostrar `—` em toda linha do
+  Almoxarifado não ajudaria ninguém.
+
+⚠️ **Bug achado ao mexer na função de novo, antes de qualquer um colar a
+planilha de verdade**: `substituir_estoque()` tem uma validação própria de
+depósito, separada da restrição da coluna —
+`if dep not in ('alm', 'sesmt') then raise exception`. O `fase29` corrigiu a
+restrição da COLUNA (`estoque_deposito_valido`), mas essa validação de
+dentro da função é outro lugar, com a própria lista — ficou pra trás. Sem o
+`fase30`, colar planilha no Benchmark falharia com "Depósito desconhecido:
+benchmark. Use alm ou sesmt.", mesmo com a restrição da coluna já certa.
+`sql/fase30-benchmark-referencia-lote.sql` corrige as duas coisas juntas
+(as colunas novas e a validação).
+
+Conferido no navegador: `prepararLote()` com a planilha real (Item,
+Descrição, UM, Localização, Referência, Lote, Quantidade) monta os itens com
+`referencia`/`lote` certos, inclusive linha com Lote vazio (`null`, não
+string vazia); a tabela mostra as duas colunas com `depositoAtual =
+'benchmark'` e as esconde com `'alm'`. Zero erro de console.
+
 ## 17. Tour guiado do primeiro acesso (10/09/2026)
 
 O Victor: *"Primeiro login fazer um mini tutorial ou um 'tour' pelo portal.

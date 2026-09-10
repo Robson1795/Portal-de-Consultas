@@ -106,6 +106,9 @@ function render(rows, intervalo) {
   // unidade mesmo quando o filtro não achou nada.
   atualizarBotaoEtiquetas();
 
+  document.querySelector('.col-referencia').style.display = mostraColunasBenchmark() ? 'table-cell' : 'none';
+  document.querySelector('.col-lote').style.display = mostraColunasBenchmark() ? 'table-cell' : 'none';
+
   // O card e a paginacao mostram o total FILTRADO, nao o da unidade toda.
   const total = rows.length;
   document.getElementById('stat-count').textContent = total.toLocaleString('pt-BR');
@@ -156,6 +159,8 @@ function render(rows, intervalo) {
           return aviso + edicao;
         })()}
       </td>
+      <td class="col-referencia" style="display:${mostraColunasBenchmark() ? 'table-cell' : 'none'};">${escapeHtml(r.referencia || '—')}</td>
+      <td class="col-lote" style="display:${mostraColunasBenchmark() ? 'table-cell' : 'none'};">${escapeHtml(r.lote || '—')}</td>
       <td class="col-padrao" style="text-align:center;">${fichaBoxMap.has(r.item)
         ? `<button class="padrao-btn" data-item="${escapeHtml(r.item)}" data-qtd="${escapeHtml(r.quantidade)}" title="Ver padrão de caixas esperado">📦</button>`
         : (podeEditarEmbalagem() ? `<button class="avulso-btn" data-item="${escapeHtml(r.item)}" title="Marcar como item avulso, sem padrão de caixa">AVULSO</button>` : '')}</td>
@@ -592,8 +597,14 @@ const UNIDADES = {
 // mesmo item no mesmo endereço do almoxarifado sobrescreveria a contagem do
 // EPI, e "Limpar tudo" levaria os dois. Ver sql/fase23-sesmt-deposito.sql.
 const DEPOSITOS = {
-  alm:   { rotulo: 'Almoxarifado', icone: '📦' },
-  sesmt: { rotulo: 'SESMT (EPI)',  icone: '⛑️' }
+  alm:       { rotulo: 'Almoxarifado',       icone: '📦' },
+  sesmt:     { rotulo: 'SESMT (EPI)',        icone: '⛑️' },
+  // Antes era o setor 'benchmark' de exp_controle_itens (pedido/etiqueta,
+  // mesmo modelo do Controle EXP) -- virou saldo simples igual ao
+  // Almoxarifado/SESMT em 10/09/2026 (Robson: "quero que mude a estrutura
+  // igual como é do almoxarifado"). Ver PAGINAS.expbenchmark em
+  // js/navegacao.js.
+  benchmark: { rotulo: 'Depósito Benchmark', icone: '🏭' }
 };
 
 // Depósito da tela aberta agora. Trocado por js/navegacao.js ao abrir
@@ -821,6 +832,14 @@ function podeVerEstoqueMinimo() {
 // template da linha, os dois usam esta função pra decidir o mesmo jeito.
 function mostraColunaEstmin() {
   return !modoContagemAtivo && (ehTrading() || podeVerEstoqueMinimo());
+}
+
+// Referência e Lote só existem na planilha do Depósito Benchmark (Robson,
+// 10/09/2026: "benchmark é um pouco diferente tem referencia e lote") --
+// Almoxarifado e SESMT nunca preenchem essas duas colunas, então mostrá-las
+// lá seria só um "—" a mais em toda linha, sem servir pra nada.
+function mostraColunasBenchmark() {
+  return depositoAtual === 'benchmark';
 }
 
 async function salvarEstoqueMinimo(id, valorBruto, input) {

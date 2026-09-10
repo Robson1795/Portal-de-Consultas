@@ -245,6 +245,11 @@
             <th data-key="desc">Descrição <span class="arrow"></span></th>
             <th data-key="um">UM <span class="arrow"></span></th>
             <th data-key="loc">Localização <span class="arrow"></span></th>
+            <!-- Só aparecem no Depósito Benchmark -- ver mostraColunasBenchmark()
+                 em js/estoque.js. Os outros depósitos (Almoxarifado, SESMT) não
+                 usam Referência/Lote. -->
+            <th class="col-referencia" style="display:none;">Referência</th>
+            <th class="col-lote" style="display:none;">Lote</th>
             <th class="col-padrao">Padrão</th>
             <th data-key="qtd">Quantidade <span class="arrow"></span></th>
             <th class="col-estmin" style="display:none;">Estoque Seguro</th>
@@ -915,6 +920,7 @@
         <div id="loteAbas" style="display:flex; gap:8px; flex-wrap:wrap;">
           <button class="btn btn-primary" data-lote-aba="alm">Almoxarifado</button>
           <button class="btn" data-lote-aba="sesmt">SESMT</button>
+          <button class="btn" data-lote-aba="benchmark">Benchmark</button>
           <button class="btn" data-lote-aba="exp">Catálogo EXP</button>
           <button class="btn" data-lote-aba="aco">Aço (bobinas)</button>
         </div>

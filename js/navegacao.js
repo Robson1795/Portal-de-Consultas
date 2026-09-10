@@ -38,11 +38,16 @@ const PAGINAS = {
   // -- não depende das planilhas da Programação, o item pode ser digitado
   // direto no app (ver "Entrada" em js/programacao.js).
   expacessorios: { rotulo: 'Controle EXP Acessórios', icone: '🔄', elemento: 'expAcessoriosContent' },
-  // Mesma tela e mesma tabela do Controle EXP Acessórios (exp_controle_itens),
-  // só filtrada pela coluna `setor` -- ver setorExpAtual em js/programacao.js
-  // e o comentário em sql/fase18-deposito-benchmark.sql sobre por que não é
-  // uma tabela própria.
-  expbenchmark: { rotulo: 'Depósito Benchmark', icone: '🏭', elemento: 'expAcessoriosContent' },
+  // Depósito Benchmark usava a MESMA tela do Controle EXP Acessórios
+  // (exp_controle_itens, filtrada por `setor` -- ver sql/fase18-deposito-
+  // benchmark.sql), com pedido/etiqueta/status. O Robson pediu pra trocar
+  // isso por saldo simples, igual ao Almoxarifado/SESMT (10/09/2026): "quero
+  // que mude a estrutura igual como é do almoxarifado". Agora usa a MESMA
+  // tela de Consulta de Itens, só que recortada pelo depósito 'benchmark'
+  // em vez de 'alm' -- ver DEPOSITOS em js/estoque.js, mesmo padrão do
+  // Depósito SESMT logo acima. O `id` da página continua 'expbenchmark' de
+  // propósito, pra não precisar mexer nas listas de PERFIS abaixo.
+  expbenchmark: { rotulo: 'Depósito Benchmark', icone: '🏭', elemento: 'estoqueContent' },
   // Demanda dos pedidos x saldo do almoxarifado: o que falta comprar.
   // Só lê o estoque -- não mexe em saldo nenhum (ver js/analise.js).
   analise: { rotulo: 'Análise de Compras', icone: '📊', elemento: 'analiseComprasContent' },
@@ -110,19 +115,21 @@ function mostrarPagina(id) {
   marcarItemAtivo();
   fecharMenuNoCelular();
 
-  // O SESMT reusa a tela de Consulta de Itens, e o que muda entre as duas
-  // é o DEPÓSITO -- não a unidade. Até 09/09/2026 esta página trocava
+  // SESMT e Benchmark reusam a tela de Consulta de Itens, e o que muda entre
+  // as três é o DEPÓSITO -- não a unidade. Até 09/09/2026 o SESMT trocava
   // `unidadeAtual` por um código falso ('SESMT') e escondia o seletor do
   // topo: existia um estoque de EPI para a empresa inteira. Agora a unidade
   // continua a mesma (o seletor segue funcionando, para admin) e só o
-  // depósito muda. Ver DEPOSITOS em js/estoque.js.
-  if (id === 'estoque' || id === 'sesmt') {
-    depositoAtual = (id === 'sesmt') ? 'sesmt' : 'alm';
+  // depósito muda. Benchmark seguiu o mesmo caminho em 10/09/2026 (ver
+  // comentário em PAGINAS.expbenchmark). Ver DEPOSITOS em js/estoque.js.
+  const PAGINA_PARA_DEPOSITO = { estoque: 'alm', sesmt: 'sesmt', expbenchmark: 'benchmark' };
+  if (PAGINA_PARA_DEPOSITO[id]) {
+    depositoAtual = PAGINA_PARA_DEPOSITO[id];
     montarCabecalho();   // redesenha o crachá do depósito ao lado da unidade
   }
 
   // Cada pagina carrega os proprios dados ao ser aberta.
-  if (id === 'estoque' || id === 'sesmt') { pararTempoRealBobinas(); loadData(); }
+  if (PAGINA_PARA_DEPOSITO[id]) { pararTempoRealBobinas(); loadData(); }
   if (id === 'bobinas') { abrirTelaBobinas(); }
   if (id === 'requisicao') { carregarRequisicao(); }
   if (id === 'programacao') { carregarProgramacao(); }
@@ -132,11 +139,12 @@ function mostrarPagina(id) {
   // demora mais que o resto), a Descrição/UM saía em branco mesmo pro item
   // que estava certinho no Catálogo. Ver carregarCatalogoExp() e
   // buscarDescricoesItens() em js/programacao.js.
-  // 'expacessorios' e 'expbenchmark' sao a MESMA tela (mesmo elemento, mesma
-  // tabela exp_controle_itens) -- so muda setorExpAtual, que filtra o que
-  // aparece em cada uma. Ver comentario em PAGINAS.expbenchmark acima.
-  if (id === 'expacessorios' || id === 'expbenchmark') {
-    setorExpAtual = (id === 'expbenchmark') ? 'benchmark' : 'exp';
+  //
+  // 'expbenchmark' NÃO entra mais aqui (10/09/2026): parou de ser a mesma
+  // tela do Controle EXP Acessórios, virou a mesma tela de Consulta de
+  // Itens (tratada acima, junto com estoque/sesmt).
+  if (id === 'expacessorios') {
+    setorExpAtual = 'exp';
     atualizarTituloSetorExp();
     trocarAbaExpAcessorios('entrada');
     carregarCatalogoExp().then(carregarProgramacao);
@@ -151,7 +159,13 @@ document.getElementById('sidebarNav').addEventListener('click', (e) => {
   // Controle EXP Acessórios não abre direto: primeiro escolhe a unidade e
   // confere a senha dela (abrirGateExp, mais abaixo). Cada unidade só
   // enxerga o próprio estoque -- nunca mistura com as outras.
-  if (item.dataset.pagina === 'expacessorios' || item.dataset.pagina === 'expbenchmark') {
+  //
+  // Depósito Benchmark NÃO entra mais aqui (10/09/2026): virou a mesma tela
+  // de Consulta de Itens (Almoxarifado/SESMT), que nunca pediu senha própria
+  // -- a senha existia para proteger o registro de pedido/etiqueta do
+  // modelo antigo, que não existe mais nesta tela. A permissão de verdade
+  // continua sendo o RLS por unidade/perfil, igual ao Almoxarifado/SESMT.
+  if (item.dataset.pagina === 'expacessorios') {
     abrirGateExp(item.dataset.pagina);
     return;
   }
@@ -171,8 +185,11 @@ function marcarUnidadeExpDesbloqueada(cod) {
   try { sessionStorage.setItem('exp_ok_' + cod, '1'); } catch (err) { /* sem sessionStorage, so pede de novo */ }
 }
 
-// Qual das duas telas abrir depois da senha confirmada -- guardado aqui
-// porque o clique no botão "Entrar" do modal não sabe de onde veio.
+// Qual página abrir depois da senha confirmada -- guardado aqui porque o
+// clique no botão "Entrar" do modal não sabe de onde veio. Só
+// 'expacessorios' usa o gate desde 10/09/2026 (Depósito Benchmark deixou de
+// pedir senha, ver PAGINAS.expbenchmark), mas o parâmetro continua genérico
+// caso outra página precise um dia.
 let gateAlvoPagina = 'expacessorios';
 
 function abrirGateExp(alvoPagina) {
@@ -323,10 +340,11 @@ function montarCabecalho() {
       ).join('')}</select>` + cracha;
     document.getElementById('unitSelect').addEventListener('change', (e) => {
       // Trocar a unidade pelo seletor do topo enquanto está no Controle EXP
-      // Acessórios ou no Depósito Benchmark não pode pular a senha daquela
-      // unidade -- senão bastava trocar aqui em vez de usar o botão do menu
-      // pra escapar da senha.
-      if (paginaAtual === 'expacessorios' || paginaAtual === 'expbenchmark') {
+      // Acessórios não pode pular a senha daquela unidade -- senão bastava
+      // trocar aqui em vez de usar o botão do menu pra escapar da senha.
+      // Depósito Benchmark NÃO entra mais aqui (10/09/2026): não tem senha
+      // pra pular, igual ao Almoxarifado/SESMT logo abaixo.
+      if (paginaAtual === 'expacessorios') {
         const escolhida = e.target.value;
         e.target.value = unidadeAtual; // volta o seletor pra unidade atual até confirmar a senha
         abrirGateExp(paginaAtual); // popula as opções e reseta o modal, mantendo a mesma tela de destino

@@ -22,7 +22,7 @@ const TOUR_EXPLICACAO = {
   requisicao: 'Monta o pedido de material e abre o e-mail já preenchido para o ALM da unidade lançar no CD1406. <b>Não abre requisição no Datasul</b> — quem lança é o ALM.',
   programacao: 'Cruza as duas planilhas do PCP pelo nº do pedido e ordena os itens pelo caminhão que sai primeiro, não pela ordem em que a planilha foi digitada.',
   expacessorios: 'Entrada e saída dos itens já separados na expedição: onde cada um foi guardado, quem retirou e quando. É daqui que sai a folha que vai colada no pallet.',
-  expbenchmark: 'A mesma tela do Controle EXP, para o material guardado no espaço do <b>Benchmark</b> — separado para o inventário não misturar os dois lugares.',
+  expbenchmark: 'A mesma tela da Consulta de Itens, mas mostrando o <b>Depósito Benchmark</b> desta unidade — separado para o inventário não misturar os dois lugares.',
   analise: 'Somando todos os pedidos que estão entrando, o que não tem saldo e quanto falta comprar. Indica também as outras unidades que têm o item, para pedir transferência em vez de comprar.',
   config: 'Aprovar contas, definir perfis, cadastrar os e-mails e as senhas de cada unidade, e atualizar o estoque de todas as unidades de uma vez.'
 };
