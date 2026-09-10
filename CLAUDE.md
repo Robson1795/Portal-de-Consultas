@@ -2004,3 +2004,35 @@ sabemos como funciona."* `iniciarTourSePrimeiraVez()` sai na hora para
 O botão **🎓** continua abrindo para eles, e não é cortesia: é por ele que se
 confere uma mudança no tour sem ter de limpar o `localStorage` — foi como
 estes 7 passos novos foram testados.
+
+## Data da última atualização, embaixo de cada aba do lote (10/09/2026)
+
+O Robson: *"coloque a data de atualização de cada aba dessa, pode ser embaixo
+em um tamanho pequeno"* — as cinco abas de "Atualizar estoques em lote"
+(Almoxarifado, SESMT, Benchmark, Catálogo EXP, Aço).
+
+`carregarDatasLote()` (`js/configuracoes.js`) faz **uma consulta rasa por
+fonte** — só a coluna `atualizado_em`, ordenada e cortada em 1 linha — e
+escreve o resultado num `<span class="lote-aba-data">` logo abaixo do botão
+de cada aba:
+
+- **Almoxarifado/SESMT/Benchmark** são a MESMA tabela (`estoque`), recortada
+  por `deposito` — a mesma coluna que separa os três em toda essa aba desde
+  o SESMT (09/09) e o Benchmark (10/09).
+- **Catálogo EXP** lê `catalogo_exp_itens`, **Aço** lê `bobinas_aco` — cada
+  uma sem recorte de depósito, porque essas duas tabelas são só uma coisa
+  cada.
+- **É a data mais recente entre TODAS as unidades**, não só a que está
+  selecionada no topo: esta seção não é presa a uma unidade — a planilha
+  colada pode trazer várias de uma vez —, então "atualizado" aqui quer dizer
+  "a última vez que alguém colou uma planilha nesta aba, em qualquer
+  unidade".
+- **Chamada de novo assim que uma substituição termina** (fim de
+  `aplicarLote()`), e não só ao abrir a página — a aba que acabou de gravar
+  mostra a hora nova na hora, sem precisar recarregar.
+- Tabela sem nenhuma linha (ou erro de leitura) mostra "Nunca atualizado" ou
+  "—", nunca fica em branco sem dizer nada.
+
+Conferido no navegador com um mock por tabela (incluindo uma sem linha
+nenhuma, pra testar "Nunca atualizado"): as cinco datas saem certas, cada
+uma da fonte certa.
