@@ -84,7 +84,7 @@ async function carregarCentrosCusto() {
 document.getElementById('reqCentroCusto').addEventListener('input', (e) => {
   const cod = e.target.value.trim();
   const existe = centrosCusto.some(c => c.ativo && c.codigo === cod);
-  e.target.style.borderColor = (cod && !existe) ? '#d97706' : '';
+  e.target.style.borderColor = (cod && !existe) ? 'var(--aviso-borda)' : '';
 });
 
 // O catálogo (`itens_requisicao`) MAIS os itens do estoque da unidade. O
@@ -293,7 +293,7 @@ document.getElementById('reqItens').addEventListener('input', (e) => {
   linha.querySelector('.req-um').value  = info ? (info.um || '') : '';
   // Código fora da lista fica marcado em laranja e é recusado no envio:
   // requisição com item inexistente só gera retrabalho para o ALM.
-  e.target.style.borderColor = (codigo && !info) ? '#d97706' : '';
+  e.target.style.borderColor = (codigo && !info) ? 'var(--aviso-borda)' : '';
 });
 
 document.getElementById('reqItens').addEventListener('click', (e) => {

@@ -1,16 +1,190 @@
 /* Portal de Estoque Kingspan Isoeste
    Extraido do index.html na Fase 2a (03/09/2026), sem alteracao de conteudo. */
   :root {
-    --bg: #eef2f6;
+  /* PALETA CLARA. O tema escuro (mais abaixo) redefine estes MESMOS nomes --
+     nenhuma regra do arquivo repete cor fixa, então trocar de tema é trocar
+     valores em um lugar só.
+
+     Os nomes dizem o PAPEL, não a cor: `--ok-fundo`, e não `--verde-claro`.
+     No escuro o "verde claro" deixa de ser claro, e um nome de cor viraria
+     mentira. */
+  --bg: #eef2f6;
+  --panel: #ffffff;
+  --panel-2: #f7f9fb;          /* superfície levemente elevada */
+  --ink: #111111;
+  --muted: #5a6472;
+  --blue: #004894;
+  --blue-dark: #003368;
+  --blue-escuro-2: #001c3d;
+  /* Azul quando ele é o TEXTO, não o fundo. No claro é o mesmo azul da marca;
+     no escuro precisa clarear, senão desaparece no fundo escuro -- enquanto
+     `--blue` (fundo de botão) tem de ficar escuro para o texto branco em cima
+     continuar legível. Um token não serve para os dois papéis. */
+  --blue-texto: #003368;
+  /* Texto que fica SOBRE uma cor de destaque -- azul da marca, dourado do
+     avatar, verde/âmbar dos botões de ação. Branco nos DOIS temas, porque
+     todas essas cores de fundo são escuras nos dois. É token, e não `#fff`
+     cru, para a varredura de cores fixas não confundir com esquecimento. */
+  --sobre-acento: #ffffff;
+  --gold: #c7a679;
+  --border: #e2e6ec;
+  --border-forte: #dde6ee;
+  --row-alt: #f7f9fb;
+  --azul-fundo: #e8f0f9;
+  --azul-borda: #c9dcf0;
+  --roxo-fundo: #efe7fb;
+
+  /* Os três estados que a interface repete em toda tela: deu certo, deu
+     errado, cuidado. Fundo, borda e texto de cada um. */
+  /* Fundo de BOTÃO de ação, com texto branco em cima: precisa ser escuro o
+     bastante para 4,5:1. Os tons `-borda` são claros e não servem -- foi o
+     que deixava "OK, bate tudo" em 3,0:1 mesmo no tema claro. */
+  --ok-acao: #1d7a45;
+  --aviso-acao: #9a5a08;
+
+  --ok-fundo: #e2f6ea;
+  --ok-borda: #2f9e5c;
+  --ok-texto: #1d7a45;
+  --erro-fundo: #fee2e2;
+  --erro-borda: #b91c1c;
+  --erro-texto: #991b1b;
+  --aviso-fundo: #fef3c7;
+  --aviso-borda: #d97706;
+  --aviso-texto: #92400e;
+
+  /* Sombra como token: no escuro, sombra preta não aparece -- o que dá relevo
+     ali é a borda, então ela muda de valor junto com o resto. */
+  --sombra: 0 1px 3px rgba(0,0,0,.06);
+}
+/* ===================== TEMA ESCURO =====================
+   Só valores: nenhuma regra do arquivo é duplicada aqui. Se uma tela nova usar
+   os tokens, ela já nasce funcionando nos dois temas -- e se usar cor fixa,
+   aparece como mancha clara no escuro, que é o sinal de que passou reto.
+
+   Escolhas que não são só "inverter":
+
+   * O fundo não é preto (#000), é azul-cinza bem escuro. Preto puro com texto
+     branco cansa a vista em tela grande, e o portal é usado o dia todo.
+   * O azul da marca CLAREIA no escuro (#004894 -> #4d9bf0). O azul original é
+     escuro por natureza: sobre fundo escuro ele desaparece, e é a cor do
+     cabeçalho, dos botões e dos links.
+   * Os fundos de estado (ok/erro/aviso) deixam de ser pastéis e viram tons
+     escuros da mesma família, com o TEXTO clareando. Manter o pastel daria
+     caixa clara acesa no meio da tela escura.
+   * A sombra vira borda: sombra preta sobre fundo escuro não existe. */
+:root[data-tema="escuro"] {
+  --bg: #10161f;
+  --panel: #172230;
+  --panel-2: #1e2b3b;
+  --ink: #e8edf4;
+  --muted: #9aa7b8;
+  /* Escuro o bastante para o texto branco dos botões (contraste 5,6:1);
+     quem clareia é o --blue-texto, logo abaixo. */
+  --blue: #1f5fa8;
+  --blue-dark: #17456f;
+  --blue-escuro-2: #0d1c30;
+  --blue-texto: #7db8f5;
+  --sobre-acento: #ffffff;
+  --gold: #d7b98c;
+  --border: #2a3a4d;
+  --border-forte: #3a4c62;
+  --row-alt: #1b2735;
+  --azul-fundo: #1a2f47;
+  --azul-borda: #2f5680;
+  --roxo-fundo: #2a2340;
+
+  --ok-acao: #20734a;
+  --aviso-acao: #8f5a10;
+
+  --ok-fundo: #14301f;
+  --ok-borda: #3fae6b;
+  --ok-texto: #7ee0a4;
+  --erro-fundo: #3a1618;
+  --erro-borda: #e05c5c;
+  --erro-texto: #ff9d9d;
+  --aviso-fundo: #35270d;
+  --aviso-borda: #e0a33c;
+  --aviso-texto: #f3c877;
+
+  --sombra: 0 1px 3px rgba(0,0,0,.45);
+}
+
+/* Duas coisas que os tokens não alcançam: */
+
+/* 1. Os campos de formulário. O navegador desenha input, select e textarea com
+      fundo branco próprio quando a página não diz o contrário -- e `color-scheme`
+      é o jeito de avisar o navegador, que ajusta também a barra de rolagem, o
+      calendário do input date e o menu do select. */
+:root[data-tema="escuro"] { color-scheme: dark; }
+:root[data-tema="escuro"] input,
+:root[data-tema="escuro"] select,
+:root[data-tema="escuro"] textarea {
+  background: var(--panel-2);
+  color: var(--ink);
+  border-color: var(--border);
+}
+:root[data-tema="escuro"] input::placeholder,
+:root[data-tema="escuro"] textarea::placeholder { color: var(--muted); }
+
+/* 2. As imagens do portal são o logo em PNG com fundo claro embutido: no tema
+      escuro elas apareceriam como retângulo branco. Um leve escurecimento
+      resolve sem trocar o arquivo. Não vale para foto de item (ficha técnica),
+      que precisa ser vista como é -- daí o recorte por classe. */
+:root[data-tema="escuro"] .logo-topo,
+:root[data-tema="escuro"] .logo-login { filter: brightness(.92) contrast(1.05); }
+/* ===================== FIM DO TEMA ESCURO ===================== */
+
+/* ===================== IMPRESSAO SEMPRE CLARA =====================
+   Papel é branco nos dois temas. A Consulta de Itens e o Estoque de Aço
+   imprimem a PRÓPRIA página (`window.print()`, não uma aba nova), e as regras
+   de @media print usam `var(--ink)` e `var(--muted)`. No tema escuro `--ink` é
+   quase branco: a folha sairia com texto branco em papel branco -- ilegível, e
+   só se descobriria na impressora.
+
+   Então na mídia de impressão os tokens voltam aos valores claros, inclusive
+   com o tema escuro ligado. Vale para TODOS os tokens, não só os dois usados
+   hoje: qualquer regra de impressão que alguém escrever amanhã já nasce certa.
+
+   As folhas geradas em aba nova (etiqueta da Trading, ficha do Controle EXP)
+   não dependem disto -- são outro documento, sem o `data-tema` -- mas o
+   reset aqui não as prejudica. */
+@media print {
+  :root, :root[data-tema="escuro"] {
+    --bg: #ffffff;
     --panel: #ffffff;
-    --ink: #111111;
-    --muted: #5a6472;
-    --blue: #004894;
-    --blue-dark: #003368;
-    --gold: #c7a679;
-    --border: #e2e6ec;
-    --row-alt: #f7f9fb;
+    --panel-2: #ffffff;
+    --ink: #000000;
+    --muted: #444444;
+    --blue: #003368;
+    --blue-dark: #001c3d;
+    --blue-escuro-2: #001c3d;
+    --blue-texto: #003368;
+    --sobre-acento: #ffffff;
+    --gold: #8a6d3b;
+    --border: #999999;
+    --border-forte: #666666;
+    --row-alt: #ffffff;
+    --azul-fundo: #ffffff;
+    --azul-borda: #999999;
+    --roxo-fundo: #ffffff;
+    --ok-acao: #1d7a45;
+    --aviso-acao: #9a5a08;
+    --ok-fundo: #ffffff;
+    --ok-borda: #1d7a45;
+    --ok-texto: #14532d;
+    --erro-fundo: #ffffff;
+    --erro-borda: #991b1b;
+    --erro-texto: #7f1d1d;
+    --aviso-fundo: #ffffff;
+    --aviso-borda: #92400e;
+    --aviso-texto: #7c2d12;
+    --sombra: none;
   }
+  /* Fundo de estado vira branco acima: quem separa a informação no papel é o
+     texto e a borda, não a mancha de cor -- que sai cinza na impressora
+     preto e branco e só suja a folha. */
+}
+
   * { box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; }
   body {
@@ -34,7 +208,7 @@
     margin: 0 auto 20px;
     border-radius: 16px;
     padding: 22px 26px;
-    background: linear-gradient(120deg, var(--blue) 0%, var(--blue-dark) 55%, #001c3d 100%);
+    background: linear-gradient(120deg, var(--blue) 0%, var(--blue-dark) 55%, var(--blue-escuro-2) 100%);
     overflow: hidden;
     box-shadow: 0 8px 24px rgba(0,50,100,0.18);
   }
@@ -46,12 +220,12 @@
   }
   .hero-top { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; position: relative; z-index: 1; flex-wrap: wrap; }
   .logo-card {
-    background: white; border-radius: 10px; padding: 8px 14px;
+    background: var(--panel); border-radius: 10px; padding: 8px 14px;
     display: flex; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.12);
   }
   .logo-card img { height: 32px; width: auto; display: block; }
   .hero h1 {
-    color: #111111; background: white; display: inline-block; margin: 0;
+    color: var(--ink); background: var(--panel); display: inline-block; margin: 0;
     font-size: 22px; padding: 6px 14px; border-radius: 8px; position: relative; z-index: 1;
   }
   .hero .subtitle { color: rgba(255,255,255,0.85); font-size: 13.5px; margin-top: 10px; position: relative; z-index: 1; }
@@ -62,7 +236,7 @@
     font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s ease;
   }
   .unit-btn:hover { background: rgba(255,255,255,0.18); }
-  .unit-btn.active { background: white; color: var(--blue-dark); border-color: white; }
+  .unit-btn.active { background: var(--panel); color: var(--blue-texto); border-color: var(--panel); }
 
   .stats { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
   .stat-pill {
@@ -74,11 +248,11 @@
 
   .edit-toggle-row { display: flex; justify-content: flex-end; margin-bottom: 10px; }
   .btn {
-    padding: 9px 14px; border: 1px solid var(--border); background: white;
+    padding: 9px 14px; border: 1px solid var(--border); background: var(--panel);
     border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--ink); font-weight: 600;
   }
   .btn:hover { background: var(--row-alt); }
-  .btn-primary { background: var(--blue); color: white; border-color: var(--blue-dark); }
+  .btn-primary { background: var(--blue); color: var(--sobre-acento); border-color: var(--blue-dark); }
   .btn-primary:hover { background: var(--blue-dark); }
 
   .edit-panel {
@@ -86,7 +260,7 @@
     padding: 16px; margin-bottom: 16px; display: none;
   }
   .edit-panel.open { display: block; }
-  .edit-panel h3 { margin: 0 0 8px 0; font-size: 15px; color: var(--blue-dark); }
+  .edit-panel h3 { margin: 0 0 8px 0; font-size: 15px; color: var(--blue-texto); }
   .edit-panel p { font-size: 12.5px; color: var(--muted); margin: 4px 0 10px 0; }
   .edit-panel textarea {
     width: 100%; min-height: 180px; font-family: ui-monospace, Consolas, monospace;
@@ -94,13 +268,13 @@
   }
   .edit-actions { display: flex; gap: 10px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
   .pin-gate {
-    background: #fff8e6; border: 1px solid #f0ce7d; border-radius: 8px;
+    background: var(--aviso-fundo); border: 1px solid var(--aviso-borda); border-radius: 8px;
     padding: 14px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
   }
   .pin-gate input { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; width: 120px; }
   .status-msg { font-size: 12.5px; margin-left: 6px; }
-  .status-ok { color: var(--blue-dark); }
-  .status-err { color: #b3441c; }
+  .status-ok { color: var(--blue-texto); }
+  .status-err { color: var(--erro-texto); }
 
   .panel {
     background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
@@ -112,23 +286,23 @@
   }
   .controls input[type="text"] {
     flex: 1; min-width: 220px; padding: 10px 14px; border: 1px solid var(--border);
-    border-radius: 10px; font-size: 14px; outline: none; background: white; color: var(--ink);
+    border-radius: 10px; font-size: 14px; outline: none; background: var(--panel); color: var(--ink);
   }
   #filterCount {
-    background: var(--gold); color: white; border-radius: 50%; font-size: 10px; font-weight: 700;
+    background: var(--gold); color: var(--sobre-acento); border-radius: 50%; font-size: 10px; font-weight: 700;
     width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center;
     position: absolute; top: -6px; right: -6px;
   }
   table { width: 100%; min-width: 620px; border-collapse: collapse; font-size: 13.5px; }
   thead th {
-    background: var(--blue); color: white; text-align: left; padding: 12px;
+    background: var(--blue); color: var(--sobre-acento); text-align: left; padding: 12px;
     position: sticky; top: 0; cursor: pointer; user-select: none; white-space: nowrap; font-weight: 600;
   }
   thead th:hover { background: var(--blue-dark); }
   thead th .arrow { font-size: 10px; opacity: 0.9; margin-left: 4px; color: var(--gold); }
   tbody td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; color: var(--ink); }
   tbody tr:nth-child(even) { background: var(--row-alt); }
-  tbody tr:hover { background: #fbf3e7; }
+  tbody tr:hover { background: var(--aviso-fundo); }
   td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; }
   td.item { font-weight: 700; color: var(--ink); white-space: nowrap; }
   td.loc { white-space: nowrap; color: var(--muted); }
@@ -188,13 +362,13 @@
     border: none; background: var(--row-alt); border-radius: 6px;
     padding: 4px 8px; cursor: pointer; font-size: 15px; line-height: 1;
   }
-  .ficha-btn:hover { background: #dde6ee; }
+  .ficha-btn:hover { background: var(--border-forte); }
   .compare-btn {
     border: none; background: transparent; border-radius: 6px;
     padding: 4px 8px; cursor: pointer; font-size: 13px; line-height: 1;
     color: var(--muted); opacity: 0.6;
   }
-  .compare-btn:hover { background: var(--row-alt); opacity: 1; color: var(--blue); }
+  .compare-btn:hover { background: var(--row-alt); opacity: 1; color: var(--blue-texto); }
 
   .padrao-btn {
     border: none; background: transparent; border-radius: 6px;
@@ -208,7 +382,7 @@
   }
   .modal-overlay.open { display: flex; }
   .modal-box {
-    background: white; border-radius: 14px; max-width: 480px; width: 100%;
+    background: var(--panel); border-radius: 14px; max-width: 480px; width: 100%;
     max-height: 85vh; overflow-y: auto; padding: 20px; position: relative;
   }
   #compareModalBox { max-width: 560px; }
@@ -223,7 +397,7 @@
     display: flex; align-items: center; justify-content: center;
     color: var(--muted); font-size: 13px; text-align: center; padding: 0 16px;
   }
-  .modal-box h3 { margin: 0 0 4px 0; font-size: 16px; color: var(--blue-dark); }
+  .modal-box h3 { margin: 0 0 4px 0; font-size: 16px; color: var(--blue-texto); }
   .modal-box .modal-item-code { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
   .modal-box .modal-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-top: 12px; margin-bottom: 4px; font-weight: 700; }
   .bobina-val-input {
@@ -259,17 +433,17 @@
 .req-linha { margin-bottom: 7px; }
 .req-linha input {
   width: 100%; padding: 8px 10px; border: 1px solid var(--border);
-  border-radius: 7px; font-size: 13px; color: var(--ink); background: white;
+  border-radius: 7px; font-size: 13px; color: var(--ink); background: var(--panel);
 }
 .req-linha input[readonly] { background: var(--row-alt); color: var(--muted); }
 .req-linha .req-remover { padding: 7px 9px; font-size: 12px; }
 
 .req-aviso {
-  margin-top: 10px; padding: 10px 13px; background: #fef3c7;
-  border: 1px solid #d97706; border-radius: 8px; font-size: 12.5px; color: #92400e;
+  margin-top: 10px; padding: 10px 13px; background: var(--aviso-fundo);
+  border: 1px solid var(--aviso-borda); border-radius: 8px; font-size: 12.5px; color: var(--aviso-texto);
 }
 #reqEmEdicao {
-  background: var(--blue); color: white; border-radius: 6px;
+  background: var(--blue); color: var(--sobre-acento); border-radius: 6px;
   padding: 3px 9px; font-size: 11.5px; font-weight: 700;
 }
 
@@ -292,7 +466,7 @@
 .cad-linha:last-child { border-bottom: none; }
 .cad-desc { color: var(--muted); margin-left: 8px; }
 .cad-um {
-  margin-left: 8px; background: #e8f0f9; color: var(--blue-dark);
+  margin-left: 8px; background: var(--azul-fundo); color: var(--blue-texto);
   border-radius: 5px; padding: 1px 7px; font-size: 11.5px; font-weight: 600;
 }
 .cad-linha .btn { padding: 5px 10px; font-size: 12px; }
@@ -300,7 +474,7 @@
 .cad-form { display: grid; grid-template-columns: 1fr 1fr 90px auto; gap: 8px; margin: 12px 0; }
 .cad-form input {
   padding: 9px 11px; border: 1px solid var(--border); border-radius: 7px;
-  font-size: 13px; color: var(--ink); background: white; min-width: 0;
+  font-size: 13px; color: var(--ink); background: var(--panel); min-width: 0;
 }
 
 @media (max-width: 700px) {
@@ -314,7 +488,7 @@
 /* ===================== FASE 4 — CONFIGURAÇÕES ====================== */
 .cfg-tabela { width: 100%; border-collapse: collapse; }
 .cfg-tabela th {
-  background: var(--blue); color: white; text-align: left; padding: 11px 12px;
+  background: var(--blue); color: var(--sobre-acento); text-align: left; padding: 11px 12px;
   font-size: 12px; font-weight: 600; white-space: nowrap;
 }
 .cfg-tabela td {
@@ -324,22 +498,22 @@
 .cfg-nome { font-weight: 700; font-size: 13.5px; color: var(--ink); }
 .cfg-email { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
 .cfg-voce {
-  background: var(--blue); color: white; border-radius: 5px;
+  background: var(--blue); color: var(--sobre-acento); border-radius: 5px;
   padding: 1px 6px; font-size: 10px; font-weight: 700; vertical-align: middle;
 }
 .cfg-status {
   display: inline-block; border-radius: 20px; padding: 3px 11px;
   font-size: 11.5px; font-weight: 700; white-space: nowrap;
 }
-.st-ativo    { background: #e2f6ea; color: #1d7a45; }
-.st-pendente { background: #fef3c7; color: #92400e; }
-.st-inativo  { background: #eef2f6; color: var(--muted); }
+.st-ativo    { background: var(--ok-fundo); color: var(--ok-texto); }
+.st-pendente { background: var(--aviso-fundo); color: var(--aviso-texto); }
+.st-inativo  { background: var(--bg); color: var(--muted); }
 /* Urgencia do pedido conforme o horario do carregamento (vw_pedidos_prioridade).
    Usadas na aba Separacao e EXP -- ver ROTULO_PRIORIDADE em js/programacao.js. */
-.st-atrasado { background: #fde2e2; color: #b91c1c; }
-.st-urgente  { background: #fde2e2; color: #b91c1c; }
-.st-atencao  { background: #fef3c7; color: #92400e; }
-.st-no-prazo { background: #e2f6ea; color: #1d7a45; }
+.st-atrasado { background: var(--erro-fundo); color: var(--erro-borda); }
+.st-urgente  { background: var(--erro-fundo); color: var(--erro-borda); }
+.st-atencao  { background: var(--aviso-fundo); color: var(--aviso-texto); }
+.st-no-prazo { background: var(--ok-fundo); color: var(--ok-texto); }
 
 /* ---- Programacao de Separacao ------------------------------------------- */
 /* A grade de carregamento imita o desenho da planilha original: blocos de
@@ -350,13 +524,13 @@
   margin-bottom: 14px; overflow: hidden; background: var(--panel);
 }
 .prog-bloco-titulo {
-  background: var(--blue); color: #fff; padding: 9px 14px;
+  background: var(--blue); color: var(--sobre-acento); padding: 9px 14px;
   font-weight: 700; font-size: 13.5px; letter-spacing: 0.3px;
 }
 .prog-hora { border-top: 1px solid var(--border); padding: 10px 14px; }
 .prog-hora-rotulo {
   font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
-  font-size: 12.5px; font-weight: 700; color: var(--blue-dark);
+  font-size: 12.5px; font-weight: 700; color: var(--blue-texto);
   margin-bottom: 7px;
 }
 .prog-card {
@@ -368,12 +542,12 @@
 .prog-card-acoes { margin-top: 7px; }
 .prog-obs-critica {
   margin-top: 5px; padding: 5px 9px; border-radius: 7px;
-  background: #fee2e2; color: #991b1b; font-size: 12.5px; font-weight: 600;
+  background: var(--erro-fundo); color: var(--erro-texto); font-size: 12.5px; font-weight: 600;
 }
 .prog-aba table { min-width: 900px; }
 .cfg-tabela select, .cfg-tabela input[type="text"] {
   padding: 7px 9px; border: 1px solid var(--border); border-radius: 7px;
-  font-size: 13px; background: white; color: var(--ink); max-width: 190px;
+  font-size: 13px; background: var(--panel); color: var(--ink); max-width: 190px;
 }
 .cfg-tabela select:disabled, .cfg-tabela input:disabled {
   background: var(--row-alt); color: var(--muted); cursor: not-allowed;
@@ -387,9 +561,9 @@
 }
 .cfg-barra .status-msg { margin: 0; }
 .cfg-nota {
-  margin-top: 14px; padding: 13px 15px; background: #eaf1f9;
-  border: 1px solid #c9dcf0; border-radius: 10px; font-size: 12.5px;
-  color: var(--blue-dark); line-height: 1.55;
+  margin-top: 14px; padding: 13px 15px; background: var(--azul-fundo);
+  border: 1px solid var(--azul-borda); border-radius: 10px; font-size: 12.5px;
+  color: var(--blue-texto); line-height: 1.55;
 }
 /* =================== FIM DA FASE 4 ================================= */
 
@@ -413,28 +587,28 @@
    item baixo. Vermelho de propósito: precisa chamar atenção mesmo. */
 .aviso-estoque-seguro {
   display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
-  background: #fef2f2; border: 1px solid #fecaca; color: #991b1b;
+  background: var(--erro-fundo); border: 1px solid var(--erro-fundo); color: var(--erro-texto);
   border-radius: 12px; padding: 12px 16px; margin-bottom: 16px;
   font-weight: 600; font-size: 14px; line-height: 1.6;
 }
 .aviso-estoque-seguro #avisoEstoqueSeguroFechar {
-  background: none; border: none; color: #991b1b; font-size: 16px;
+  background: none; border: none; color: var(--erro-texto); font-size: 16px;
   cursor: pointer; padding: 2px 6px; flex: 0 0 auto;
 }
-.aviso-estoque-seguro #avisoEstoqueSeguroFechar:hover { color: #7f1d1d; }
+.aviso-estoque-seguro #avisoEstoqueSeguroFechar:hover { color: var(--erro-texto); }
 .aviso-item-btn {
-  background: #fff; border: 1px solid #fecaca; color: #991b1b;
+  background: var(--panel); border: 1px solid var(--erro-fundo); color: var(--erro-texto);
   border-radius: 999px; padding: 1px 9px; font-weight: 700; font-size: 12.5px;
   cursor: pointer;
 }
-.aviso-item-btn:hover { background: #fee2e2; }
+.aviso-item-btn:hover { background: var(--erro-fundo); }
 .stat-icone {
   width: 46px; height: 46px; border-radius: 50%; flex: 0 0 auto;
   display: flex; align-items: center; justify-content: center; font-size: 20px;
 }
-.stat-icone.azul  { background: #e0ecfa; }
-.stat-icone.verde { background: #e2f6ea; }
-.stat-icone.roxo  { background: #efe7fb; }
+.stat-icone.azul  { background: var(--azul-fundo); }
+.stat-icone.verde { background: var(--ok-fundo); }
+.stat-icone.roxo  { background: var(--roxo-fundo); }
 .stat-texto { min-width: 0; }
 .stat-rotulo {
   font-size: 10.5px; font-weight: 700; letter-spacing: 0.7px;
@@ -466,7 +640,7 @@
 }
 .filtro-campo select, .filtro-campo input[type="text"] {
   width: 100%; padding: 9px 11px; border: 1px solid var(--border); border-radius: 8px;
-  font-size: 13.5px; background: white; color: var(--ink);
+  font-size: 13.5px; background: var(--panel); color: var(--ink);
 }
 .filtro-status { display: flex; flex-direction: column; gap: 5px; }
 .filtro-status label {
@@ -476,47 +650,47 @@
 .filtro-acoes { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
 
 .loc-chip {
-  display: inline-block; background: #e8f0f9; color: var(--blue-dark);
+  display: inline-block; background: var(--azul-fundo); color: var(--blue-texto);
   border-radius: 6px; padding: 2px 8px; font-size: 12.5px; font-weight: 600; white-space: nowrap;
 }
 /* Contagem registrou um local diferente do cadastrado -- aparece sempre
    que existir, com ou sem o Modo Contagem ativo (e o que o filtro "com
    divergencia" usa pra sinalizar "atualizar no sistema"). */
 .loc-fisica-aviso {
-  margin-top: 4px; font-size: 11px; font-weight: 600; color: #92400e;
-  background: #fef3c7; border-radius: 6px; padding: 2px 6px; white-space: normal; max-width: 160px;
+  margin-top: 4px; font-size: 11px; font-weight: 600; color: var(--aviso-texto);
+  background: var(--aviso-fundo); border-radius: 6px; padding: 2px 6px; white-space: normal; max-width: 160px;
 }
 .loc-fisica-edit { margin-top: 6px; display: flex; gap: 4px; align-items: center; }
 .loc-fisica-input {
   width: 90px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px;
 }
 .loc-fisica-confirmar {
-  border: 1px solid var(--blue); background: white; color: var(--blue); border-radius: 6px;
+  border: 1px solid var(--blue); background: var(--panel); color: var(--blue-texto); border-radius: 6px;
   cursor: pointer; font-size: 11px; font-weight: 600; padding: 4px 8px; white-space: nowrap;
 }
-.loc-fisica-confirmar:hover { background: var(--blue); color: white; }
-.loc-fisica-msg { display: block; font-size: 10.5px; color: #1d7a45; margin-top: 2px; }
-.loc-fisica-msg.loc-fisica-erro { color: #c62828; }
+.loc-fisica-confirmar:hover { background: var(--blue); color: var(--sobre-acento); }
+.loc-fisica-msg { display: block; font-size: 10.5px; color: var(--ok-texto); margin-top: 2px; }
+.loc-fisica-msg.loc-fisica-erro { color: var(--erro-borda); }
 td.col-acoes { white-space: nowrap; text-align: center; }
 .acao-btn {
-  border: 1px solid var(--border); background: white; border-radius: 7px;
+  border: 1px solid var(--border); background: var(--panel); border-radius: 7px;
   cursor: pointer; font-size: 14px; padding: 4px 8px; line-height: 1.2; margin: 0 1px;
 }
-.acao-btn:hover { background: #dde6ee; }
+.acao-btn:hover { background: var(--border-forte); }
 /* Item sem foto/embalagem cadastrada ainda -- destaque pra quem esta
    passando item por item cadastrando. Some sozinho ao preencher. */
-.ficha-btn.pendente { background: #fff3cd; border-color: #f0c419; }
-.ficha-btn.pendente:hover { background: #ffe9a8; }
+.ficha-btn.pendente { background: var(--aviso-fundo); border-color: #f0c419; } /* amarelo de sinalizacao, igual ao dos veiculos: nao segue o tema */
+.ficha-btn.pendente:hover { background: var(--aviso-fundo); }
 
 /* Botao rapido pra marcar "sem padrao de caixa" direto na lista, sem abrir
    o modal -- tracejado de proposito, pra parecer "ainda em aberto, clique
    pra decidir" em vez de uma acao normal do dia a dia. */
 .avulso-btn {
-  border: 1px dashed #b0b7c0; background: transparent; border-radius: 6px;
+  border: 1px dashed var(--border-forte); background: transparent; border-radius: 6px;
   cursor: pointer; font-size: 10px; font-weight: 700; letter-spacing: 0.3px;
   padding: 3px 6px; color: var(--muted); white-space: nowrap;
 }
-.avulso-btn:hover { background: #fee2e2; border-color: #f87171; color: #b91c1c; }
+.avulso-btn:hover { background: var(--erro-fundo); border-color: var(--erro-borda); color: var(--erro-borda); }
 
 .paginacao {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
@@ -525,18 +699,18 @@ td.col-acoes { white-space: nowrap; text-align: center; }
 }
 .paginacao .pg-info { margin-right: auto; }
 .pg-btn {
-  border: 1px solid var(--border); background: white; border-radius: 7px;
+  border: 1px solid var(--border); background: var(--panel); border-radius: 7px;
   min-width: 32px; padding: 5px 9px; font-size: 12.5px; font-weight: 600;
   color: var(--ink); cursor: pointer;
 }
-.pg-btn:hover:not(:disabled) { background: #dde6ee; }
-.pg-btn.ativo { background: var(--blue); color: white; border-color: var(--blue); }
+.pg-btn:hover:not(:disabled) { background: var(--border-forte); }
+.pg-btn.ativo { background: var(--blue); color: var(--sobre-acento); border-color: var(--blue); }
 .pg-btn:disabled { opacity: 0.45; cursor: default; }
 .pg-elipse { padding: 0 2px; }
 .pg-porpagina { display: flex; align-items: center; gap: 6px; }
 .pg-porpagina select {
   padding: 5px 8px; border: 1px solid var(--border); border-radius: 7px;
-  font-size: 12.5px; background: white; color: var(--ink);
+  font-size: 12.5px; background: var(--panel); color: var(--ink);
 }
 
 @media print {
@@ -588,20 +762,20 @@ td.col-acoes { white-space: nowrap; text-align: center; }
   cursor: pointer; text-align: left; white-space: nowrap;
 }
 .nav-item:hover { background: var(--row-alt); }
-.nav-item.ativo { background: var(--blue); color: #fff; }
+.nav-item.ativo { background: var(--blue); color: var(--sobre-acento); }
 .nav-icone { font-size: 16px; line-height: 1; }
 
 .app-main { display: flex; flex-direction: column; min-width: 0; }
 
 .topbar {
   background: linear-gradient(100deg, var(--blue) 0%, var(--blue-dark) 100%);
-  color: #fff;
+  color: var(--sobre-acento);
   min-height: 66px;
   padding: 10px 18px;
   display: flex; align-items: center; gap: 14px;
 }
 .topbar-menu {
-  background: transparent; border: none; color: #fff;
+  background: transparent; border: none; color: var(--sobre-acento);
   font-size: 22px; line-height: 1; cursor: pointer; padding: 4px 6px; border-radius: 7px;
 }
 .topbar-menu:hover { background: rgba(255,255,255,0.14); }
@@ -611,7 +785,7 @@ td.col-acoes { white-space: nowrap; text-align: center; }
 .topbar-unidade-fixa { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .topbar-sem-unidade { font-weight: 500; opacity: 0.9; font-style: italic; }
 .unit-select {
-  background: rgba(255,255,255,0.14); color: #fff;
+  background: rgba(255,255,255,0.14); color: var(--sobre-acento);
   border: 1px solid rgba(255,255,255,0.3); border-radius: 7px;
   padding: 6px 9px; font-size: 14px; font-weight: 600; cursor: pointer; max-width: 100%;
 }
@@ -666,7 +840,7 @@ td.col-acoes { white-space: nowrap; text-align: center; }
        </div>
   */
   #manutencaoBanner {
-    background: #fef3c7; border-bottom: 2px solid #d97706; color: #92400e;
+    background: var(--aviso-fundo); border-bottom: 2px solid var(--aviso-borda); color: var(--aviso-texto);
     padding: 11px 16px; font-size: 13.5px; font-weight: 600; text-align: center;
     line-height: 1.45;
   }
@@ -676,13 +850,13 @@ td.col-acoes { white-space: nowrap; text-align: center; }
   @media print { #manutencaoBanner { display: none; } }
 
   #alertaBobinaBanner {
-    background: #fef3c7; border: 1px solid #d97706; color: #92400e; padding: 10px 14px;
+    background: var(--aviso-fundo); border: 1px solid var(--aviso-borda); color: var(--aviso-texto); padding: 10px 14px;
     border-radius: 8px; font-size: 13px; font-weight: 600; margin-bottom: 12px;
   }
   .modal-box .modal-text { font-size: 13.5px; color: var(--ink); line-height: 1.5; }
   .modal-box .modal-link {
     display: inline-block; margin-top: 14px; padding: 8px 14px; background: var(--blue);
-    color: white; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: 600;
+    color: var(--sobre-acento); border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: 600;
   }
   .modal-box .modal-link:hover { background: var(--blue-dark); }
   .modal-empty { text-align: center; color: var(--muted); padding: 20px 0; }
@@ -710,7 +884,7 @@ td.col-acoes { white-space: nowrap; text-align: center; }
   }
   .col-contagem { width: 120px; }
   #limparContagemBtn {
-    border: 1px solid rgba(255,255,255,0.5); background: rgba(255,255,255,0.15); color: white;
+    border: 1px solid rgba(255,255,255,0.5); background: rgba(255,255,255,0.15); color: var(--sobre-acento);
     border-radius: 5px; padding: 3px 8px; font-size: 11px; font-weight: 700; cursor: pointer;
     margin-top: 4px; text-transform: none;
   }
@@ -721,8 +895,8 @@ td.col-acoes { white-space: nowrap; text-align: center; }
     -moz-appearance: textfield;
   }
   .contagem-input:focus { border-color: var(--blue); outline: none; box-shadow: 0 0 0 2px rgba(0,72,148,0.15); }
-  .contagem-input.contagem-salvo { border-color: #2f9e5c; background: #f0fbf4; }
-  .contagem-input.contagem-divergente { border-color: #d97706; background: #fffbeb; }
+  .contagem-input.contagem-salvo { border-color: var(--ok-borda); background: var(--ok-fundo); }
+  .contagem-input.contagem-divergente { border-color: var(--aviso-borda); background: var(--aviso-fundo); }
   .contagem-rodape {
     display: flex; align-items: center; justify-content: space-between; gap: 6px;
     margin-top: 4px; min-height: 16px;
@@ -733,15 +907,15 @@ td.col-acoes { white-space: nowrap; text-align: center; }
   .diff-badge {
     font-size: 11px; font-weight: 700; padding: 1px 4px; border-radius: 4px;
   }
-  .diff-ok { color: #2f9e5c; }
-  .diff-mais { color: #0369a1; background: #e0f2fe; }
-  .diff-menos { color: #b45309; background: #fef3c7; }
+  .diff-ok { color: var(--ok-borda); }
+  .diff-mais { color: var(--blue-texto); background: var(--azul-fundo); }
+  .diff-menos { color: var(--aviso-texto); background: var(--aviso-fundo); }
   .contagem-clear-btn {
     border: none; background: transparent; color: var(--blue); font-size: 11px;
     font-weight: 600; text-decoration: underline; cursor: pointer; padding: 0; white-space: nowrap;
   }
-  .contagem-clear-btn:hover { color: #b91c1c; }
-  #contagemBtn.active-toggle { background: var(--blue); color: white; border-color: var(--blue-dark); }
+  .contagem-clear-btn:hover { color: var(--erro-borda); }
+  #contagemBtn.active-toggle { background: var(--blue); color: var(--sobre-acento); border-color: var(--blue-dark); }
 
 /* Crachá do depósito, ao lado da unidade no cabeçalho. As telas de
    Almoxarifado e SESMT são a MESMA -- sem este aviso não há nada dizendo qual
@@ -751,10 +925,29 @@ td.col-acoes { white-space: nowrap; text-align: center; }
   margin-left: 8px;
   padding: 3px 9px;
   border-radius: 999px;
-  background: #fef3c7;
-  border: 1px solid #d97706;
-  color: #92400e;
+  background: var(--aviso-fundo);
+  border: 1px solid var(--aviso-borda);
+  color: var(--aviso-texto);
   font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
 }
+
+/* Botão de alternar tema, no canto do cabeçalho. Sem texto: o ícone diz o que
+   vai acontecer (🌙 = ir para o escuro, ☀️ = voltar ao claro), e o `title`
+   escreve por extenso pra quem passa o mouse. */
+.topbar-tema {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,.35);
+  color: var(--sobre-acento);
+  width: 34px; height: 34px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+.topbar-tema:hover { background: rgba(255,255,255,.14); }

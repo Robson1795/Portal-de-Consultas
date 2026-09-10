@@ -508,7 +508,7 @@ function abrirSugestoesSubstituto(codigoItem) {
             <td style="padding:9px 10px; font-weight:600;">${escapeHtml(s.item)}</td>
             <td style="padding:9px 10px;">${escapeHtml(s.descricao)}</td>
             <td style="padding:9px 10px; text-align:right; font-weight:700; color:var(--blue-dark);">${numeroBR(s.quantidade)}</td>
-            <td style="padding:9px 10px; color:#166534;">${escapeHtml(s.comuns.join(', '))}</td>
+            <td style="padding:9px 10px; color:var(--ok-texto);">${escapeHtml(s.comuns.join(', '))}</td>
           </tr>`).join('')}
       </tbody>
     </table>
@@ -607,7 +607,7 @@ function solicitacaoHtml(item) {
     // "solicitado" aqui viraria decisao de compra baseada em algo que o
     // sistema nao sabe.
     return `<button class="acao-btn analise-solicitar" data-item="${escapeHtml(item.codigo_item)}"
-              style="color:#166534;"
+              style="color:var(--ok-texto);"
               title="E-mail de compra aberto em ${escapeHtml(quando)}${escapeHtml(quem)} — o portal não confirma o envio. Clique para abrir de novo.">✅</button>`
          + `<button class="acao-btn analise-limpar-solicitacao" data-item="${escapeHtml(item.codigo_item)}"
               title="Tirar a marca de solicitado (clique errado, ou o e-mail não foi enviado)">↺</button>`;
@@ -817,7 +817,7 @@ function renderAnalise() {
   // tamanho do problema do dia.
   document.getElementById('analiseResumo').innerHTML = analiseDemanda.length
     ? `<b>${numeroBR(ativos.length)}</b> item(ns) na análise · `
-      + `<b style="color:${faltando.length ? '#991b1b' : '#166534'};">${numeroBR(faltando.length)}</b> sem saldo pra atender tudo · `
+      + `<b style="color:${faltando.length ? 'var(--erro-texto)' : 'var(--ok-texto)'};">${numeroBR(faltando.length)}</b> sem saldo pra atender tudo · `
       + `${numeroBR(analiseDemanda.length)} linha(s) de pedido`
       + (qtdIgnorados ? ` · <b>${numeroBR(qtdIgnorados)}</b> marcado(s) como "não repor"` : '')
     : '';
@@ -843,15 +843,15 @@ function renderAnalise() {
   corpo.innerHTML = linhas.map(l => {
     const falta = l.comprar > 0;
     return `
-    <tr${falta && !analiseVerIgnorados ? ' style="background:#fef2f2;"' : ''}${analiseVerIgnorados ? ' style="opacity:0.65;"' : ''}>
+    <tr${falta && !analiseVerIgnorados ? ' style="background:var(--erro-fundo);"' : ''}${analiseVerIgnorados ? ' style="opacity:0.65;"' : ''}>
       <td class="item">${escapeHtml(l.codigo_item)}</td>
       <td>${escapeHtml(l.descricao || '—')}</td>
       <td class="loc">${escapeHtml(l.um || '—')}</td>
       <td class="num">${numeroBR(l.pedido)}</td>
       <td class="num">${numeroBR(l.saldo)}</td>
-      <td class="num" style="font-weight:700; color:${falta ? '#991b1b' : '#166534'};">
+      <td class="num" style="font-weight:700; color:${falta ? 'var(--erro-texto)' : 'var(--ok-texto)'};">
         ${falta ? '−' + numeroBR(l.comprar) : '+' + numeroBR(l.sobra)}</td>
-      <td class="num" style="font-weight:800; color:#991b1b;">${falta ? numeroBR(l.comprar) : '—'}</td>
+      <td class="num" style="font-weight:800; color:var(--erro-texto);">${falta ? numeroBR(l.comprar) : '—'}</td>
       <td class="loc">${transferenciaHtml(l)}</td>
       <td class="loc">${substitutoHtml(l)}</td>
       <td class="loc" title="${escapeHtml([...l.pedidos].join(', '))}">${numeroBR(l.qtdPedidos)}</td>

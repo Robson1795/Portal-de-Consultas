@@ -7,6 +7,21 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Exportar Controle EXP em Excel de verdade (nao so um .csv renomeado). -->
 <link rel="stylesheet" href="styles.css">
+<script>
+  // Aplica o tema salvo ANTES de pintar a tela. Se isto estivesse nos
+  // scripts do fim do body, cada carregamento daria um flash branco antes
+  // de escurecer -- o defeito clássico de tema escuro.
+  //
+  // Sem preferência salva, segue o sistema operacional
+  // (prefers-color-scheme): quem já usa o computador no escuro abre o
+  // portal no escuro, sem ter de descobrir o botão.
+  try {
+    var salvo = localStorage.getItem('portal_tema');
+    var escuro = salvo ? salvo === 'escuro'
+      : window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (escuro) document.documentElement.setAttribute('data-tema', 'escuro');
+  } catch (e) { /* navegador sem localStorage: fica no claro */ }
+</script>
 </head>
 <body>
 <div class="wrap">
@@ -26,10 +41,10 @@
         <button class="btn" id="tabSignupBtn" style="flex:1;">Criar conta</button>
       </div>
       <div>
-        <select id="authUnidade" style="width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:10px; font-size:14px; background:white; color:var(--ink);">
+        <select id="authUnidade" style="width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:10px; font-size:14px; background:var(--panel); color:var(--ink);">
           <option value="">Selecione a unidade...</option>
         </select>
-        <select id="authCargo" style="width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:10px; font-size:14px; background:white; color:var(--ink);">
+        <select id="authCargo" style="width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:10px; font-size:14px; background:var(--panel); color:var(--ink);">
           <option value="">Selecione o cargo...</option>
           <option value="consultor">Consultor</option>
           <option value="estoque_alm">Estoque ALM</option>
@@ -76,6 +91,8 @@
           <button class="topbar-menu" id="menuToggle" title="Abrir/fechar menu" aria-label="Abrir ou fechar o menu">&#9776;</button>
           <div class="topbar-local" id="topbarLocal"></div>
           <div class="topbar-user">
+            <button class="topbar-tema" id="temaToggle" title="Alternar entre modo claro e escuro"
+                    aria-label="Alternar entre modo claro e escuro">🌙</button>
             <div class="topbar-avatar" id="userAvatar">?</div>
             <div class="topbar-user-info">
               <div id="userNameDisplay"></div>
@@ -128,7 +145,7 @@
          Clica pra filtrar só os itens abaixo do estoque seguro cadastrado. -->
     <div class="stat-card" id="statEstoqueBaixoCard" style="display:none; cursor:pointer;"
          title="Clique para filtrar só os itens com estoque abaixo do estoque seguro">
-      <div class="stat-icone" style="background:#fee2e2;">⚠️</div>
+      <div class="stat-icone" style="background:var(--erro-fundo);">⚠️</div>
       <div class="stat-texto">
         <div class="stat-rotulo">Estoque baixo</div>
         <div class="stat-valor" id="stat-estoque-baixo">-</div>
@@ -293,7 +310,7 @@
         <input type="text" id="bobinasSearchBox" placeholder="Buscar por item, descrição, depósito, localização ou lote...">
         <button class="btn" id="bobinasClearBtn">Limpar filtro</button>
         <button class="btn" id="bobinasPrintBtn">Imprimir / Salvar PDF</button>
-        <span id="bobinasSyncStatus" style="font-size:12px; color:#2f9e5c; font-weight:600;">🟢 Sincronizado em tempo real</span>
+        <span id="bobinasSyncStatus" style="font-size:12px; color:var(--ok-texto); font-weight:600;">🟢 Sincronizado em tempo real</span>
       </div>
       <div class="scroll-area">
         <table id="bobinasTable">
@@ -419,14 +436,14 @@
             </div>
           </div>
           <div class="stat-card">
-            <div class="stat-icone" style="background:#fef3c7;">⏳</div>
+            <div class="stat-icone" style="background:var(--aviso-fundo);">⏳</div>
             <div class="stat-texto">
               <div class="stat-rotulo">Pendentes</div>
               <div class="stat-valor" id="progPendentes">-</div>
             </div>
           </div>
           <div class="stat-card">
-            <div class="stat-icone" style="background:#dcfce7;">✅</div>
+            <div class="stat-icone" style="background:var(--ok-fundo);">✅</div>
             <div class="stat-texto">
               <div class="stat-rotulo">Separados</div>
               <div class="stat-valor" id="progSeparados">-</div>
@@ -1036,7 +1053,7 @@
       <div class="status-msg" id="cadastroMsg" style="margin-bottom:10px;"></div>
 
       <details id="cadImportar" style="margin-bottom:12px;">
-        <summary style="cursor:pointer; font-size:13px; font-weight:600; color:var(--blue);">
+        <summary style="cursor:pointer; font-size:13px; font-weight:600; color:var(--blue-texto);">
           Importar do Excel ou de um CSV
         </summary>
         <div style="margin-top:10px;">
@@ -1083,8 +1100,8 @@
       <input type="text" id="valLocalizacaoReal" placeholder="Localização física real" class="bobina-val-input">
 
       <div style="display:flex; gap:10px; margin-top:16px;">
-        <button id="confirmarOkBtn" style="flex:1; padding:18px 10px; font-size:16px; font-weight:700; background:#2f9e5c; color:white; border:none; border-radius:10px; cursor:pointer;">✅ OK, bate tudo</button>
-        <button id="salvarDivergenteBtn" style="flex:1; padding:18px 10px; font-size:16px; font-weight:700; background:#d97706; color:white; border:none; border-radius:10px; cursor:pointer;">⚠️ Salvar divergência</button>
+        <button id="confirmarOkBtn" style="flex:1; padding:18px 10px; font-size:16px; font-weight:700; background:var(--ok-acao); color:var(--sobre-acento); border:none; border-radius:10px; cursor:pointer;">✅ OK, bate tudo</button>
+        <button id="salvarDivergenteBtn" style="flex:1; padding:18px 10px; font-size:16px; font-weight:700; background:var(--aviso-acao); color:var(--sobre-acento); border:none; border-radius:10px; cursor:pointer;">⚠️ Salvar divergência</button>
       </div>
       <div class="status-msg" id="validacaoMsg" style="margin-top:10px; text-align:center;"></div>
     </div>
@@ -1121,7 +1138,7 @@
       <button class="modal-close" id="expGateCloseBtn">✕</button>
       <h3 style="margin-top:0;" id="expGateTitulo">Controle EXP Acessórios</h3>
       <p style="font-size:13px; color:var(--muted); margin-bottom:14px;">Escolha a unidade para entrar.</p>
-      <select id="expGateUnidade" style="width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:10px; font-size:14px; background:white; color:var(--ink);"></select>
+      <select id="expGateUnidade" style="width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:10px; font-size:14px; background:var(--panel); color:var(--ink);"></select>
       <input type="password" id="expGateSenhaInput" placeholder="Senha desta unidade" maxlength="20" style="width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:10px; font-size:14px; text-align:center;">
       <button class="btn btn-primary" id="expGateEntrarBtn" style="width:100%;">Liberar e entrar</button>
       <div class="status-msg status-err" id="expGateMsg" style="margin-top:8px;"></div>
