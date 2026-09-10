@@ -2045,6 +2045,7 @@ O botão **🎓** continua abrindo para eles, e não é cortesia: é por ele que
 confere uma mudança no tour sem ter de limpar o `localStorage` — foi como
 estes 7 passos novos foram testados.
 
+
 ## Data da última atualização, embaixo de cada aba do lote (10/09/2026)
 
 O Robson: *"coloque a data de atualização de cada aba dessa, pode ser embaixo
@@ -2076,3 +2077,61 @@ de cada aba:
 Conferido no navegador com um mock por tabela (incluindo uma sem linha
 nenhuma, pra testar "Nunca atualizado"): as cinco datas saem certas, cada
 uma da fonte certa.
+
+## 19. Aba Configurações: filtros e contagem de consultores (10/09/2026)
+
+O Victor: *"Na aba configuração, mostre também quantos consultores tem. Uma
+correção para essa tela: os filtros de usuario, status, perfil de acesso e
+unidade não funcionam. Se possivel, filtrar por padrão por perfil de acesso."*
+
+⚠️ **Os filtros não estavam quebrados: não existiam.** A tela tinha só os
+títulos das colunas (Usuário · Status · Perfil de acesso · Unidade). Eles
+pareciam clicáveis porque o ordenador da Consulta de Itens estava ligado a
+**todo** `thead th` do documento — clicar ali zerava `sortKey`, apagava as
+flechas da outra tabela e estourava em `.arrow` nulo, sem fazer nada de visível.
+Isso foi recortado para `#dataTable thead th` em 10/09/2026 (seção 13), e o que
+restou foi um cabeçalho que não faz nada. Agora há filtro de verdade.
+
+- **Quatro filtros na barra**: busca por **nome e e-mail** (quem administra
+  lembra de um ou do outro, raramente dos dois), Status, Perfil de acesso e
+  Unidade. Filtram **ao digitar**, sem botão de aplicar — mesmo padrão do
+  `#searchBox` e do `#filterLocalizacao`, que só passou a filtrar ao digitar em
+  10/09/2026 justamente porque esperar o clique parecia que não funcionava.
+  Nada vai ao banco: `usuariosCarregados` já está em memória.
+- **Os selects são montados de `PERFIS` e `UNIDADES`** (`montarFiltrosCfg()`), e
+  não de uma lista escrita no HTML: um perfil ou uma unidade nova entraria no
+  cadastro e no menu mas ficaria fora do filtro, e o sintoma seria "a pessoa
+  existe e o filtro não acha".
+- **"Sem unidade definida" é uma opção de verdade**, não enfeite: cadastro sem
+  unidade não conta nada (falha fechado, seção 5), então é exatamente a lista
+  que o administrador precisa achar para arrumar.
+- **Card novo: Consultores.** Junto com Total, Aguardando aprovação e
+  Administradores.
+- ⚠️ **Os cards contam TODO mundo, não o que o filtro deixou na tela.** Eles
+  respondem "quantas contas existem", que é a pergunta de quem administra.
+  Quantos o filtro deixou vai na linha `#cfgContagem` ao lado
+  (`Mostrando 3 de 6`) — sem ela, filtrar e ver 2 linhas com o card dizendo 40
+  parece dado errado.
+- ⚠️ **A lista vazia tem duas causas, e a mensagem distingue as duas**:
+  "Nenhum usuário bate com os filtros" e "Nenhum usuário cadastrado ainda".
+  Culpar o filtro pela causa errada faz a pessoa mexer nos filtros atrás de
+  gente que nunca foi carregada. Falha de leitura tem mensagem própria, no
+  `#cfgMsg`.
+
+### A ordem: pendente primeiro, depois por perfil
+
+`ordenarUsuariosCfg()`, três regras nesta ordem:
+
+1. **Pendente primeiro.** É o item de ação da tela — quem não foi aprovado não
+   entra em nada, e essa fila é o que trava a pessoa do outro lado. Já era assim
+   (`order('aprovado')` na consulta) e continua sendo.
+2. **Depois por perfil de acesso**, na ordem de `PERFIS` (do menos para o mais
+   privilegiado). É o "filtrar por padrão por perfil" do pedido: agrupa quem faz
+   a mesma coisa, que é como se lê uma lista de acesso — *"quem são meus
+   consultores?"*, não *"quem começa com A?"*. **Não** é o filtro pré-preenchido
+   com um perfil: isso esconderia gente na abertura da tela, e numa tela de
+   acesso não ver alguém é o pior tipo de omissão.
+3. Nome, para a ordem não dançar entre duas cargas com o mesmo perfil.
+
+Perfil desconhecido (linha antiga, ou valor que saiu de `PERFIS`) vai para o
+**fim** em vez de sumir — sumir da lista é o pior lugar para um acesso ficar.

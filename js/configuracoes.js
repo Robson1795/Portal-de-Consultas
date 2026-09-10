@@ -18,6 +18,13 @@
 
 let usuariosCarregados = [];
 
+// Os filtros da lista de usuários. Não existiam: a tela tinha só os títulos
+// das colunas, que pareciam clicáveis porque o ordenador global do projeto
+// estava ligado a TODO `thead th` do documento e estourava ali (hoje recortado
+// pro `#dataTable`, em js/estoque.js). Quem administra oito unidades precisa
+// achar UMA pessoa na lista, e rolar não é achar.
+const filtrosCfg = { busca: '', status: '', perfil: '', unidade: '' };
+
 function ehSuperAdminAtual() {
   return SUPER_ADMINS.includes(emailUsuarioAtual);
 }
@@ -27,7 +34,74 @@ function statusDoUsuario(u) {
   return { rotulo: 'Pendente', classe: 'st-pendente' };
 }
 
+// Preenche os dois selects a partir de `PERFIS` e `UNIDADES`, e não de uma
+// lista escrita no HTML: um perfil ou uma unidade nova entraria no cadastro e
+// no menu, mas ficaria fora do filtro -- e o sintoma seria "a pessoa existe e
+// o filtro não acha".
+//
+// "Sem unidade" é uma opção de verdade, não enfeite: cadastro sem unidade não
+// conta nada (falha fechado, seção 5), então é exatamente a lista que o
+// administrador precisa achar para arrumar.
+function montarFiltrosCfg() {
+  const perfil = document.getElementById('cfgFiltroPerfil');
+  if (perfil && !perfil.options.length) {
+    perfil.innerHTML = '<option value="">Perfil: todos</option>'
+      + Object.entries(PERFIS).map(([id, pf]) =>
+          `<option value="${id}">${escapeHtml(pf.rotulo)}</option>`).join('');
+  }
+  const unidade = document.getElementById('cfgFiltroUnidade');
+  if (unidade && !unidade.options.length) {
+    unidade.innerHTML = '<option value="">Unidade: todas</option>'
+      + Object.keys(UNIDADES).map(c =>
+          `<option value="${c}">${escapeHtml(rotuloUnidade(c))}</option>`).join('')
+      + '<option value="__sem__">Sem unidade definida</option>';
+  }
+}
+
+// A ordem da lista. Duas regras, nesta ordem, e as duas de propósito:
+//
+//   1. PENDENTE PRIMEIRO. É o item de ação da tela -- quem não foi aprovado
+//      não entra em nada, e essa fila é o que trava a pessoa do outro lado.
+//      Já era assim (`order('aprovado')` na consulta) e continua.
+//   2. Depois, por PERFIL DE ACESSO (pedido do Victor, 10/09/2026), na ordem
+//      de `PERFIS` -- do menos para o mais privilegiado. Agrupa quem faz a
+//      mesma coisa, que é como se lê uma lista de acesso: "quem são meus
+//      consultores?", não "quem começa com A?".
+//   3. Nome, para a ordem não dançar entre duas cargas com o mesmo perfil.
+//
+// Perfil desconhecido (linha antiga, ou valor que saiu de `PERFIS`) vai para o
+// fim em vez de sumir: some da lista é o pior lugar para um acesso ficar.
+const ORDEM_PERFIS = Object.keys(PERFIS);
+function ordenarUsuariosCfg(lista) {
+  const posto = u => {
+    const n = ORDEM_PERFIS.indexOf(u.perfil);
+    return n === -1 ? ORDEM_PERFIS.length : n;
+  };
+  return lista.slice().sort((a, b) =>
+    (a.aprovado ? 1 : 0) - (b.aprovado ? 1 : 0)
+    || posto(a) - posto(b)
+    || String(a.nome || a.email || '').localeCompare(String(b.nome || b.email || ''), 'pt-BR'));
+}
+
+// Aplica os quatro filtros. A busca olha nome E e-mail: quem administra
+// lembra de um ou do outro, raramente dos dois.
+function usuariosFiltradosCfg() {
+  const busca = filtrosCfg.busca.trim().toLowerCase();
+  return ordenarUsuariosCfg(usuariosCarregados.filter(u => {
+    if (busca && !String(u.nome || '').toLowerCase().includes(busca)
+             && !String(u.email || '').toLowerCase().includes(busca)) return false;
+    if (filtrosCfg.status === 'ativo' && !u.aprovado) return false;
+    if (filtrosCfg.status === 'pendente' && u.aprovado) return false;
+    if (filtrosCfg.perfil && u.perfil !== filtrosCfg.perfil) return false;
+    if (filtrosCfg.unidade === '__sem__' && u.unidade) return false;
+    if (filtrosCfg.unidade && filtrosCfg.unidade !== '__sem__'
+        && u.unidade !== filtrosCfg.unidade) return false;
+    return true;
+  }));
+}
+
 async function carregarUsuarios() {
+  montarFiltrosCfg();
   const aviso = document.getElementById('cfgMsg');
   aviso.textContent = 'Carregando...';
   aviso.className = 'status-msg';
@@ -57,10 +131,35 @@ function renderUsuarios() {
   document.getElementById('cfg-total').textContent = usuariosCarregados.length;
   document.getElementById('cfg-pendentes').textContent = pendentes;
   document.getElementById('cfg-admins').textContent = admins;
+  // Os cards contam TODO mundo, e não o que o filtro deixou na tela: eles
+  // respondem "quantas contas existem", que é a pergunta de quem administra.
+  // Quantos o filtro deixou vai na linha #cfgContagem, ao lado.
+  const consultores = usuariosCarregados.filter(u => u.perfil === 'consultor').length;
+  document.getElementById('cfg-consultores').textContent = consultores;
 
   const podeMexerEmAdmin = ehSuperAdminAtual();
 
-  document.getElementById('cfgCorpo').innerHTML = usuariosCarregados.map(u => {
+  const visiveis = usuariosFiltradosCfg();
+  const contagem = document.getElementById('cfgContagem');
+  const filtrando = visiveis.length !== usuariosCarregados.length;
+  if (contagem) {
+    contagem.textContent = filtrando
+      ? `Mostrando ${visiveis.length} de ${usuariosCarregados.length}`
+      : `${usuariosCarregados.length} usuário(s)`;
+  }
+  const vazio = document.getElementById('cfgVazio');
+  if (vazio) {
+    vazio.style.display = visiveis.length ? 'none' : 'block';
+    // Lista vazia tem duas causas diferentes, e culpar o filtro pela errada faz
+    // a pessoa mexer nos filtros atras de gente que nunca foi carregada. Mesmo
+    // padrao do 'Nenhum item bate com a busca' / 'Nenhum item registrado ainda'
+    // do Controle EXP. Falha de leitura tem mensagem propria, no #cfgMsg.
+    vazio.textContent = usuariosCarregados.length
+      ? 'Nenhum usuário bate com os filtros.'
+      : 'Nenhum usuário cadastrado ainda.';
+  }
+
+  document.getElementById('cfgCorpo').innerHTML = visiveis.map(u => {
     const ehEuMesmo = u.user_id === userIdAtual;
     const st = statusDoUsuario(u);
     // Linha travada: o próprio usuário, ou um admin quando quem olha não é
@@ -143,6 +242,31 @@ document.getElementById('cfgCorpo').addEventListener('click', (e) => {
 });
 
 document.getElementById('cfgRecarregar').addEventListener('click', carregarUsuarios);
+
+// Filtra AO DIGITAR, sem botão de aplicar -- mesmo padrão do #searchBox da
+// Consulta de Itens e do #filterLocalizacao (que só passou a filtrar ao digitar
+// em 10/09/2026, justamente porque esperar o clique parecia que não funcionava).
+// Nada aqui vai ao banco: `usuariosCarregados` já está em memória.
+document.getElementById('cfgBusca').addEventListener('input', (e) => {
+  filtrosCfg.busca = e.target.value;
+  renderUsuarios();
+});
+[['cfgFiltroStatus', 'status'], ['cfgFiltroPerfil', 'perfil'],
+ ['cfgFiltroUnidade', 'unidade']].forEach(([id, chave]) => {
+  document.getElementById(id).addEventListener('change', (e) => {
+    filtrosCfg[chave] = e.target.value;
+    renderUsuarios();
+  });
+});
+
+document.getElementById('cfgLimparFiltros').addEventListener('click', () => {
+  filtrosCfg.busca = ''; filtrosCfg.status = '';
+  filtrosCfg.perfil = ''; filtrosCfg.unidade = '';
+  document.getElementById('cfgBusca').value = '';
+  ['cfgFiltroStatus', 'cfgFiltroPerfil', 'cfgFiltroUnidade']
+    .forEach(id => { document.getElementById(id).value = ''; });
+  renderUsuarios();
+});
 
 
 // ===========================================================================
