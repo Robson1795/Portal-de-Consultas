@@ -13,7 +13,7 @@
 // o Deposito SESMT e a Requisicao ALM -- e uma REVERSAO da decisao anterior,
 // que abria a Requisicao para todo perfil ("qualquer pessoa aprovada pode
 // pedir material"). Se a Requisicao voltar a ser de todos, mexa TAMBEM no
-// RLS: sql/fase29-consultor-so-consulta.sql fechou a criacao no banco, e so
+// RLS: sql/fase31-consultor-so-consulta.sql fechou a criacao no banco, e so
 // devolver a pagina no menu nao devolveria a permissao.
 // Programacao de Separacao NAO aparece para consultor nem para estoque_aco:
 // ela move separacao, enderecamento e saida de material de verdade, diferente

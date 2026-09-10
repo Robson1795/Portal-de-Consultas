@@ -290,7 +290,7 @@ aparece (`PERFIS` em `js/navegacao.js`) e o RLS decide o que a pessoa consegue
 gravar. A política `"Criar propria requisicao"` da fase6 exigia apenas
 `esta_aprovado()`, então tirar a página do menu **não impediria** um consultor de
 criar requisição pelo inspetor do navegador. Quem fecha isso é
-`sql/fase29-consultor-so-consulta.sql`, pela função `pode_pedir_material()`.
+`sql/fase31-consultor-so-consulta.sql`, pela função `pode_pedir_material()`.
 **Se um dia voltar a ser de todos, tem de voltar nos dois** — devolver a página
 no menu não devolve a permissão do banco.
 
@@ -451,7 +451,7 @@ Hoje ele cria só estrutura, e o RLS é assunto dos scripts da Fase 1.
 
 **De painel — destrava o resto, e não é código:**
 
-1. **Rodar `sql/fase29-consultor-so-consulta.sql`** no Supabase. Sem ele o menu
+1. **Rodar `sql/fase31-consultor-so-consulta.sql`** no Supabase. Sem ele o menu
    esconde o Depósito SESMT e a Requisição ALM do consultor, mas o banco continua
    deixando: ele cria requisição (a política da fase6 pede só `esta_aprovado()`) e
    lê o estoque de EPI (a leitura de `estoque` não olha a coluna `deposito`). Ver
@@ -1794,11 +1794,11 @@ ALM."* `PERFIS.consultor` passou de `['estoque', 'sesmt', 'requisicao']` para
 propósito: a Requisição ALM era aberta a todo perfil porque "qualquer pessoa
 aprovada pode pedir material" (seção 8). Não é o caso mais.
 
-⚠️ **O menu não é a tranca.** `sql/fase29-consultor-so-consulta.sql` é a
+⚠️ **O menu não é a tranca.** `sql/fase31-consultor-so-consulta.sql` é a
 metade que importa — sem ele, um consultor com o inspetor aberto continua
 criando requisição e lendo o EPI:
 
-| O que estava aberto | Por quê | O que o fase29 faz |
+| O que estava aberto | Por quê | O que o fase31 faz |
 |---|---|---|
 | criar requisição | `"Criar propria requisicao"` (fase6) exige só `esta_aprovado()` | refaz a política com `pode_pedir_material()` |
 | ler o estoque de EPI | a leitura de `estoque` (fase1c) não olha `deposito`, coluna que só nasceu na fase23 | `deposito = 'alm' or meu_perfil() <> 'consultor'` |
@@ -1816,6 +1816,11 @@ criando requisição e lendo o EPI:
 - **As políticas de leitura são SUBSTITUÍDAS, não somadas.** Política
   permissiva se soma (OR): criar uma restrita ao lado da antiga não restringe
   nada. Mesma lição do comentário do fase11.
+- **A condição é `deposito = 'alm'`, não `deposito <> 'sesmt'`.** Desde o
+  `fase29` existe um terceiro depósito (`benchmark`). Escrita como está, o
+  consultor lê só o almoxarifado, e qualquer depósito que nasça amanhã já
+  entra fechado para ele — o lado certo de errar. `<> 'sesmt'` teria deixado o
+  Benchmark aberto sem ninguém notar.
 - **A leitura entre UNIDADES continua aberta.** O recorte novo é por
   **depósito**, não por unidade — é o que mantém o botão ⇄ funcionando
   (decisão de 03/09/2026, seção 5).
@@ -1823,7 +1828,7 @@ criando requisição e lendo o EPI:
   de corredor, não saldo nem item, e a tela que a usa é o modo contagem, onde
   o consultor só entra com a senha da unidade.
 - Independe do fase11 (ainda pendente): ele mexe na **escrita** de
-  `contagem_fisica`, o fase29 só na leitura. Qualquer ordem serve.
+  `contagem_fisica`, o fase31 só na leitura. Qualquer ordem serve.
 
 ### 2. O tour explica a tela de Consulta, não só o nome dela
 
@@ -1846,6 +1851,12 @@ nome dela no menu não ensinava nada.
   pulados. Só troca quando ainda não está na tela: `mostrarPagina()` recarrega
   os dados, e chamar a cada passo faria sete consultas ao banco para andar
   pelos sete passos.
+  Isso ficou mais importante depois do Depósito Benchmark virar saldo simples:
+  ele reusa o MESMO `estoqueContent` e o mesmo `#dataTable` (como o SESMT), então
+  os seletores destes passos casariam com a tabela do Benchmark se o tour não
+  trocasse de página. `mostrarPagina('estoque')` também devolve `depositoAtual`
+  para `'alm'` — a explicação é do almoxarifado, e é o almoxarifado que fica na
+  frente. Conferido abrindo o 🎓 a partir do Benchmark.
 - ⚠️ **Três alvos são botões da PRIMEIRA LINHA da tabela** e não existem com
   a lista vazia (unidade sem dados, busca sem resultado). São pulados sozinhos
   — e é por isso que a explicação de cada um não fala do item que estiver na

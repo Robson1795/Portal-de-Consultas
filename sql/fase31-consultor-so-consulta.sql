@@ -1,5 +1,5 @@
 -- ============================================================================
--- Fase 29 — Consultor só consulta: fecha o Depósito SESMT e a Requisição ALM
+-- Fase 31 — Consultor só consulta: fecha o Depósito SESMT e a Requisição ALM
 -- ============================================================================
 --
 -- O Victor, 10/09/2026: "Consultor apenas consulta de itens, restringir
@@ -76,6 +76,12 @@ create policy "Criar propria requisicao" on public.requisicoes_alm
 -- ---------------------------------------------------------------------------
 -- `estoque.deposito` é `not null default 'alm'` (fase23), então não há caso
 -- nulo para tratar.
+--
+-- ⚠️ A condição é `deposito = 'alm'`, e não `deposito <> 'sesmt'`: desde o
+-- fase29 existe um TERCEIRO depósito, `benchmark`, e a restrição aceita os
+-- três. Escrita como está, o consultor lê só o almoxarifado — qualquer
+-- depósito que nasça amanhã já entra fechado para ele, que é o lado certo de
+-- errar. `<> 'sesmt'` teria deixado o Benchmark aberto sem ninguém notar.
 --
 -- A leitura entre UNIDADES continua aberta, e isso é decisão de 03/09/2026,
 -- não esquecimento: é ela que faz o botão ⇄ "Comparar entre unidades"
