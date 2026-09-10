@@ -22,6 +22,13 @@ let sortDir = 1;
 // continuar marcado quando a pessoa volta da página 3. Guarda o id como
 // string: o data-id do HTML sempre volta string, e o r.id do banco é number.
 let etiquetasTrading = new Set();
+// Acima de quantas folhas o portal pergunta antes de imprimir. Vale pra
+// etiqueta da Trading (uma folha por item) E pro Imprimir do Controle EXP
+// (js/programacao.js, uma folha por item desde 10/09/2026) -- e a MESMA regra,
+// entao e um numero so. js/estoque.js carrega antes, por isso mora aqui.
+const LIMITE_FOLHAS_IMPRESSAO = 10;
+// Segundo clique do botao Etiquetas quando a impressao passa desse limite.
+let etiquetaTradingConfirmar = false;
 // O que o filtro deixou na tela (todas as páginas), preenchido por
 // applyFilterAndSort(): é sobre isso que o "marcar todas" age.
 let linhasFiltradasAtual = [];
@@ -2021,6 +2028,13 @@ function atualizarBotaoEtiquetas() {
   const botao = document.getElementById('etiquetaTradingBtn');
   if (!botao) return;
   botao.style.display = ehTrading() ? 'inline-block' : 'none';
+  // Mexer na marcacao cancela a confirmacao pendente: o numero de folhas que a
+  // pessoa leu na tela deixou de valer. Este helper roda a cada marcacao, e e
+  // ele que reescreve o rotulo -- se a bandeira ficasse de pe com o rotulo
+  // trocado de volta, o proximo clique imprimiria a resma sem avisar.
+  etiquetaTradingConfirmar = false;
+  const aviso = document.getElementById('etiquetaTradingMsg');
+  if (aviso) { aviso.textContent = ''; aviso.className = 'status-msg'; }
   botao.textContent = `🖨️ Etiquetas (${etiquetasTrading.size})`;
   botao.disabled = etiquetasTrading.size === 0;
 }
@@ -2124,8 +2138,26 @@ document.getElementById('etiquetaTradingBtn').addEventListener('click', () => {
   if (!linhas.length) return;
   // Sai UMA folha por item -- com a lista inteira marcada isso é resma, e
   // quem clicou merece saber disso antes, não pela impressora.
-  if (linhas.length > 10 &&
-      !confirm(`Vão sair ${linhas.length} folhas, uma por item. Continuar?`)) return;
+  //
+  // ⚠️ Era `if (!confirm(...)) return`, e nessa polaridade o confirm() falha
+  // FECHADO em silêncio: marcado "impedir que esta página crie novos diálogos",
+  // o Chrome devolve `false` na hora, o clique deixa de imprimir e nenhuma
+  // mensagem aparece -- indistinguível de botão quebrado. É o mesmo modo de
+  // falha de 08/09/2026 na aba de lote (seção 7 do CLAUDE.md). A confirmação
+  // agora é um segundo clique no próprio botão, com o número na frente.
+  const aviso = document.getElementById('etiquetaTradingMsg');
+  if (linhas.length > LIMITE_FOLHAS_IMPRESSAO && !etiquetaTradingConfirmar) {
+    etiquetaTradingConfirmar = true;
+    const botao = document.getElementById('etiquetaTradingBtn');
+    botao.textContent = `\u26A0\uFE0F Confirmar ${linhas.length} folhas`;
+    aviso.textContent = `Vai sair uma folha por item: ${linhas.length} folhas. `
+      + 'Clique de novo para imprimir, ou desmarque o que não precisa.';
+    aviso.className = 'status-msg status-err';
+    return;
+  }
+  etiquetaTradingConfirmar = false;
+  aviso.textContent = '';
+  aviso.className = 'status-msg';
   imprimirEtiquetasTrading(linhas);
 });
 

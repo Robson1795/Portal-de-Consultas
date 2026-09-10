@@ -53,7 +53,9 @@ let expCtrlSelecionadas = new Set();
 // `if (!confirm(...)) return` o clique deixa de imprimir sem dizer nada --
 // indistinguível de botão quebrado. Aconteceu em 08/09/2026 na aba de lote.
 // Ver pedirConfirmacaoLote() em js/configuracoes.js.
-const LIMITE_FOLHAS_EXP = 10;
+// O limite mora em js/estoque.js (LIMITE_FOLHAS_IMPRESSAO), carregado antes:
+// e a MESMA regra da etiqueta da Trading, e dois numeros iguais em arquivos
+// diferentes sairiam de sincronia na primeira vez que um deles mudasse.
 let expImprimirConfirmar = false;
 let expCtrlDescMap = new Map(); // codigo_item -> {descricao, um}, resolvido em cascata pra exibir a lista
 let catalogoExpItens = []; // catalogo_exp_itens -- planilha do sistema, carregada só ao entrar na página
@@ -2077,9 +2079,9 @@ document.getElementById('expCtrlImprimirBtn').addEventListener('click', async ()
     return;
   }
 
-  // Sai uma folha por item: acima de LIMITE_FOLHAS_EXP, pede um segundo
+  // Sai uma folha por item: acima de LIMITE_FOLHAS_IMPRESSAO, pede um segundo
   // clique com o número na frente da pessoa.
-  if (linhas.length > LIMITE_FOLHAS_EXP && !expImprimirConfirmar) {
+  if (linhas.length > LIMITE_FOLHAS_IMPRESSAO && !expImprimirConfirmar) {
     expImprimirConfirmar = true;
     document.getElementById('expCtrlImprimirBtn').textContent =
       '\u26A0\uFE0F Confirmar ' + linhas.length + ' folhas';

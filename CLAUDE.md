@@ -1217,6 +1217,20 @@ na Trading o Estoque Seguro não é usado. Fora da Trading nada muda.
 - **Acima de 10 folhas o portal pergunta antes.** Sai uma folha por item, e
   marcar a lista inteira é resma — quem clicou merece saber pela tela, não
   pela impressora.
+  ⚠️ **Era `confirm()`, e foi trocado em 10/09/2026.** Num
+  `if (!confirm(...)) return` o `confirm()` falha **fechado e em silêncio**:
+  marcado "impedir que esta página crie novos diálogos", o Chrome devolve
+  `false` na hora, o clique deixa de imprimir e nenhuma mensagem aparece —
+  indistinguível de botão quebrado. É o mesmo modo de falha de 08/09/2026 na aba
+  de lote (seção 7), e estava aqui desde que a etiqueta nasceu. Hoje a
+  confirmação é um **segundo clique no próprio botão**, que passa a dizer
+  `⚠️ Confirmar N folhas`, com a explicação em `#etiquetaTradingMsg`. Mexer na
+  marcação cancela a confirmação pendente — o número que a pessoa leu na tela
+  deixou de valer, e é `atualizarBotaoEtiquetas()` que reescreve o rótulo.
+- **O limite é um número só para os dois lugares** (`LIMITE_FOLHAS_IMPRESSAO`,
+  em `js/estoque.js`, que carrega antes): é a MESMA regra da etiqueta da Trading
+  e do Imprimir do Controle EXP, e dois números iguais em arquivos diferentes
+  sairiam de sincronia na primeira vez que um deles mudasse.
 
 A folha usa o mesmo desenho da do Controle EXP (milímetros, não px), **em
 paisagem**: **TRADING** no topo, item em 32 mm, descrição em 9 mm, quantidade

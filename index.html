@@ -197,6 +197,9 @@
               title="Imprime uma folha por item marcado, com a localização em letra grande">🖨️ Etiquetas (0)</button>
       <button class="btn" id="contagemBtn" title="Planilha para contagem física de estoque" style="font-size:16px; padding:9px 12px;">📋</button>
       <button class="btn" id="quemContouBtn" style="display:none;">Quem já contou</button>
+      <!-- So a Trading escreve aqui (ver atualizarBotaoEtiquetas). Fica vazio
+           nas outras unidades, e vazio nao ocupa linha. -->
+      <span class="status-msg" id="etiquetaTradingMsg" style="flex-basis:100%;"></span>
     </div>
 
     <!-- Painel de filtros. Era um modal; virou painel embutido na Fase 3.
