@@ -85,13 +85,19 @@ function montarMenu() {
             </button>`;
   }).join('');
 
-  // O 💡 de sugestão é do CONSULTOR (Robson, 10/09/2026: "um botão para que
-  // os consultores coloquem sugestões de melhorias"). É quem tem menos tela
-  // e nenhum outro canal dentro do portal -- o ALM e o aço falam com ele
-  // direto, e o Robson e o Victor são justamente quem RECEBE. Ver
-  // js/sugestao.js.
+  // ⚠️ O botão de sugestão apareceu primeiro SÓ para consultor (o Robson,
+  // 10/09/2026: "quero que crie um botão para que os consultores coloquem
+  // sugestões de melhorias" -- é quem tem menos tela e nenhum outro canal
+  // dentro do portal). No mesmo dia o Victor pediu a caixa de sugestões no
+  // "tutorial de TODOS os cargos", e um passo de tutorial apontando um botão
+  // que a pessoa não tem é pior que não ter o passo: ela procura e não acha.
+  //
+  // Então o botão passou a aparecer para todo perfil. Quem RECEBE não mudou --
+  // continua sendo `eh_super_admin()` no RLS (Robson e Victor), e a leitura da
+  // lista continua só para eles. Para voltar ao desenho original, é esta linha:
+  // `(perfilAtual === 'consultor') ? '' : 'none'`.
   const btnSugestao = document.getElementById('sugestaoBtn');
-  if (btnSugestao) btnSugestao.style.display = (perfilAtual === 'consultor') ? '' : 'none';
+  if (btnSugestao) btnSugestao.style.display = '';
 
   // Abre na primeira pagina que a pessoa pode ver.
   if (!paginaAtual || !podeVer(paginaAtual)) mostrarPagina(visiveis[0]);

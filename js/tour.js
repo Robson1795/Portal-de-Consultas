@@ -155,6 +155,20 @@ function montarPassosTour() {
     texto: 'Troca o portal entre o modo claro e o escuro, e fica guardado neste navegador. A impressão sai sempre clara, para não gastar tinta.'
   });
 
+  // A caixa de sugestões entra na cauda comum -- vale para TODOS os cargos, e
+  // não dentro de PASSOS_CONSULTA, que é só da tela de Consulta de Itens.
+  //
+  // O texto diz que a sugestão FICA GRAVADA, e isso não é detalhe: as outras
+  // telas que "mandam" algo (Requisição ALM, solicitação de compra) usam
+  // `mailto` e dependem de a pessoa clicar em enviar no Outlook. Ali alguém
+  // está esperando o material e vai cobrar; uma sugestão perdida não é cobrada
+  // por ninguém. Saber que ela chega inteira é o que faz a pessoa escrever.
+  passos.push({
+    alvo: '#sugestaoBtn',
+    titulo: '💡 Caixa de sugestões',
+    texto: 'Achou que alguma tela podia ser melhor, ou falta algo que ajudaria no seu dia? Escreva aqui. A sugestão vai para o <b>Robson</b> e para o <b>Victor</b> e <b>fica registrada no portal</b> — não é e-mail, então não se perde no caminho nem depende de você lembrar de enviar.<br><br>Vale ideia pequena: a maioria das telas deste portal nasceu de um pedido de quem usa.'
+  });
+
   passos.push({
     alvo: '#tourBtn',
     titulo: 'Para rever',

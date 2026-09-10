@@ -451,11 +451,11 @@ Hoje ele cria só estrutura, e o RLS é assunto dos scripts da Fase 1.
 
 **De painel — destrava o resto, e não é código:**
 
-1. **Rodar `sql/fase31-consultor-so-consulta.sql`** no Supabase. Sem ele o menu
-   esconde o Depósito SESMT e a Requisição ALM do consultor, mas o banco continua
-   deixando: ele cria requisição (a política da fase6 pede só `esta_aprovado()`) e
-   lê o estoque de EPI (a leitura de `estoque` não olha a coluna `deposito`). Ver
-   a seção "Consultor só consulta" abaixo.
+1. **Rodar `sql/fase32-sugestoes-melhoria.sql`** no Supabase. Sondado pela API em
+   10/09/2026: a tabela `sugestoes_melhoria` **não existe** ainda, então clicar em
+   Enviar na caixa de sugestões falha (a tela já diz que o script falta). Ficou
+   mais urgente depois de 10/09: o tour agora mostra esse botão para **todos** os
+   perfis, então é a primeira coisa que um usuário novo vai tentar usar.
 
 2. **Rodar `sql/fase11-limpar-contagem-restrito.sql`** no Supabase. Sem ele, "Limpar tudo" está
    travado só na tela, e um inspetor de navegador contorna. O script **substitui** a política
@@ -2178,3 +2178,99 @@ restou foi um cabeçalho que não faz nada. Agora há filtro de verdade.
 
 Perfil desconhecido (linha antiga, ou valor que saiu de `PERFIS`) vai para o
 **fim** em vez de sumir — sumir da lista é o pior lugar para um acesso ficar.
+
+
+## 20. Aba Conferir do Controle EXP: sistema × físico (10/09/2026)
+
+O Victor: *"Precisamos colocar uma aba 'Conferir' no Controle EXP Acessórios. A
+ideia é que o app faça um confronto do que existe no sistema e o que tem no
+fisico, faça uma comparação e retorne indicadores. Quais tem diferença, quanto
+é, se ta no sistema ou nao, etc."*
+
+| | O que é |
+|---|---|
+| **Sistema** | `catalogo_exp_itens` desta unidade — a planilha do Datasul, colada na aba Catálogo. É a coluna `quantidade` dela |
+| **Físico** | `exp_controle_itens` com status `na_expedicao`. Item já **retirado** não conta: ele saiu no caminhão, e contá-lo diria que o material está lá |
+
+Cinco indicadores: itens confrontados, com diferença, só no sistema, só no
+físico, conferem. A tabela mostra os dois saldos, a **diferença com sinal**
+(`+` é sobra no físico, `−` é falta — sem o sinal a pessoa lê "3" e não sabe
+para que lado), a situação e onde o item está guardado.
+
+⚠️ **Cuidado com o nome.** Já existe a sub-aba **"Saída / Conferência"**, que é
+outra coisa: ali se registra a retirada item por item. Esta confronta as duas
+pontas e não escreve nada.
+
+### As três decisões que fazem a conta estar certa
+
+- ⚠️ **Por item, somando os dois lados.** O mesmo código aparece em várias
+  linhas das duas pontas (o sistema separa por lote e depósito, o físico por
+  endereço e pedido), então comparar linha a linha acusaria diferença onde só há
+  material espalhado. Mesma decisão da Análise de Compras, e pelo mesmo motivo.
+- ⚠️ **A chave passa por `normalizaCodigoItem()`.** As duas pontas são planilhas
+  **coladas à mão, de origens diferentes**, e o projeto já perdeu uma tarde com
+  o item `996613I` gravado minúsculo numa e maiúsculo na outra (seção 14). Numa
+  tela de conferência isso não seria um número errado — seria uma **divergência
+  inventada**, e alguém indo procurar material que está no lugar. Testado
+  exatamente com esse caso.
+- ⚠️ **`noCatalogo`/`noFisico` olham a PRESENÇA da linha, não a quantidade.**
+  Item cadastrado no sistema com saldo zero é diferente de item que o sistema
+  não conhece, e a tela precisa dizer qual dos dois é.
+
+### O pré-requisito: as duas cargas passaram a ser paginadas
+
+Sem isto a tela **mentiria em silêncio**, e é a razão de a paginação ter entrado
+no mesmo commit. O PostgREST devolve no máximo **1.000 linhas** e não avisa que
+cortou (seção 9). O catálogo de uma unidade cheia passa disso — a mensagem da
+substituição em lote já falava em 4.000 linhas — e `exp_controle_itens` é
+append-only de propósito. Com um dos lados cortado, o que falta vira "não existe
+no sistema" e a tela acusaria **centenas de divergências falsas**.
+
+`buscarTudoPaginado(fazerConsulta)` vive em `js/estoque.js` (carrega antes) e
+busca de mil em mil. Quem chama monta os filtros e a ordenação — precisa de
+`.order()` estável, senão a página 2 repete ou pula linha da 1. Isto fecha, para
+estas duas tabelas, o item aberto de paginação do CLAUDE.md.
+
+### Por que o filtro nasce em "só divergências", e o teto de 300 linhas
+
+O catálogo é o depósito **inteiro**, não só o que está na expedição: abrir
+mostrando tudo enterraria a divergência no meio do que está certo. E a lista tem
+teto de **300 linhas desenhadas**, com o total dito na tela
+(`Mostrando 300 de N — use a busca para estreitar`) — "Tudo" numa unidade cheia
+travaria a aba, e o corte nunca é silencioso.
+
+**A ordem é a do risco**, não a alfabética: **só no físico** primeiro (material
+guardado que o sistema não conhece é o que se perde no inventário — ninguém
+procura o que não está na lista), depois **diferença** da maior para a menor em
+módulo, depois **só no sistema**, e o que **confere** por último, porque não há
+o que fazer com ele.
+
+**O formulário de registro não aparece nesta aba** (como na aba Catálogo):
+registrar movimentação a partir de uma tela de conferência seria mexer no que se
+está medindo. E **Recarregar busca as duas pontas juntas** — a conferência só
+vale se os dois lados forem do mesmo momento.
+
+### A caixa de sugestões entrou no tour, e o botão passou a ser de todos
+
+O Victor: *"O Robson colocou uma função de 'caixa de sugestões'. Dê uma
+analisada e acrescente isso no tutorial de todos os cargos."*
+
+O passo entra na **cauda comum** do tour (não em `PASSOS_CONSULTA`, que é só da
+tela de Consulta de Itens), então vale para os quatro perfis. O texto diz que a
+sugestão **fica gravada**, e isso não é detalhe: as outras telas que "mandam"
+algo usam `mailto` e dependem de a pessoa clicar em enviar no Outlook — ali
+alguém está esperando o material e vai cobrar, mas uma sugestão perdida não é
+cobrada por ninguém. Saber que ela chega inteira é o que faz a pessoa escrever.
+
+⚠️ **Isto mudou quem vê o botão, e a mudança é do mesmo dia que a decisão
+anterior.** O Robson pediu o botão **só para consultor** (*"para que os
+consultores coloquem sugestões"* — é quem tem menos tela e nenhum outro canal
+dentro do portal). Um passo de tutorial apontando um botão que a pessoa não tem
+é pior que não ter o passo: ela procura e não acha. Então o botão passou a
+aparecer para **todo** perfil. **Quem recebe não mudou** — continua
+`eh_super_admin()` no RLS (Robson e Victor), e a lista só eles leem. Para voltar
+ao desenho original é uma linha em `montarMenu()`, marcada no comentário.
+
+Passos por perfil depois desta mudança: consultor **15**, estoque_aco **9**,
+estoque_alm **21**, admin **23** (o admin não recebe o tour sozinho, só pelo
+🎓).
