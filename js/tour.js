@@ -79,17 +79,17 @@ const PASSOS_CONSULTA = [
     texto: 'Recorta por localização, UM, padrão de caixa e por situação do item: <b>zerado</b>, <b>com foto</b>, <b>com divergência</b> ou <b>estoque baixo</b>. Combinam entre si, e o número no botão diz quantos estão ligados.'
   },
   {
-    pagina: 'estoque', alvo: '#dataTable tbody .ficha-btn',
+    pagina: 'estoque', alvo: '#dataTable tbody .ficha-btn', alvoAlternativo: '#dataTable',
     titulo: '👁 Ver a foto do item',
     texto: 'Abre a <b>ficha do item</b>: a foto, para que ele serve e quantas peças vêm na caixa. É o jeito de confirmar que o código é a peça certa antes de pedir ou separar.<br><br>O olho <b>apagado</b> quer dizer que este item ainda não tem ficha cadastrada — clicar nele abre para preencher.'
   },
   {
-    pagina: 'estoque', alvo: '#dataTable tbody .compare-btn',
+    pagina: 'estoque', alvo: '#dataTable tbody .compare-btn', alvoAlternativo: '#dataTable',
     titulo: '⇄ Quanto tem em cada unidade',
     texto: 'Mostra o saldo do <b>mesmo item nas outras unidades</b>, somado por unidade e da maior para a menor, com a localização de cada uma. Serve para pedir transferência em vez de esperar compra — o material às vezes já está na empresa, em outro galpão.<br><br>Tem um botão de <b>compartilhar</b> dentro: manda a tabela por WhatsApp ou e-mail, em texto ou como imagem.'
   },
   {
-    pagina: 'estoque', alvo: '#dataTable tbody .substituto-btn',
+    pagina: 'estoque', alvo: '#dataTable tbody .substituto-btn', alvoAlternativo: '#dataTable',
     titulo: '💡 Item equivalente',
     texto: 'Aparece só no item <b>zerado</b>: procura no estoque desta unidade outra peça da <b>mesma medida e do mesmo material</b>. Um rebite 4,0 × 15 mm inox sugere outro inox da mesma medida — e não o galvanizado, que não serve para o mesmo lugar.'
   },
@@ -184,11 +184,17 @@ function tourElementos() {
   };
 }
 
+// `alvoAlternativo`: onde apontar quando o alvo principal não está na tela.
+// Os três passos dos botões de ação miram a PRIMEIRA LINHA da tabela, e há
+// unidade sem dado nenhum (a 101 e a 105, hoje) -- sem alternativa, a pessoa
+// simplesmente não recebe a explicação do 👁, do ⇄ e do 💡. Apontando a tabela
+// inteira, o texto sai de todo jeito.
 // Elemento que existe mas está escondido tem retângulo de tamanho zero. Sem
 // esta checagem o tour apontaria o buraco onde o botão estaria.
 function tourAlvoUtil(passo) {
   if (!passo.alvo) return null;
-  const el = document.querySelector(passo.alvo);
+  const el = document.querySelector(passo.alvo) || (passo.alvoAlternativo
+    ? document.querySelector(passo.alvoAlternativo) : null);
   if (!el) return null;
   const r = el.getBoundingClientRect();
   return (r.width > 0 && r.height > 0) ? el : null;
@@ -296,9 +302,35 @@ function iniciarTourSePrimeiraVez() {
   // tour sem ter de limpar o localStorage.
   if (perfilAtual === 'admin') return;
   if (tourJaVisto()) return;
-  // Espera a primeira pintura: `montarMenu()` acabou de escrever o `nav`, e o
-  // getBoundingClientRect() de um elemento recém-inserido ainda vem zerado.
-  requestAnimationFrame(() => requestAnimationFrame(abrirTour));
+  // ⚠️ ESPERA A TABELA, e não só a primeira pintura.
+  //
+  // `montarMenu()` abre a Consulta de Itens, que dispara `loadData()` -- uma ida
+  // ao Supabase, que NÃO é esperada por ninguém. Abrindo o tour em dois quadros
+  // de animação, a tabela ainda está vazia e os passos do 👁, do ⇄ e do 💡 (que
+  // miram botões da primeira linha) são pulados: o tour do consultor saía sem
+  // justamente as três coisas que ele foi feito para explicar. Era o defeito
+  // relatado em 10/09/2026 ("o tutorial do consultor ainda ta incompleto").
+  //
+  // Espera limitada, e não `await loadData()`: a carga pode falhar, a unidade
+  // pode não ter item nenhum (a 101 e a 105 hoje), e nesse caso o tour tem de
+  // abrir do mesmo jeito -- com o `alvoAlternativo` cobrindo os três passos.
+  // 12 x 250 ms = ~3 s. A carga normal chega em menos de 1 s, e a espera só
+  // estoura quando a unidade não tem item nenhum -- aí 6 s de tela parada
+  // pareceriam portal travado. Se a linha chegar DEPOIS de o tour abrir, os
+  // três passos passam a funcionar de todo jeito: `tourAlvoUtil()` é
+  // consultado na hora de avançar, não uma vez na montagem.
+  const LIMITE = 12;
+  let tentativas = 0;
+  (function esperarTabela() {
+    const temLinha = document.querySelector('#dataTable tbody tr');
+    if (temLinha || ++tentativas > LIMITE) {
+      // Um quadro depois de a linha existir: `getBoundingClientRect()` de um
+      // elemento recém-inserido ainda vem zerado antes da pintura.
+      requestAnimationFrame(() => requestAnimationFrame(abrirTour));
+      return;
+    }
+    setTimeout(esperarTabela, 250);
+  })();
 }
 
 document.getElementById('tourProximo').addEventListener('click', () => tourAndar(1));

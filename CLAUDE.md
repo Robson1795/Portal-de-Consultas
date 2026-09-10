@@ -1896,6 +1896,35 @@ nome dela no menu não ensinava nada.
   com alvo), sem item zerado (o 💡 sai), e com a tabela vazia (os três de
   linha saem, 11 passos andados).
 
+⚠️ **O tour saía sem esses três passos no primeiro login, e por corrida de
+tempo.** O Victor: *"o tutorial do consultor ainda ta incompleto"*.
+`montarMenu()` abre a Consulta de Itens, que dispara `loadData()` — uma ida ao
+Supabase que **ninguém espera**. O tour abria dois quadros de animação depois,
+com a tabela ainda vazia, e os passos do 👁, do ⇄ e do 💡 eram pulados: faltava
+justamente o que o pedido original queria explicar ("como funciona a
+visualização da foto", "quanto tem em cada unidade"). Meus testes não pegaram
+porque eu populava a tabela à mão **antes** de abrir o tour.
+
+Duas correções, e as duas são necessárias:
+
+1. **`iniciarTourSePrimeiraVez()` espera a tabela**, e não a primeira pintura:
+   procura `#dataTable tbody tr` a cada 250 ms, no máximo ~3 s. Não é
+   `await loadData()` — a carga pode falhar e a unidade pode não ter item
+   nenhum, e nos dois casos o tour tem de abrir. 3 s e não 6: a carga normal
+   chega em menos de 1 s, e a espera só estoura sem dados — aí a tela parada
+   pareceria portal travado.
+2. **`alvoAlternativo`**: os três passos apontam a tabela inteira (`#dataTable`)
+   quando não há linha. As unidades **101 e 105 não têm dado nenhum** hoje, e sem
+   isso a pessoa dali nunca receberia essas explicações — nem depois dos 3 s.
+
+E se a linha chegar **depois** de o tour abrir, os três passos passam a
+funcionar de todo jeito: `tourAlvoUtil()` é consultado na hora de avançar, não
+uma vez na montagem.
+
+⚠️ Ao testar isto no navegador, lembre que **aba de fundo estrangula
+`setTimeout`** (Chrome joga para ~1 s): a espera de 3 s virou 24 s no teste e
+pareceu que o tour não abria. Teste com a aba na frente.
+
 ### 3. Admin não ganha o tour sozinho
 
 *"Admin não precisa de tutorial, pq só eu e o Robson somos admin e ambos
