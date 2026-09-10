@@ -747,6 +747,15 @@ transferência.
 - Ficou na função existente, e não num modal novo, pra não duplicar a
   montagem da tabela de unidades (mesmo motivo de reaproveitar o modal
   inteiro, ver acima).
+- **Rodapé com o total (10/09/2026)**: o Robson, apontando pro fim dessa
+  mesma tabela: *"coloque a qtd total que preciso atender faça soma de
+  todos os itens"*. `pedidosDoItemHtml()` ganhou um `<tfoot>` somando
+  `qt_pedido` de todas as linhas ordenadas. `qt_pedido` é `numeric` de
+  verdade (não texto formatado à brasileira, ao contrário de
+  `estoque.quantidade`) — a soma usa `Number(l.qt_pedido) || 0` direto,
+  **não** o `parseFloat`+troca de vírgula usado noutros lugares deste
+  arquivo pra campos de texto; usar aquele padrão aqui teria corrompido
+  qualquer quantidade com ponto decimal de verdade.
 
 - **Soma os endereços da mesma unidade**: `estoque` tem uma linha por
   endereço; sem somar, a tela ofereceria transferir só o que está na primeira
