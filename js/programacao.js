@@ -1777,6 +1777,13 @@ document.getElementById('expCtrlMarcarTodos').addEventListener('change', (e) => 
 async function gravarMovimentacaoManual({ codigo, pedido, quantidadeTexto, local, op, lote, ref, tipo }) {
   codigo = (codigo || '').trim();
   if (!codigo) return { ok: false, mensagem: 'Informe o código do item.' };
+  // Trava repetida aqui (defesa em profundidade): o formulário completo já
+  // barra pelo blur do campo Item, mas o passo-a-passo confirma o Item num
+  // passo e só chega aqui bem depois -- sem checar de novo na gravação, um
+  // código digitado errado no wizard passaria batido.
+  if (!itemExisteNoCatalogoExp(codigo)) {
+    return { ok: false, mensagem: `NÃO SALVOU: o item ${codigo} não está no Catálogo EXP desta unidade — confira o código.` };
+  }
 
   const linha = {
     unidade: unidadeAtual,
@@ -1934,6 +1941,17 @@ function salvarPassoAtual() {
     document.getElementById('expWizMsg').className = 'status-msg status-err';
     return false;
   }
+  // Mesma trava do formulário completo (travarFormularioManual/
+  // itemExisteNoCatalogoExp): sem ela, a pessoa preencheria os seis passos
+  // seguintes antes de descobrir, só na revisão final, que o item nem
+  // existe no Catálogo EXP desta unidade.
+  if (passo.campo === 'codigo_item' && valor && !itemExisteNoCatalogoExp(valor)) {
+    document.getElementById('expWizMsg').textContent =
+      'Este código não está no Catálogo EXP desta unidade — confira o código.';
+    document.getElementById('expWizMsg').className = 'status-msg status-err';
+    return false;
+  }
+
   expWizDados[passo.campo] = valor;
 
   // Assim que o Item é confirmado, já consulta o Catálogo EXP: se só tem 1
@@ -2979,6 +2997,26 @@ document.getElementById('catalogoExpBusca').addEventListener('input', () => rend
 // aquele item, preenche sozinho (sem sobrescrever o que já foi digitado);
 // se existem vários, mostra a lista pra pessoa escolher na mão -- preencher
 // errado sozinho seria pior do que deixar em branco.
+// Código que não existe no Catálogo EXP desta unidade -- Robson, 10/09/2026,
+// vendo o item "135556i" na aba Conferir como "Só no físico", sem
+// descrição nenhuma: "escrevi o codigo errado, quero que coloque uma trava
+// se eu digitar o codigo que nao estiver no catalago nao deixar preencher".
+// Sem a trava, um código digitado errado virava uma linha fantasma em
+// exp_controle_itens -- ninguém vai apagar isso na mão, e é exatamente o
+// tipo de "Só no físico" que a aba Conferir foi feita pra achar.
+function itemExisteNoCatalogoExp(codigo) {
+  return catalogoExpItens.some(l => l.codigo_item === codigo);
+}
+
+// Trava/destrava os campos que vêm DEPOIS do Item no formulário completo,
+// conforme o código bater ou não com o Catálogo EXP desta unidade. Chamada
+// no blur do Item (ver mais abaixo) -- então a pessoa só digita o resto
+// depois de o código já ter sido conferido.
+function travarFormularioManual(bloquear) {
+  ['expManualQtd', 'expManualLocal', 'expManualAdicionarBtn', 'expManualExtrasToggleBtn']
+    .forEach(id => { document.getElementById(id).disabled = bloquear; });
+}
+
 function lotesDoItemNoCatalogo(codigo) {
   return catalogoExpItens.filter(l => l.codigo_item === codigo && (l.referencia || l.lote));
 }
@@ -3019,7 +3057,16 @@ document.getElementById('expManualItem').addEventListener('blur', async () => {
   const codigo = document.getElementById('expManualItem').value.trim();
   const descricaoEl = document.getElementById('expManualDescricao');
   const dica = document.getElementById('expManualCatalogoDica');
-  if (!codigo) { descricaoEl.textContent = ''; dica.textContent = ''; return; }
+  if (!codigo) { descricaoEl.textContent = ''; dica.textContent = ''; travarFormularioManual(false); return; }
+
+  if (!itemExisteNoCatalogoExp(codigo)) {
+    descricaoEl.textContent = '⚠ Este código não está no Catálogo EXP desta unidade — confira o código, ou cole a planilha do sistema na aba Catálogo.';
+    descricaoEl.className = 'status-msg status-err';
+    dica.textContent = '';
+    travarFormularioManual(true);
+    return;
+  }
+  travarFormularioManual(false);
 
   const mapaDescricoes = await buscarDescricoesItens([codigo]);
   const achou = mapaDescricoes.get(codigo);

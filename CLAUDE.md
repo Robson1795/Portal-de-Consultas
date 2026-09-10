@@ -2358,3 +2358,46 @@ todos; excluir um item some da lista normal e ele aparece em "Ver excluídos
 observação digitada e salva sobrevive a um redesenho da tela
 (`renderConferirExp()` de novo, simulando reabrir a aba); o card "Itens
 confrontados" cai de 4 para 3 ao excluir. Zero erro de console.
+
+## Trava: código fora do Catálogo EXP não deixa preencher o resto (10/09/2026)
+
+O Robson, vendo o item `135556i` na aba Conferir como "Só no físico", sem
+descrição nenhuma: *"escrevi o codigo errado, quero que coloque uma trava se
+eu digitar o codigo que nao estiver no catalago nao deixar preencher"*.
+
+Sem trava, um código digitado errado no formulário manual (Entrada) virava
+uma linha fantasma em `exp_controle_itens` — ninguém apaga isso na mão, e é
+exatamente o tipo de divergência que a aba Conferir foi feita pra achar. A
+raiz: o `blur` do campo Item já mostrava "⚠ Descrição não encontrada", mas
+só como aviso — nada impedia continuar preenchendo e salvando.
+
+`itemExisteNoCatalogoExp(codigo)` confere contra `catalogoExpItens` (o
+Catálogo EXP **desta unidade**, já em memória) — não contra a busca em
+cascata de `buscarDescricoesItens()` (que também olha `itens_requisicao` e
+`estoque`): o pedido foi especificamente sobre o Catálogo EXP, que é a
+referência de verdade deste domínio.
+
+- **Formulário completo**: `travarFormularioManual(bloquear)` desliga
+  Quantidade, Localização, "+ Referência/Lote/Nº da OP" e o botão Registrar
+  no `blur` do campo Item, sempre que o código não bate com o catálogo — a
+  pessoa literalmente não consegue preencher o resto até corrigir o código
+  (ou apagar o campo, que limpa a trava sem exigir nada).
+- **Passo-a-passo**: `salvarPassoAtual()` já confirma o item no PRIMEIRO
+  passo — sem a trava ali, a pessoa preencheria os outros seis passos antes
+  de descobrir na revisão final que o item nem existe no catálogo.
+- **`gravarMovimentacaoManual()` confere de novo, na gravação** — defesa em
+  profundidade: é o ponto por onde os dois formulários passam antes de
+  chamar `exp_controle_itens.insert()`, então nenhum caminho futuro escapa
+  da trava só por não ter passado pelo `blur` ou pelo passo do wizard.
+- Vale nos dois setores (Controle EXP Acessórios e Depósito Benchmark): o
+  Catálogo EXP é **um só, compartilhado pelos dois** (decisão já registrada
+  no fase18), então a mesma verificação serve pras duas telas sem
+  duplicar nada.
+
+Conferido no navegador: código errado (`135556i`) trava Quantidade,
+Localização, "+ Referência..." e Registrar, com a mensagem explicando o
+porquê; código certo (`140488`, do catálogo de teste) destrava tudo e
+preenche a descrição normalmente; `gravarMovimentacaoManual()` chamada
+direto com o código errado devolve "NÃO SALVOU" sem gravar nada; o wizard
+recusa avançar do passo do Item com o mesmo código errado. Zero erro de
+console.
