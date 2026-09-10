@@ -1672,6 +1672,41 @@ modal; Controle EXP Acessórios continua intacto (`setorExpAtual` fica
 blocos com `deposito: 'benchmark'`, e Almoxarifado/SESMT continuam com o
 depósito certo (sem regressão). Zero erro de console.
 
+### Referência e Lote, só no Benchmark (10/09/2026)
+
+O Robson, com a planilha real na mão: *"benchmark é um pouco diferente tem
+referencia e lote"*. O desenho acima tratou o Benchmark como saldo idêntico
+ao Almoxarifado/SESMT (item, descrição, UM, localização, quantidade) — a
+planilha real tem duas colunas a mais.
+
+- `estoque` ganhou `referencia` e `lote`, **nullable** — mesmo princípio do
+  `deposito`: quem não usa (Almoxarifado, SESMT) fica em branco, sem mudar
+  nada pra quem não pediu.
+- `prepararLote()` reconhece as duas colunas nas **três** abas (Almoxarifado,
+  SESMT, Benchmark), não só na do Benchmark — coluna que a planilha não tem
+  simplesmente não aparece no mapa, então não muda nada pra quem não a usa.
+- **As colunas Referência e Lote só aparecem na tabela quando
+  `depositoAtual === 'benchmark'`** (`mostraColunasBenchmark()`) — mesmo
+  padrão do Estoque Seguro/Etiqueta da Trading: mostrar `—` em toda linha do
+  Almoxarifado não ajudaria ninguém.
+
+⚠️ **Bug achado ao mexer na função de novo, antes de qualquer um colar a
+planilha de verdade**: `substituir_estoque()` tem uma validação própria de
+depósito, separada da restrição da coluna —
+`if dep not in ('alm', 'sesmt') then raise exception`. O `fase29` corrigiu a
+restrição da COLUNA (`estoque_deposito_valido`), mas essa validação de
+dentro da função é outro lugar, com a própria lista — ficou pra trás. Sem o
+`fase30`, colar planilha no Benchmark falharia com "Depósito desconhecido:
+benchmark. Use alm ou sesmt.", mesmo com a restrição da coluna já certa.
+`sql/fase30-benchmark-referencia-lote.sql` corrige as duas coisas juntas
+(as colunas novas e a validação).
+
+Conferido no navegador: `prepararLote()` com a planilha real (Item,
+Descrição, UM, Localização, Referência, Lote, Quantidade) monta os itens com
+`referencia`/`lote` certos, inclusive linha com Lote vazio (`null`, não
+string vazia); a tabela mostra as duas colunas com `depositoAtual =
+'benchmark'` e as esconde com `'alm'`. Zero erro de console.
+
 ## 17. Tour guiado do primeiro acesso (10/09/2026)
 
 O Victor: *"Primeiro login fazer um mini tutorial ou um 'tour' pelo portal.

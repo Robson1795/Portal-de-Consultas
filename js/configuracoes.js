@@ -295,9 +295,9 @@ const LOTE_FORMATOS = {
   sesmt: 'Precisa de cabeçalho, e uma das colunas tem de ser a unidade — igual à do '
        + 'almoxarifado. Colunas lidas: Unidade (ou Estab), Item, Descrição, UM, Localização, '
        + 'Quantidade. Vai para o depósito SESMT (EPI) de cada unidade.',
-  benchmark: 'Precisa de cabeçalho, e uma das colunas tem de ser a unidade — igual à do '
-           + 'almoxarifado. Colunas lidas: Unidade (ou Estab), Item, Descrição, UM, Localização, '
-           + 'Quantidade. Vai para o Depósito Benchmark de cada unidade.',
+  benchmark: 'Precisa de cabeçalho, e uma das colunas tem de ser a unidade. Colunas lidas: '
+           + 'Unidade (ou Estab), Item, Descrição, UM, Localização, Referência, Lote, '
+           + 'Quantidade — em qualquer ordem. Vai para o Depósito Benchmark de cada unidade.',
   exp: 'Precisa de cabeçalho, e uma das colunas tem de ser a unidade. Colunas lidas: '
      + 'Unidade (ou Estab), Item, Descrição, UM, Depósito, Referência, Lote, '
      + 'Quantidade — em qualquer ordem. Substitui o Catálogo EXP de cada unidade '
@@ -521,9 +521,15 @@ function prepararLote(texto) {
   // mandaria material para o galpão errado.
   const precisaUnidade = true;
   const deposito = (loteAba === 'sesmt' || loteAba === 'benchmark') ? loteAba : 'alm';
+  // Referência e Lote só o Benchmark usa (Robson, 10/09/2026: "benchmark é
+  // um pouco diferente tem referencia e lote") -- mas ficam reconhecidas
+  // pras três abas, e não só a de Benchmark: coluna que a planilha não tem
+  // simplesmente não aparece no mapa (mapearColunas devolve undefined,
+  // pega() já trata isso como vazio), então não muda nada pro Almoxarifado
+  // nem pro SESMT continuarem sem essas colunas.
   const campos = precisaUnidade
-    ? ['um', 'unidade', 'item', 'descricao', 'localizacao', 'quantidade']
-    : ['um', 'item', 'descricao', 'localizacao', 'quantidade'];
+    ? ['um', 'unidade', 'item', 'descricao', 'localizacao', 'quantidade', 'referencia', 'lote']
+    : ['um', 'item', 'descricao', 'localizacao', 'quantidade', 'referencia', 'lote'];
 
   let mapa = null;
   let corpo = linhas;
@@ -568,7 +574,9 @@ function prepararLote(texto) {
       descricao: pega('descricao').trim() || null,
       um: pega('um').trim() || null,
       localizacao: pega('localizacao').trim() || null,
-      quantidade: pega('quantidade').trim()
+      quantidade: pega('quantidade').trim(),
+      referencia: pega('referencia').trim() || null,
+      lote: pega('lote').trim() || null
     });
   });
 
