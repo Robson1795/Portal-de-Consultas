@@ -500,7 +500,7 @@ function cardPedidoCarregamento(p) {
 }
 
 function corDaOrigem(nome) {
-  const mapa = { amarelo: '#f0c419', rosa: '#ec4899', verde: '#2f9e5c', azul: '#0369a1', laranja: '#d97706', vermelho: '#b91c1c' };
+  const mapa = { amarelo: '#f0c419', rosa: '#ec4899', verde: 'var(--ok-borda)', azul: '#0369a1', laranja: 'var(--aviso-borda)', vermelho: 'var(--erro-borda)' };
   return mapa[String(nome).toLowerCase()] || '#94a3b8';
 }
 
@@ -1040,7 +1040,7 @@ document.getElementById('expCtrlConferirBtn').addEventListener('click', async ()
       </thead>
       <tbody>
         ${expCtrlPendentes.map(l => `
-          <tr${l.descricao ? '' : ' style="background:#fee2e2;"'}>
+          <tr${l.descricao ? '' : ' style="background:var(--erro-fundo);"'}>
             <td class="item">${escapeHtml(l.codigo_item)}</td>
             <td>${l.descricao ? escapeHtml(l.descricao) : '⚠ não encontrada'}</td>
             <td class="loc">${escapeHtml(l.um || '—')}</td>
@@ -1221,7 +1221,7 @@ function renderExpControle(erroCarregamento) {
       <td class="loc">${escapeHtml(l.lote || '—')}</td>
       <td class="loc">${escapeHtml(l.referencia || '—')}</td>
       <td class="loc">${l.etiqueta_emitida_em
-        ? `<span title="Etiqueta emitida em ${escapeHtml(formatarDataHoraBR(l.etiqueta_emitida_em))}${l.etiqueta_emitida_por ? ' por ' + escapeHtml(l.etiqueta_emitida_por) : ''}" style="color:#166534; font-weight:700;">✓</span>`
+        ? `<span title="Etiqueta emitida em ${escapeHtml(formatarDataHoraBR(l.etiqueta_emitida_em))}${l.etiqueta_emitida_por ? ' por ' + escapeHtml(l.etiqueta_emitida_por) : ''}" style="color:var(--ok-texto); font-weight:700;">✓</span>`
         : `<span title="Etiqueta ainda não emitida — sai marcada quando você imprimir esta lista" style="color:var(--muted);">—</span>`}</td>
       <td>${retirado
         ? `<span class="cfg-status st-ativo">Saiu p/ carregamento</span>`

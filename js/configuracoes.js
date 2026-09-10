@@ -185,10 +185,10 @@ function renderConfigUnidades() {
     <tr data-unidade="${escapeHtml(u.unidade)}">
       <td>
         <div class="cfg-nome">${escapeHtml(rotuloUnidade(u.unidade))}</div>
-        ${faltaSenha ? '<div class="cfg-email" style="color:#92400e;">sem senha — contagem bloqueada</div>' : ''}
-        ${faltaSenhaExp ? '<div class="cfg-email" style="color:#92400e;">sem senha EXP — página bloqueada</div>' : ''}
-        ${faltaEmail ? '<div class="cfg-email" style="color:#92400e;">sem e-mail — envio desabilitado</div>' : ''}
-        ${faltaEmailCompras ? '<div class="cfg-email" style="color:#92400e;">sem e-mail do Compras — solicitação de compra desabilitada</div>' : ''}
+        ${faltaSenha ? '<div class="cfg-email" style="color:var(--aviso-texto);">sem senha — contagem bloqueada</div>' : ''}
+        ${faltaSenhaExp ? '<div class="cfg-email" style="color:var(--aviso-texto);">sem senha EXP — página bloqueada</div>' : ''}
+        ${faltaEmail ? '<div class="cfg-email" style="color:var(--aviso-texto);">sem e-mail — envio desabilitado</div>' : ''}
+        ${faltaEmailCompras ? '<div class="cfg-email" style="color:var(--aviso-texto);">sem e-mail do Compras — solicitação de compra desabilitada</div>' : ''}
       </td>
       <td><input type="text" class="cfgu-emails" placeholder="alm@kingspanisoeste.com.br; outro@..."
                  value="${escapeHtml(u.emails_alm || '')}" style="max-width:320px;"></td>
@@ -582,7 +582,7 @@ function renderPreviaLote(pronto) {
   const alvo = document.getElementById('lotePrevia');
 
   const avisosHtml = (pronto.avisos && pronto.avisos.length)
-    ? '<div class="cfg-nota" style="margin:0 0 10px; color:#92400e;">'
+    ? '<div class="cfg-nota" style="margin:0 0 10px; color:var(--aviso-texto);">'
       + pronto.avisos.map(a => '⚠️ ' + escapeHtml(a)).join('<br>') + '</div>'
     : '';
 
@@ -657,8 +657,8 @@ function pedirConfirmacaoLote() {
     return;
   }
   document.getElementById('loteAcao').innerHTML =
-      '<div class="cfg-nota" style="margin:0 0 10px; background:#fee2e2;'
-    + ' border:1px solid #b91c1c; color:#991b1b;">'
+      '<div class="cfg-nota" style="margin:0 0 10px; background:var(--erro-fundo);'
+    + ' border:1px solid var(--erro-borda); color:var(--erro-texto);">'
     + '<b>Confirmar substituição.</b> Vai substituir: '
     + escapeHtml(resumoDoLote(lotePreparado)) + '. O estoque anterior dessas '
     + 'unidades é apagado e trocado pelo que veio na planilha. '

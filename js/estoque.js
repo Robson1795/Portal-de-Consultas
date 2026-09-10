@@ -1132,8 +1132,8 @@ async function salvarContagemItem(input) {
 // Deixa visível para quem está contando que a gravação NÃO foi feita.
 function marcarFalhaContagem(input, diffSlot, mensagem) {
   input.classList.remove('contagem-salvo', 'contagem-divergente');
-  input.style.borderColor = '#c62828';
-  input.style.background = '#ffebee';
+  input.style.borderColor = 'var(--erro-borda)';
+  input.style.background = 'var(--erro-fundo)';
   input.title = 'NÃO SALVOU: ' + mensagem;
   if (diffSlot) diffSlot.innerHTML = '<span class="diff-badge diff-menos">\u26a0 não salvou</span>';
   console.error('Falha ao gravar contagem:', mensagem);
@@ -1309,7 +1309,7 @@ async function compartilharImagemModal() {
     // scale: 2 -- a imagem sai numa tela de celular depois de ir e voltar
     // pelo WhatsApp (que recomprime), então vale sair maior que o normal
     // pra não nascer borrada.
-    canvas = await html2canvas(compareModalBox, { backgroundColor: '#ffffff', scale: 2 });
+    canvas = await html2canvas(compareModalBox, { backgroundColor: 'var(--panel)', scale: 2 });
   } catch (e) {
     escondidos.forEach((el, i) => { el.style.display = displayOriginal[i]; });
     if (botao) { botao.disabled = false; botao.textContent = textoOriginalBotao; }
@@ -1411,7 +1411,7 @@ async function openCompareModal(itemCode, extraHtml) {
     const ehAtual = cod === unidadeAtual;
     const ehMaior = r && r.totalQtd === maiorQtd && maiorQtd > -1;
     let estilo = '';
-    if (ehMaior) estilo = 'background:#fff8e6;';
+    if (ehMaior) estilo = 'background:var(--aviso-fundo);';
     else if (ehAtual) estilo = 'background:var(--row-alt);';
 
     // Nota discreta só na Trading, e só quando o código de lá é diferente --
@@ -1514,7 +1514,7 @@ function abrirSugestoesSubstitutoEstoque(itemCode) {
             <td style="padding:9px 10px; font-weight:600;">${escapeHtml(s.item)}</td>
             <td style="padding:9px 10px;">${escapeHtml(s.descricao)}</td>
             <td style="padding:9px 10px; text-align:right; font-weight:700; color:var(--blue-dark);">${escapeHtml(s.quantidade.toLocaleString('pt-BR'))}</td>
-            <td style="padding:9px 10px; color:#166534;">${escapeHtml(s.comuns.join(', '))}</td>
+            <td style="padding:9px 10px; color:var(--ok-texto);">${escapeHtml(s.comuns.join(', '))}</td>
           </tr>`).join('')}
       </tbody>
     </table>` : `<div class="modal-empty">Nenhum item parecido com saldo nesta unidade.</div>`}

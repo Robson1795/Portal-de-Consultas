@@ -1350,3 +1350,100 @@ lugar.
   (seção 7): marcado "impedir que esta página crie novos diálogos", o clique
   não faz nada e nenhuma mensagem aparece. Fica como pendência — a aba de lote
   já usa a confirmação na própria tela.
+
+---
+
+## 16. Tema claro e escuro (10/09/2026)
+
+O Victor: *"Coloque um botão na tela de navegação, no canto superior, para
+alternar entre modo claro e modo escuro. Implemente o modo escuro entre todas
+as telas."*
+
+Botão no canto direito do cabeçalho, ao lado do avatar. O ícone mostra **para
+onde vai**, não onde está: 🌙 no claro (clique para escurecer), ☀️ no escuro.
+Mostrar o estado atual é a fonte clássica de confusão nesse botão.
+
+### O trabalho não foi o botão, foi centralizar as cores
+
+O portal tinha **9 variáveis no `:root` e 166 cores fixas espalhadas** — 87 no
+`styles.css` e 79 em HTML/JS. Um tema escuro em cima disso deixaria caixa
+branca acesa e texto ilegível em metade das telas. Então primeiro as cores
+viraram **tokens**, e o tema escuro é só redefinir os mesmos nomes:
+
+```
+:root { --panel: #ffffff; ... }
+:root[data-tema="escuro"] { --panel: #172230; ... }
+```
+
+29 tokens. Os nomes dizem o **papel**, não a cor (`--ok-fundo`, não
+`--verde-claro`): no escuro o "verde claro" deixa de ser claro, e o nome
+viraria mentira. Regra para telas novas: **use os tokens.** Cor fixa aparece
+como mancha clara no tema escuro, que é o próprio sinal de que passou reto.
+
+### Os quatro tokens que não são óbvios
+
+| Token | Para quê |
+|---|---|
+| `--blue` | o azul como **fundo** (cabeçalho, botão primário, menu ativo). No escuro fica **escuro** (`#1f5fa8`), para o texto branco em cima continuar legível |
+| `--blue-texto` | o azul como **texto/borda**. No escuro **clareia** (`#7db8f5`), senão desaparece no fundo escuro |
+| `--sobre-acento` | texto que fica sobre qualquer cor de destaque (azul, dourado, verde de ação). **Branco nos dois temas** — é token, e não `#fff` cru, para a varredura de cores não confundir com esquecimento |
+| `--ok-acao` / `--aviso-acao` | fundo de **botão** de ação, com texto branco. Os tons `-borda` são claros e não servem: era o que deixava "OK, bate tudo" em 3,0:1 **mesmo no tema claro** |
+
+⚠️ **`--blue` e `--blue-texto` existem porque um token não faz os dois papéis.**
+Antes de separar, o menu ativo ficava com texto escuro sobre azul no tema
+escuro (2,49:1) — em todas as nove telas.
+
+### ⚠️ Impressão é sempre clara, e isso precisou de um bloco próprio
+
+A Consulta de Itens e o Estoque de Aço imprimem a **própria página**
+(`window.print()`, não uma aba nova), e as regras de `@media print` usam
+`var(--ink)` e `var(--muted)`. No tema escuro `--ink` é quase branco: a folha
+sairia com **texto branco em papel branco** — ilegível, e só se descobriria na
+impressora.
+
+Por isso existe um `@media print` que reescreve **todos os 29 tokens** para
+valores claros, inclusive com o tema escuro ligado. Vale para os dois que são
+usados hoje e para qualquer regra de impressão que apareça amanhã. Os fundos de
+estado viram branco: no papel quem separa a informação é o texto e a borda, não
+a mancha de cor, que sai cinza na impressora preto e branco e só suja a folha.
+
+As folhas geradas em **aba nova** (etiqueta da Trading, ficha do Controle EXP)
+não dependem disso — são outro documento, sem o `data-tema` — e continuam com
+as cores próprias em milímetros. Nenhuma delas foi tocada.
+
+### Detalhes que evitam defeito
+
+- **O tema é aplicado por um script no `<head>`**, antes de a tela ser pintada.
+  Nos scripts do fim do `body` cada carregamento daria um **flash branco** antes
+  de escurecer — o defeito clássico de tema escuro.
+- **Sem preferência salva, segue o sistema** (`prefers-color-scheme`): quem já
+  usa o computador no escuro abre o portal no escuro, sem descobrir o botão.
+  A escolha explícita fica no `localStorage` e vence o sistema.
+- **`color-scheme: dark`** no tema escuro: é o que faz o navegador desenhar
+  barra de rolagem, menu de `select` e calendário no escuro. Sem isso, `input` e
+  `select` aparecem brancos por conta própria.
+- **O logo é PNG com fundo claro embutido** e apareceria como retângulo branco.
+  Leva um `filter: brightness(.92)` — só ele, não as fotos de item da ficha
+  técnica, que precisam ser vistas como são.
+- **Cores de sinalização não seguem o tema**, de propósito: as cores de veículo
+  (amarelo, rosa, verde, azul) e o amarelo do pallet pendente identificam coisa
+  física, e mudariam de significado se mudassem de tom.
+
+### Como isto foi conferido
+
+Um auditor de contraste rodado **dentro da página**, nas 9 telas, nos 9 modais
+e no login, nos dois temas: para cada elemento com texto, compõe o fundo real
+(subindo a árvore, misturando transparência e média de gradiente) e calcula o
+contraste WCAG. Resultado final: **zero texto abaixo de 4,5:1 e zero mancha
+clara**, nos dois temas.
+
+O auditor pegou seis defeitos que passariam numa conferência a olho:
+
+1. `background: white` (palavra-chave) — o primeiro regex só via hex.
+2. `#fff` trocado por `--panel` **também onde era `color:`** — texto escuro
+   sobre azul, nas nove telas.
+3. Regras acrescentadas **depois** do primeiro `@media print` no arquivo, que a
+   primeira passada pulou inteiras (o crachá do depósito acendia).
+4. Os dois botões grandes da validação de bobina, em 2,8:1 e 2,2:1.
+5. `background:white` e `color:var(--blue)` **inline** no `index.html`.
+6. O verde do "Sincronizado", que usava tom de borda em texto (3,23:1).

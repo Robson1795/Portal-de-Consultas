@@ -31,7 +31,7 @@ const DOMINIO_USUARIO = "portal.kingspanisoeste.local";
 
 // Nome que aparece destacado em verde na saudacao do cabecalho.
 // Verde claro porque o cabecalho tem fundo azul-escuro; o verde do resto
-// do portal (#2f9e5c) nao teria contraste suficiente ali.
+// do portal (var(--ok-borda)) nao teria contraste suficiente ali.
 const NOME_DESTAQUE = "victor hugo";
 const COR_NOME_DESTAQUE = "#6ee7a0";
 
@@ -53,7 +53,7 @@ function resolverIdentificador(valor) {
 if (!window.supabase || typeof window.supabase.createClient !== 'function') {
   document.body.insertAdjacentHTML('afterbegin',
     '<div style="margin:16px; padding:16px 18px; border-radius:12px;'
-    + ' background:#fee2e2; border:1px solid #b91c1c; color:#991b1b;'
+    + ' background:var(--erro-fundo); border:1px solid var(--erro-borda); color:var(--erro-texto);'
     + ' font: 15px/1.45 -apple-system, \'Segoe UI\', Roboto, Arial, sans-serif;">'
     + '<b>Não foi possível abrir o portal.</b><br>'
     + 'A biblioteca de acesso ao banco não chegou — quase sempre é a conexão,'

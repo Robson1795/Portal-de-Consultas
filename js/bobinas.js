@@ -127,7 +127,7 @@ function renderBobinas() {
     const chave = chaveBobina(r.item, r.localizacao, r.lote);
     const fisico = bobinasContagemMap[chave];
     const d = calcularDivergenciaBobina(r.qtd_liquida, fisico);
-    const corLinha = d.temValor ? (d.classe === 'diff-ok' ? 'background:#f0fbf4;' : 'background:#fffbeb;') : '';
+    const corLinha = d.temValor ? (d.classe === 'diff-ok' ? 'background:var(--ok-fundo);' : 'background:var(--aviso-fundo);') : '';
     return `
       <tr style="${corLinha}" data-chave="${escapeHtml(chave)}">
         <td class="item">${escapeHtml(r.item)}</td>
@@ -220,12 +220,12 @@ async function salvarContagemBobina(input) {
   }
 
   if (erro) {
-    input.style.borderColor = '#c62828';
-    input.style.background = '#ffebee';
+    input.style.borderColor = 'var(--erro-borda)';
+    input.style.background = 'var(--erro-fundo)';
     input.title = 'NÃO SALVOU: ' + erro.message;
     badge.className = 'diff-badge diff-menos';
     badge.textContent = '\u26a0 não salvou';
-    linha.style.background = '#ffebee';
+    linha.style.background = 'var(--erro-fundo)';
     console.error('Falha ao gravar contagem de bobina:', erro.message);
     return;
   }
@@ -238,7 +238,7 @@ async function salvarContagemBobina(input) {
   if (ajustadoTd) ajustadoTd.textContent = d.temValor ? d.ajustado : '-';
   clearBtn.style.display = d.temValor ? 'inline-block' : 'none';
   // Pinta a linha automaticamente: verde se bateu, amarelo se divergiu
-  linha.style.background = d.temValor ? (d.classe === 'diff-ok' ? '#f0fbf4' : '#fffbeb') : '';
+  linha.style.background = d.temValor ? (d.classe === 'diff-ok' ? 'var(--ok-fundo)' : 'var(--aviso-fundo)') : '';
   atualizarCardsBobinas();
 }
 
@@ -284,7 +284,7 @@ function iniciarTempoRealBobinas() {
       badge.textContent = d.texto;
       if (ajustadoTd) ajustadoTd.textContent = d.temValor ? d.ajustado : '-';
       clearBtn.style.display = d.temValor ? 'inline-block' : 'none';
-      linha.style.background = d.temValor ? (d.classe === 'diff-ok' ? '#f0fbf4' : '#fffbeb') : '';
+      linha.style.background = d.temValor ? (d.classe === 'diff-ok' ? 'var(--ok-fundo)' : 'var(--aviso-fundo)') : '';
       atualizarCardsBobinas();
     })
     .subscribe();

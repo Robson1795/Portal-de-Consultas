@@ -333,3 +333,32 @@ function montarCabecalho() {
     });
   }
 }
+
+// ---- Alternar claro/escuro ------------------------------------------------
+//
+// O tema em si e aplicado por um script no <head> do index.html, antes de a
+// tela ser pintada (ver o comentario de la). Aqui fica so o clique e o icone.
+//
+// O icone mostra PARA ONDE vai, nao onde esta: no claro aparece a lua (clique
+// pra escurecer), no escuro aparece o sol. Mostrar o estado atual e a fonte
+// classica de confusao nesse botao.
+function aplicarTema(tema) {
+  const escuro = tema === 'escuro';
+  document.documentElement.setAttribute('data-tema', escuro ? 'escuro' : 'claro');
+  const b = document.getElementById('temaToggle');
+  if (b) {
+    b.textContent = escuro ? '\u2600\uFE0F' : '\u{1F319}';
+    b.title = escuro ? 'Voltar para o modo claro' : 'Alternar para o modo escuro';
+  }
+  try { localStorage.setItem('portal_tema', escuro ? 'escuro' : 'claro'); }
+  catch (e) { /* sem localStorage: vale so nesta aba */ }
+}
+
+document.getElementById('temaToggle').addEventListener('click', () => {
+  const escuroAgora = document.documentElement.getAttribute('data-tema') === 'escuro';
+  aplicarTema(escuroAgora ? 'claro' : 'escuro');
+});
+
+// Acerta o icone na carga: o <head> ja aplicou o tema, mas o botao ainda nao
+// existia naquele momento.
+aplicarTema(document.documentElement.getAttribute('data-tema') === 'escuro' ? 'escuro' : 'claro');

@@ -125,9 +125,9 @@ function mostrarVeredito(codigo, pesoEtiqueta) {
       `<div>lote <b>${escapeHtml(b.lote || '—')}</b> · ${escapeHtml(b.localizacao || '—')} · <b>${escapeHtml(String(b.qtd_liquida))}</b> ${escapeHtml(b.um || '')}</div>`
     ).join('');
     box.style.display = 'block';
-    box.style.background = '#fffbeb';
-    box.style.borderColor = '#d97706';
-    box.style.color = '#92400e';
+    box.style.background = 'var(--aviso-fundo)';
+    box.style.borderColor = 'var(--aviso-borda)';
+    box.style.color = 'var(--aviso-texto)';
     box.innerHTML = `<div style="font-size:20px; font-weight:800;">⚠️ ${candidatas.length} lotes deste item</div>
       <div style="font-size:13px; margin-top:4px;">Confira o lote na etiqueta e registre a divergência se o peso não bater:</div>
       <div style="font-size:12.5px; margin-top:6px; line-height:1.5;">${linhas}</div>`;
@@ -140,9 +140,9 @@ function mostrarVeredito(codigo, pesoEtiqueta) {
 
   if (!bobina) {
     box.style.display = 'block';
-    box.style.background = '#fee2e2';
-    box.style.borderColor = '#b91c1c';
-    box.style.color = '#991b1b';
+    box.style.background = 'var(--erro-fundo)';
+    box.style.borderColor = 'var(--erro-borda)';
+    box.style.color = 'var(--erro-texto)';
     box.innerHTML = `<div style="font-size:20px; font-weight:800;">❌ Não encontrada no sistema</div>
       <div style="font-size:13px; margin-top:4px;">Código lido: <b>${escapeHtml(codigo || '—')}</b>. Confira o código ou registre como divergência.</div>`;
     msg.textContent = '';
@@ -156,25 +156,25 @@ function mostrarVeredito(codigo, pesoEtiqueta) {
   box.style.display = 'block';
   if (pesoEtiqueta === null) {
     // Achou a bobina, mas não conseguiu ler o peso da etiqueta
-    box.style.background = '#fffbeb';
-    box.style.borderColor = '#d97706';
-    box.style.color = '#92400e';
+    box.style.background = 'var(--aviso-fundo)';
+    box.style.borderColor = 'var(--aviso-borda)';
+    box.style.color = 'var(--aviso-texto)';
     box.innerHTML = `<div style="font-size:20px; font-weight:800;">⚠️ Confira o peso</div>
       <div style="font-size:13px; margin-top:4px;">Bobina <b>${escapeHtml(bobina.item)}</b> encontrada. No sistema: <b>${escapeHtml(String(pesoSistema))}</b>. Não consegui ler o peso da etiqueta — digite abaixo.</div>`;
     if (navigator.vibrate) navigator.vibrate(150);
   } else if (!pesoDivergente) {
-    box.style.background = '#f0fbf4';
-    box.style.borderColor = '#2f9e5c';
-    box.style.color = '#166534';
+    box.style.background = 'var(--ok-fundo)';
+    box.style.borderColor = 'var(--ok-borda)';
+    box.style.color = 'var(--ok-texto)';
     box.innerHTML = `<div style="font-size:22px; font-weight:800;">✅ TUDO OK</div>
       <div style="font-size:13px; margin-top:4px;">Peso da etiqueta bate com o sistema (<b>${escapeHtml(String(pesoSistema))}</b>). Confirme a localização e toque em OK.</div>`;
     if (navigator.vibrate) navigator.vibrate(150);
     msg.textContent = '';
   } else {
     const dif = (pesoEtiqueta - pesoSistema).toFixed(2);
-    box.style.background = '#fffbeb';
-    box.style.borderColor = '#d97706';
-    box.style.color = '#92400e';
+    box.style.background = 'var(--aviso-fundo)';
+    box.style.borderColor = 'var(--aviso-borda)';
+    box.style.color = 'var(--aviso-texto)';
     box.innerHTML = `<div style="font-size:22px; font-weight:800;">⚠️ DIVERGENTE</div>
       <div style="font-size:13px; margin-top:4px;">Etiqueta: <b>${escapeHtml(String(pesoEtiqueta))}</b> · Sistema: <b>${escapeHtml(String(pesoSistema))}</b> · Diferença: <b>${dif > 0 ? '+' : ''}${escapeHtml(dif)}</b></div>`;
     if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
