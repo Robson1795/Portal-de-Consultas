@@ -887,6 +887,7 @@ async function aplicarLote() {
   document.getElementById('lotePrevia').innerHTML = '';
   document.getElementById('loteTexto').value = '';
   document.getElementById('loteArquivoNome').textContent = '';
+  carregarDatasLote(); // a aba que acabou de gravar mostra a hora agora mesmo, sem esperar recarregar a página
 }
 
 // ---- Abas, arquivo, botões ------------------------------------------------
@@ -955,6 +956,42 @@ document.getElementById('loteArquivo').addEventListener('change', (e) => {
   e.target.value = '';
 });
 
+// Data da última atualização de cada aba do lote, embaixo do botão (Robson,
+// 10/09/2026: "coloque a data de atualização de cada aba dessa, pode ser
+// embaixo em um tamanho pequeno"). Uma consulta rasa por fonte (só a coluna
+// da data, 1 linha só) -- nunca mais que 5 idas ao banco, cada uma
+// praticamente de graça. É a data mais recente entre TODAS as unidades:
+// esta seção não é presa a uma unidade só (a planilha colada pode trazer
+// várias de uma vez), então "atualizado" aqui quer dizer "a última vez que
+// alguém colou uma planilha nesta aba, em qualquer unidade".
+async function carregarDatasLote() {
+  const fontes = [
+    { aba: 'alm', tabela: 'estoque', deposito: 'alm' },
+    { aba: 'sesmt', tabela: 'estoque', deposito: 'sesmt' },
+    { aba: 'benchmark', tabela: 'estoque', deposito: 'benchmark' },
+    { aba: 'exp', tabela: 'catalogo_exp_itens', deposito: null },
+    { aba: 'aco', tabela: 'bobinas_aco', deposito: null }
+  ];
+
+  await Promise.all(fontes.map(async ({ aba, tabela, deposito }) => {
+    const el = document.querySelector(`.lote-aba-data[data-lote-aba-data="${aba}"]`);
+    if (!el) return;
+    try {
+      let consulta = sb.from(tabela).select('atualizado_em').not('atualizado_em', 'is', null);
+      if (deposito) consulta = consulta.eq('deposito', deposito);
+      const { data, error } = await consulta.order('atualizado_em', { ascending: false }).limit(1);
+      if (error) throw error;
+      const quando = data && data[0] && data[0].atualizado_em;
+      el.textContent = quando
+        ? 'Atualizado ' + new Date(quando).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+        : 'Nunca atualizado';
+    } catch (e) {
+      el.textContent = '—';
+      console.warn('Não foi possível ler a data de atualização de ' + aba + ':', e.message);
+    }
+  }));
+}
+
 // Chamada ao abrir a aba Configurações (js/navegacao.js).
 function carregarLote() {
   const mostrar = !!isAdminAtual;
@@ -962,5 +999,5 @@ function carregarLote() {
     const el = document.getElementById(id);
     if (el) el.style.display = mostrar ? '' : 'none';
   });
-  if (mostrar) trocarAbaLote(loteAba);
+  if (mostrar) { trocarAbaLote(loteAba); carregarDatasLote(); }
 }

@@ -952,12 +952,27 @@
     <div class="req-secao" id="loteSecaoTitulo">Atualizar estoques em lote</div>
     <div class="panel" id="loteSecao">
       <div class="cfg-barra">
-        <div id="loteAbas" style="display:flex; gap:8px; flex-wrap:wrap;">
-          <button class="btn btn-primary" data-lote-aba="alm">Almoxarifado</button>
-          <button class="btn" data-lote-aba="sesmt">SESMT</button>
-          <button class="btn" data-lote-aba="benchmark">Benchmark</button>
-          <button class="btn" data-lote-aba="exp">Catálogo EXP</button>
-          <button class="btn" data-lote-aba="aco">Aço (bobinas)</button>
+        <div id="loteAbas" style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-start;">
+          <div style="display:flex; flex-direction:column; align-items:center; gap:3px;">
+            <button class="btn btn-primary" data-lote-aba="alm">Almoxarifado</button>
+            <span class="lote-aba-data" data-lote-aba-data="alm">—</span>
+          </div>
+          <div style="display:flex; flex-direction:column; align-items:center; gap:3px;">
+            <button class="btn" data-lote-aba="sesmt">SESMT</button>
+            <span class="lote-aba-data" data-lote-aba-data="sesmt">—</span>
+          </div>
+          <div style="display:flex; flex-direction:column; align-items:center; gap:3px;">
+            <button class="btn" data-lote-aba="benchmark">Benchmark</button>
+            <span class="lote-aba-data" data-lote-aba-data="benchmark">—</span>
+          </div>
+          <div style="display:flex; flex-direction:column; align-items:center; gap:3px;">
+            <button class="btn" data-lote-aba="exp">Catálogo EXP</button>
+            <span class="lote-aba-data" data-lote-aba-data="exp">—</span>
+          </div>
+          <div style="display:flex; flex-direction:column; align-items:center; gap:3px;">
+            <button class="btn" data-lote-aba="aco">Aço (bobinas)</button>
+            <span class="lote-aba-data" data-lote-aba-data="aco">—</span>
+          </div>
         </div>
         <span class="status-msg" id="loteMsg" style="margin-left:auto;"></span>
       </div>
