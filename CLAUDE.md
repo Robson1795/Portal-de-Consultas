@@ -1113,6 +1113,37 @@ antes da tabela dela. Assim o botão funciona nos três usos do modal sem
 duplicar a lógica de montagem de cada um — e se o conteúdo do modal mudar um
 dia, o texto compartilhado muda junto sozinho.
 
+### 🖼️ Compartilhar como imagem — pro WhatsApp de verdade (09/09/2026)
+
+O Robson: *"faça a opção de compartilhar em html também para whats"*.
+Perguntado o que resolveria — WhatsApp não renderiza HTML colado, só texto
+puro ou uma imagem — a resposta foi direta: **gerar uma imagem da tabela**.
+
+Segundo botão, **🖼️ Imagem**, ao lado do 📤 Compartilhar, nos mesmos três
+usos do modal:
+
+- **`html2canvas`** (carregado só no primeiro uso, mesmo padrão de
+  `CDN_XLSX`/`CDN_TESSERACT` em `js/config.js`) tira uma "foto" do
+  `compareModalBox` inteiro — cores, negrito, borda e o 🏆 da unidade com
+  mais saldo saem exatamente como na tela. Desenhar a tabela célula a célula
+  num `<canvas>` à mão reinventaria o que a biblioteca já resolve.
+- **Os três botões (fechar, Compartilhar, Imagem) somem só durante a
+  captura** (`display:none` nos elementos com `.modal-close` ou
+  `.modal-acao-compartilhar`, restaurado logo depois) — ninguém quer print de
+  botão clicável na imagem que vai pro cliente ou pro compras.
+- **`scale: 2`**: a imagem sai numa tela de celular depois de passar pelo
+  WhatsApp (que recomprime), então vale nascer maior que o normal em vez de
+  ficar borrada.
+- **`navigator.canShare({ files })` antes de `navigator.share()`**: tem
+  navegador que compartilha texto mas recusa arquivo — teria que ser
+  conferido ANTES de chamar `share()`, senão o erro só aparece depois de já
+  ter gerado a imagem inteira.
+- **Sem compartilhamento de arquivo** (a maioria dos navegadores de
+  computador): baixa o PNG (`comparativo-AAAA-MM-DD.png`) e o botão avisa
+  "✓ Baixada! Anexe no WhatsApp" — pra anexar à mão no WhatsApp Web.
+- Cancelar a caixa de compartilhamento (`AbortError`) não cai no fallback de
+  baixar — mesma regra do botão de texto.
+
 ## Etiqueta de localização — só na Trading (09/09/2026)
 
 O Robson: *"agora só para o estoque da trading, pode colocar no lugar de estoque

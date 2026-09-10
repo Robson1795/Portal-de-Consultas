@@ -1259,8 +1259,86 @@ async function compartilharConteudoModal() {
   }
 }
 
+// ---- Compartilhar como IMAGEM (pro WhatsApp, que não mostra tabela/HTML) --
+//
+// O Robson pediu "compartilhar em HTML também para o WhatsApp" -- perguntado
+// o que resolveria (WhatsApp não renderiza HTML colado, só texto puro ou
+// imagem), a resposta foi: gerar uma imagem da tabela, que o WhatsApp trata
+// como uma foto qualquer, igual a um print de tela.
+//
+// html2canvas em vez de desenhar a tabela à mão num <canvas>: a tabela já
+// tem cor, negrito, borda e o 🏆 da unidade com mais saldo -- reproduzir tudo
+// isso célula por célula seria reinventar exatamente o que a biblioteca já
+// resolve. Carregada só no primeiro uso (mesmo padrão do xlsx/tesseract, ver
+// js/config.js) -- ninguém que só consulta item paga esse peso.
+async function compartilharImagemModal() {
+  const botao = document.getElementById('compareShareImgBtn');
+  const textoOriginalBotao = botao ? botao.textContent : '';
+
+  try {
+    await carregarBiblioteca('a geração de imagem', CDN_HTML2CANVAS, () => typeof html2canvas !== 'undefined');
+  } catch (e) {
+    alert(e.message);
+    return;
+  }
+
+  if (botao) { botao.disabled = true; botao.textContent = 'Gerando imagem...'; }
+
+  // Os botões de ação (✕ fechar, Compartilhar, Compartilhar imagem) somem só
+  // durante a captura -- ninguém quer print de botão clicável na imagem que
+  // vai pro cliente ou pro compras.
+  const escondidos = [...compareModalBox.querySelectorAll('.modal-close, .modal-acao-compartilhar')];
+  const displayOriginal = escondidos.map(el => el.style.display);
+  escondidos.forEach(el => { el.style.display = 'none'; });
+
+  let canvas;
+  try {
+    // scale: 2 -- a imagem sai numa tela de celular depois de ir e voltar
+    // pelo WhatsApp (que recomprime), então vale sair maior que o normal
+    // pra não nascer borrada.
+    canvas = await html2canvas(compareModalBox, { backgroundColor: '#ffffff', scale: 2 });
+  } catch (e) {
+    escondidos.forEach((el, i) => { el.style.display = displayOriginal[i]; });
+    if (botao) { botao.disabled = false; botao.textContent = textoOriginalBotao; }
+    alert('Não foi possível gerar a imagem: ' + e.message);
+    return;
+  }
+  escondidos.forEach((el, i) => { el.style.display = displayOriginal[i]; });
+  if (botao) { botao.disabled = false; botao.textContent = textoOriginalBotao; }
+
+  canvas.toBlob(async (blob) => {
+    if (!blob) { alert('Não foi possível gerar a imagem.'); return; }
+    const nomeArquivo = 'comparativo-' + new Date().toISOString().slice(0, 10) + '.png';
+
+    // canShare({ files }) e não só `!!navigator.share`: têm navegador que
+    // compartilha TEXTO mas recusa ARQUIVO -- teria que ser conferido antes
+    // de chamar share(), senão o erro só aparece depois de gerar a imagem.
+    if (navigator.canShare) {
+      const arquivo = new File([blob], nomeArquivo, { type: 'image/png' });
+      if (navigator.canShare({ files: [arquivo] })) {
+        try {
+          await navigator.share({ files: [arquivo] });
+          return;
+        } catch (e) {
+          if (e.name === 'AbortError') return; // cancelou o compartilhamento -- não é erro
+          // segue pro fallback de baixar, abaixo
+        }
+      }
+    }
+
+    // Sem compartilhamento de arquivo (a maioria dos navegadores de
+    // computador): baixa o PNG, pra anexar à mão no WhatsApp Web.
+    baixarArquivo(blob, nomeArquivo);
+    if (botao) {
+      botao.textContent = '✓ Baixada! Anexe no WhatsApp';
+      setTimeout(() => { botao.textContent = textoOriginalBotao; }, 2500);
+    }
+  }, 'image/png');
+}
+
 compareModalBox.addEventListener('click', (e) => {
   if (e.target.closest('#compareShareBtn')) compartilharConteudoModal();
+  if (e.target.closest('#compareShareImgBtn')) compartilharImagemModal();
 });
 
 // `extraHtml` é opcional: um bloco de HTML pronto pra entrar depois da
@@ -1356,7 +1434,10 @@ async function openCompareModal(itemCode, extraHtml) {
     <button class="modal-close" id="compareCloseBtn2">✕</button>
     <h3 style="padding-right:24px;">${escapeHtml(nomeItem || itemCode)}</h3>
     <div class="modal-item-code">Código: ${escapeHtml(itemCode)}</div>
-    <button type="button" class="btn" id="compareShareBtn" style="margin-bottom:6px;" title="Compartilhar ou copiar esta tabela — pra pedir transferência a outra unidade, ou justificar reposição pro compras">📤 Compartilhar</button>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:6px;">
+      <button type="button" class="btn modal-acao-compartilhar" id="compareShareBtn" title="Compartilhar ou copiar como texto — pra pedir transferência a outra unidade, ou justificar reposição pro compras">📤 Compartilhar</button>
+      <button type="button" class="btn modal-acao-compartilhar" id="compareShareImgBtn" title="Compartilhar como imagem — pro WhatsApp, que não mostra tabela colada">🖼️ Imagem</button>
+    </div>
     <table style="width:100%; border-collapse:collapse; margin-top:10px; font-size:13px; table-layout:fixed;">
       <thead>
         <tr style="border-bottom:2px solid var(--border);">
@@ -1396,7 +1477,10 @@ function abrirSugestoesSubstitutoEstoque(itemCode) {
     <button class="modal-close" id="compareCloseBtn2">✕</button>
     <h3 style="padding-right:24px;">${escapeHtml(item.descricao || itemCode)}</h3>
     <div class="modal-item-code">Código: ${escapeHtml(itemCode)} — sem saldo nesta unidade</div>
-    <button type="button" class="btn" id="compareShareBtn" style="margin-bottom:6px;" title="Compartilhar ou copiar">📤 Compartilhar</button>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:6px;">
+      <button type="button" class="btn modal-acao-compartilhar" id="compareShareBtn" title="Compartilhar ou copiar como texto">📤 Compartilhar</button>
+      <button type="button" class="btn modal-acao-compartilhar" id="compareShareImgBtn" title="Compartilhar como imagem — pro WhatsApp, que não mostra tabela colada">🖼️ Imagem</button>
+    </div>
     <div class="modal-text" style="margin:8px 0 4px;">
       Itens já em estoque com a mesma medida e pelo menos uma palavra em comum
       (ex.: material) -- confira se algum serve no lugar deste.

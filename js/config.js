@@ -80,6 +80,8 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // Agora as duas últimas são buscadas no momento do uso, uma vez por sessão.
 const CDN_TESSERACT = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
 const CDN_XLSX = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+// Só o "Compartilhar imagem" do modal de comparação usa -- ver js/estoque.js.
+const CDN_HTML2CANVAS = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
 
 const bibliotecasPedidas = {};
 
