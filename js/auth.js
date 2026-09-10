@@ -129,6 +129,23 @@ async function registrarAcesso(user) {
   }
 }
 
+// Avisa quem aprova (Robson e Victor, ver iniciarAlertaCadastro() em
+// js/configuracoes.js) que alguém acabou de se cadastrar. Broadcast, sem
+// esperar resposta -- só chega em quem estiver com o portal aberto na hora
+// (mesmo padrão de dispararAlertaBobina() em js/ocr.js). Não bloqueia o
+// cadastro se falhar: quem está se cadastrando não pode ficar preso porque
+// o aviso não saiu.
+function dispararAlertaCadastro({ nome, email, unidade }) {
+  try {
+    sb.channel('alertas-cadastro').send({
+      type: 'broadcast', event: 'novo_cadastro',
+      payload: { nome: nome || null, email, unidade: unidade || null, quando: new Date().toISOString() }
+    });
+  } catch (e) {
+    console.warn('Não foi possível avisar sobre o novo cadastro:', e.message);
+  }
+}
+
 // Garante que existe uma linha em usuarios_permitidos para este usuário,
 // e retorna { aprovado, nome }.
 async function verificarAprovacao(user) {
@@ -137,13 +154,24 @@ async function verificarAprovacao(user) {
     // O cargo aqui e um PEDIDO. Um gatilho no banco recusa 'admin' e forca
     // aprovado = false, entao escolher cargo no cadastro nao da acesso a nada
     // -- quem libera e o administrador, na aba Configuracoes.
-    await sb.from('usuarios_permitidos').insert({
+    // `error` conferido de propósito (e não só o `await` sem checar nada, como
+    // este bloco fazia antes): `.insert()` do PostgREST NÃO lança exceção
+    // para chave duplicada, só devolve `error` preenchido -- o `catch` deste
+    // try só pegaria falha de rede. É o `error` aqui que diz se a linha era
+    // NOVA de verdade (sem ele, dispararAlertaCadastro() avisaria Robson e
+    // Victor toda vez que qualquer pessoa já cadastrada abrisse o portal).
+    const { error: erroInsercao } = await sb.from('usuarios_permitidos').insert({
       user_id: user.id,
       email: user.email,
       nome: nomeCadastroPendente || null,
       unidade: unidadeCadastroPendente || null,
       perfil: cargoCadastroPendente || 'consultor'
     });
+    if (!erroInsercao) {
+      dispararAlertaCadastro({
+        nome: nomeCadastroPendente, email: user.email, unidade: unidadeCadastroPendente
+      });
+    }
     nomeCadastroPendente = '';
     unidadeCadastroPendente = '';
     cargoCadastroPendente = '';

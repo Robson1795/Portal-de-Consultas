@@ -927,6 +927,37 @@ td.col-acoes { white-space: nowrap; text-align: center; }
     background: var(--aviso-fundo); border: 1px solid var(--aviso-borda); color: var(--aviso-texto); padding: 10px 14px;
     border-radius: 8px; font-size: 13px; font-weight: 600; margin-bottom: 12px;
   }
+
+  /* Aviso de novo cadastro (Robson, 10/09/2026: "notificação chamativa nessa
+     tela") -- mesmo esquema de cor do #alertaBobinaBanner (é o mesmo padrão de
+     "algo precisa da sua atenção" já usado neste portal), com um pulso de
+     escala em vez de brilho: um box-shadow chamativo precisaria de uma cor
+     translúcida fixa, que ficaria errada trocando de tema claro/escuro. */
+  .alerta-cadastro {
+    background: var(--aviso-fundo); border: 1px solid var(--aviso-borda); color: var(--aviso-texto);
+    padding: 12px 16px; border-radius: 10px; font-size: 13.5px; font-weight: 700; margin-bottom: 14px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    animation: alerta-cadastro-pulso 0.9s ease-in-out 4;
+  }
+  .alerta-cadastro button {
+    background: var(--aviso-texto); color: var(--panel); border: none; border-radius: 6px;
+    padding: 6px 12px; font-size: 12.5px; font-weight: 700; cursor: pointer; white-space: nowrap;
+  }
+  @keyframes alerta-cadastro-pulso {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.02); }
+  }
+
+  /* Card "Aguardando aprovação" pulsa enquanto tiver alguém na fila -- pega
+     quem chegou na tela sem estar presente pro aviso ao vivo (o banner acima
+     só aparece pra quem já estava com o portal aberto no momento do
+     cadastro). Mesma técnica de escala, sem parar: some sozinho quando o
+     último pendente for aprovado (ver renderUsuarios() em
+     js/configuracoes.js). */
+  .stat-card-pendente-ativo {
+    border-color: var(--aviso-borda);
+    animation: alerta-cadastro-pulso 1.6s ease-in-out infinite;
+  }
   .modal-box .modal-text { font-size: 13.5px; color: var(--ink); line-height: 1.5; }
   .modal-box .modal-link {
     display: inline-block; margin-top: 14px; padding: 8px 14px; background: var(--blue);

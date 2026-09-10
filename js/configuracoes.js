@@ -131,6 +131,10 @@ function renderUsuarios() {
   document.getElementById('cfg-total').textContent = usuariosCarregados.length;
   document.getElementById('cfg-pendentes').textContent = pendentes;
   document.getElementById('cfg-admins').textContent = admins;
+  // Pulsa enquanto houver alguém na fila -- pega quem chegou na tela sem
+  // estar presente pro aviso ao vivo (ver iniciarAlertaCadastro() mais
+  // abaixo). Some sozinho quando o último pendente for aprovado.
+  document.getElementById('cfgPendentesCard').classList.toggle('stat-card-pendente-ativo', pendentes > 0);
   // Os cards contam TODO mundo, e não o que o filtro deixou na tela: eles
   // respondem "quantas contas existem", que é a pergunta de quem administra.
   // Quantos o filtro deixou vai na linha #cfgContagem, ao lado.
@@ -242,6 +246,45 @@ document.getElementById('cfgCorpo').addEventListener('click', (e) => {
 });
 
 document.getElementById('cfgRecarregar').addEventListener('click', carregarUsuarios);
+
+// ---- Aviso de novo cadastro, ao vivo, só pra Robson e Victor ---------------
+// O Robson: "sempre que tiver um novo cadastro eu e o Victor recebe uma
+// notificação chamativa nessa tela".
+//
+// Broadcast, e não "postgres_changes" em usuarios_permitidos -- mesmo padrão
+// de dispararAlertaBobina()/js/ocr.js: não existe servidor neste projeto, e
+// broadcast não exige ligar o Realtime na tabela (sem ALTER PUBLICATION,
+// sem mexer em replica identity -- ver o histórico do fase23 sobre como isso
+// dá errado). O preço é o mesmo de lá: só quem está com o portal aberto
+// NA HORA recebe o aviso ao vivo. Quem chegar depois vê pelo card
+// "Aguardando aprovação" pulsando (renderUsuarios() acima), que não depende
+// de estar online no momento do cadastro.
+//
+// Quem dispara é dispararAlertaCadastro(), em js/auth.js, logo após o
+// INSERT de verdade em usuarios_permitidos (não dispara para quem já tinha
+// linha lá -- só cadastro novo).
+function iniciarAlertaCadastro() {
+  sb.channel('alertas-cadastro')
+    .on('broadcast', { event: 'novo_cadastro' }, (msg) => {
+      if (!ehSuperAdminAtual()) return; // "eu e o Victor" -- não é pra todo admin
+      const p = msg.payload || {};
+      const banner = document.getElementById('alertaCadastroBanner');
+      banner.innerHTML = `
+        <span>🔔 Novo cadastro: <b>${escapeHtml(p.nome || p.email || '—')}</b>
+          ${p.email && p.nome ? ' (' + escapeHtml(p.email) + ')' : ''}
+          ${p.unidade ? ' — ' + escapeHtml(rotuloUnidade(p.unidade)) : ''}
+          pediu acesso.</span>
+        <button type="button" id="alertaCadastroFechar">Ver / dispensar</button>`;
+      banner.style.display = 'flex';
+      // A gente já sabe que tem gente nova -- traz pra lista na hora, sem
+      // esperar a pessoa lembrar de clicar em "Recarregar lista".
+      if (isAdminAtual) carregarUsuarios();
+      const fechar = document.getElementById('alertaCadastroFechar');
+      if (fechar) fechar.addEventListener('click', () => { banner.style.display = 'none'; });
+    })
+    .subscribe();
+}
+iniciarAlertaCadastro();
 
 // Filtra AO DIGITAR, sem botão de aplicar -- mesmo padrão do #searchBox da
 // Consulta de Itens e do #filterLocalizacao (que só passou a filtrar ao digitar

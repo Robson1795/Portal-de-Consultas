@@ -2178,3 +2178,42 @@ restou foi um cabeçalho que não faz nada. Agora há filtro de verdade.
 
 Perfil desconhecido (linha antiga, ou valor que saiu de `PERFIS`) vai para o
 **fim** em vez de sumir — sumir da lista é o pior lugar para um acesso ficar.
+
+## Aviso chamativo de novo cadastro, só pra Robson e Victor (10/09/2026)
+
+O Robson: *"sempre que tiver um novo cadastro eu e o Victor recebe uma
+notificação chamativa nessa tela"*.
+
+**Broadcast, e não `postgres_changes` em `usuarios_permitidos`** — mesmo
+padrão de `dispararAlertaBobina()` (`js/ocr.js`, já existia): não há servidor
+neste projeto, e broadcast não exige ligar o Realtime na tabela (sem `alter
+publication`, sem mexer em replica identity — ver o histórico do fase23 sobre
+como isso pode dar errado). O preço é o mesmo de lá: **só quem está com o
+portal aberto NA HORA recebe o aviso ao vivo.**
+
+- `dispararAlertaCadastro()` (`js/auth.js`) manda o broadcast **logo após o
+  INSERT de verdade** em `usuarios_permitidos`, dentro de `verificarAprovacao()`.
+  ⚠️ Isso exigiu conferir `error` explicitamente — `.insert()` do PostgREST
+  **não lança exceção** para chave duplicada, só devolve `error` preenchido; o
+  bloco já tinha um `try/catch`, mas o `catch` ali só pegaria falha de rede.
+  Sem checar `error`, o aviso dispararia toda vez que **qualquer pessoa já
+  cadastrada** abrisse o portal, não só em cadastro novo.
+- `iniciarAlertaCadastro()` (`js/configuracoes.js`) escuta o canal e só mostra
+  o banner (`#alertaCadastroBanner`) para `ehSuperAdminAtual()` — é "eu e o
+  Victor", não todo perfil `admin` (o card "Administradores" mostra 3 hoje).
+  Ao mostrar, já chama `carregarUsuarios()` sozinho — a pessoa nova aparece na
+  lista sem precisar lembrar de clicar em "Recarregar lista".
+- **O card "Aguardando aprovação" pulsa** (`.stat-card-pendente-ativo`,
+  `renderUsuarios()`) enquanto a fila não estiver vazia — cobre quem chega na
+  tela depois do aviso ao vivo ter passado (o banner já fechou, ou a pessoa
+  nem estava com o portal aberto no momento do cadastro). O pulso é de
+  **escala**, não de brilho: um `box-shadow` chamativo pediria uma cor
+  translúcida fixa, que ficaria errada trocando de tema claro/escuro (mesmo
+  cuidado do trabalho de tema do Victor, 10/09/2026).
+
+Conferido no navegador com `sb.channel` trocado por um mock local (capaz de
+guardar os `.on()` registrados e disparar `.send()` na mão, sem depender de
+rede de verdade): o banner aparece certo (nome, e-mail, unidade) só quando
+`emailUsuarioAtual` é super admin, fica escondido para um consultor, e o
+botão "Ver / dispensar" fecha. O card pulsa com `usuariosCarregados` tendo
+pendente e para de pulsar quando esvazia. Zero erro de console.

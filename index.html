@@ -852,7 +852,7 @@
           <div class="stat-nota">no total</div>
         </div>
       </div>
-      <div class="stat-card">
+      <div class="stat-card" id="cfgPendentesCard">
         <div class="stat-icone verde">⏳</div>
         <div class="stat-texto">
           <div class="stat-rotulo">Aguardando aprovação</div>
@@ -877,6 +877,13 @@
         </div>
       </div>
     </div>
+
+    <!-- Notificação de novo cadastro, só pra Robson e Victor (Robson,
+         10/09/2026: "sempre que tiver um novo cadastro eu e o Victor recebe
+         uma notificação chamativa nessa tela"). Ver iniciarAlertaCadastro()
+         em js/configuracoes.js e dispararAlertaCadastro() em js/auth.js --
+         mesmo padrão (broadcast, sem servidor) do alertaBobinaBanner. -->
+    <div id="alertaCadastroBanner" class="alerta-cadastro" style="display:none;"></div>
 
     <div class="panel">
       <div class="cfg-barra">
