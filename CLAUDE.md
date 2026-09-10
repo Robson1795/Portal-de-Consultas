@@ -1447,3 +1447,24 @@ O auditor pegou seis defeitos que passariam numa conferência a olho:
 4. Os dois botões grandes da validação de bobina, em 2,8:1 e 2,2:1.
 5. `background:white` e `color:var(--blue)` **inline** no `index.html`.
 6. O verde do "Sincronizado", que usava tom de borda em texto (3,23:1).
+
+## Filtro de Localização passou a filtrar ao digitar (10/09/2026)
+
+O Robson, na contagem, digitando "CANT" no filtro avançado de Localização:
+*"quando eu escrever CANT aparecer todos"* — depois *"faça para as outras
+localizações também"* e *"deixe bem inteligente"*.
+
+O casamento por trecho já existia (`applyFilterAndSort()`, `.includes()`
+sobre a localização em minúsculas) — "CANT" já batia com "CANT A-01" e
+"CANT B-03" ao mesmo tempo, sem precisar de tratamento por letra/grupo. O que
+faltava era **reagir à digitação**: o campo só valia depois de clicar em
+"Aplicar filtros", então a lista continuava mostrando o filtro anterior
+enquanto a pessoa digitava — parecia que "não aparecia tudo".
+
+`#filterLocalizacao` ganhou um listener de `input` (mesmo padrão do
+`#searchBox`, que já era assim) que atualiza `filtros.localizacao` e
+reaplica a cada tecla — nenhuma lista de padrões por prefixo, então vale
+igual para "CANT", uma letra de corredor, um código de pallet ou qualquer
+outro texto que a planilha tiver. O botão "Aplicar filtros" continua
+funcionando (ainda é ele que aplica UM, Padrão e as caixas de status), só
+deixou de ser obrigatório para a Localização.

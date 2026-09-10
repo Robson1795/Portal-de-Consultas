@@ -2138,6 +2138,21 @@ document.getElementById('filterApplyBtn').addEventListener('click', () => {
   painelFiltros.classList.remove('aberto');
 });
 
+// Localização filtra ao digitar, sem precisar de "Aplicar filtros" -- mesmo
+// padrão do campo de busca (#searchBox). Robson, 10/09/2026, digitando "CANT"
+// na contagem: "quando eu escrever CANT aparecer todos" / "faça para as
+// outras localizações também" / "deixe bem inteligente". Já era um filtro
+// por trecho (`.includes()`, ver applyFilterAndSort) -- "CANT" já batia com
+// "CANT A-01" e "CANT B-03" ao mesmo tempo; faltava só reagir à digitação em
+// vez de esperar o clique no botão, que é o que fazia parecer que não
+// "aparecia tudo" (o painel ficava mostrando o filtro de antes até clicar).
+document.getElementById('filterLocalizacao').addEventListener('input', (e) => {
+  filtros.localizacao = e.target.value;
+  pagina = 1;
+  atualizarBadgeFiltros();
+  applyFilterAndSort();
+});
+
 document.getElementById('filterClearAllBtn').addEventListener('click', () => {
   filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false, estoqueBaixo: false };
   document.getElementById('statEstoqueBaixoCard').classList.remove('stat-card-ativo');
