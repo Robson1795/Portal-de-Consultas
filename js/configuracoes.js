@@ -276,7 +276,7 @@ document.getElementById('cfgUniRecarregar').addEventListener('click', carregarCo
 // Ver sql/fase12-substituir-estoque-em-lote.sql.
 // ===========================================================================
 
-let loteAba = 'alm';          // 'alm' | 'sesmt' | 'aco' | 'exp'
+let loteAba = 'alm';          // 'alm' | 'sesmt' | 'benchmark' | 'aco' | 'exp'
 let lotePreparado = null;     // resultado do Conferir, aguardando confirmação
 
 const LOTE_FORMATOS = {
@@ -285,6 +285,9 @@ const LOTE_FORMATOS = {
   sesmt: 'Precisa de cabeçalho, e uma das colunas tem de ser a unidade — igual à do '
        + 'almoxarifado. Colunas lidas: Unidade (ou Estab), Item, Descrição, UM, Localização, '
        + 'Quantidade. Vai para o depósito SESMT (EPI) de cada unidade.',
+  benchmark: 'Precisa de cabeçalho, e uma das colunas tem de ser a unidade — igual à do '
+           + 'almoxarifado. Colunas lidas: Unidade (ou Estab), Item, Descrição, UM, Localização, '
+           + 'Quantidade. Vai para o Depósito Benchmark de cada unidade.',
   exp: 'Precisa de cabeçalho, e uma das colunas tem de ser a unidade. Colunas lidas: '
      + 'Unidade (ou Estab), Item, Descrição, UM, Depósito, Referência, Lote, '
      + 'Quantidade — em qualquer ordem. Substitui o Catálogo EXP de cada unidade '
@@ -500,13 +503,14 @@ function prepararLote(texto) {
   }
 
 
-  // ---------------------------------------- Estoque: ALM e SESMT
-  // As DUAS precisam da coluna de unidade desde 09/09/2026: o SESMT deixou
+  // ---------------------------------------- Estoque: ALM, SESMT e Benchmark
+  // As três precisam da coluna de unidade desde 09/09/2026: o SESMT deixou
   // de ser uma unidade falsa e passou a ser o depósito de EPI de cada
-  // unidade. Sem a coluna não há como saber de qual fábrica é cada EPI, e
-  // chutar mandaria a luva para o galpão errado.
+  // unidade (o Benchmark seguiu o mesmo caminho em 10/09/2026). Sem a
+  // coluna não há como saber de qual fábrica é cada item, e chutar
+  // mandaria material para o galpão errado.
   const precisaUnidade = true;
-  const deposito = (loteAba === 'sesmt') ? 'sesmt' : 'alm';
+  const deposito = (loteAba === 'sesmt' || loteAba === 'benchmark') ? loteAba : 'alm';
   const campos = precisaUnidade
     ? ['um', 'unidade', 'item', 'descricao', 'localizacao', 'quantidade']
     : ['um', 'item', 'descricao', 'localizacao', 'quantidade'];

@@ -1468,3 +1468,57 @@ igual para "CANT", uma letra de corredor, um código de pallet ou qualquer
 outro texto que a planilha tiver. O botão "Aplicar filtros" continua
 funcionando (ainda é ele que aplica UM, Padrão e as caixas de status), só
 deixou de ser obrigatório para a Localização.
+
+## Depósito Benchmark vira saldo simples (10/09/2026)
+
+Até aqui, "Depósito Benchmark" era o **mesmo modelo do Controle EXP
+Acessórios**: mesma tabela (`exp_controle_itens`), mesmo fluxo de
+Entrada/Saída-Conferência com pedido, etiqueta e status — filtrado pela
+coluna `setor` (ver `sql/fase18-deposito-benchmark.sql`). O Robson, vendo a
+tela de "Atualizar estoques em lote" (que já tem Almoxarifado, SESMT,
+Catálogo EXP e Aço) com uma planilha de saldo do Benchmark pronta pra
+colar: *"deposito benchmark quero usar por aqui, quero que mude a estrutura
+igual como é do almoxarifado"*.
+
+Perguntado se a aba antiga (Entrada/Saída/Catálogo do Benchmark, em
+Programação) deveria sair ou conviver com a nova, a resposta foi **tirar a
+antiga** — não tinha nenhum pedido registrado nela.
+
+**Agora Benchmark é o terceiro depósito**, no mesmo modelo do SESMT
+(09/09/2026): item + localização + quantidade, substituído inteiro ao colar
+planilha nova, mesma tela de Consulta de Itens.
+
+- `DEPOSITOS.benchmark` em `js/estoque.js`, ao lado de `alm`/`sesmt`.
+- `PAGINAS.expbenchmark` (`js/navegacao.js`) passou a apontar pro elemento
+  `estoqueContent` (era `expAcessoriosContent`) — o **id da página continua
+  `expbenchmark`** de propósito, pra não mexer nas listas de `PERFIS`.
+  `mostrarPagina()` ganhou `PAGINA_PARA_DEPOSITO` (`estoque`→`alm`,
+  `sesmt`→`sesmt`, `expbenchmark`→`benchmark`) e `expbenchmark` **saiu** do
+  bloco que trocava `setorExpAtual` — não é mais a mesma tela do Controle
+  EXP Acessórios.
+- Aba **Benchmark** nova em "Atualizar estoques em lote" (`index.html` +
+  `js/configuracoes.js`): mesmas colunas do Almoxarifado/SESMT (Unidade,
+  Item, Descrição, UM, Localização, Quantidade), substitui por
+  `(unidade, deposito='benchmark')`.
+- `sql/fase29-benchmark-deposito.sql` troca a restrição de `deposito` em
+  `estoque`/`contagem_fisica`/`atribuicoes_corredor` (criada no fase23, só
+  aceitava `'alm'`/`'sesmt'`) pra aceitar `'benchmark'` também. Coluna,
+  índice e chave primária já existiam desde o fase23 — não precisou de mais
+  nada estrutural.
+
+**O código antigo (`setorExpAtual === 'benchmark'`) fica no histórico** em
+`js/programacao.js`, comentado como obsoleto: nada no menu grava mais
+`'benchmark'` ali, então esse caminho nunca mais roda sozinho. Mesmo
+princípio já registrado sobre o `sql/fase26-exp-em-lote.sql` do Victor:
+função/caminho que sobra é pior que código morto só se alguém ainda o
+chamar sem querer — aqui ninguém mais chama. Remover de vez é decisão pra
+tomar separada, se confirmar que não faz falta nenhuma.
+
+Conferido no navegador (mocks de `sb.from`/`sb.rpc`): o menu mostra "🏭
+Depósito Benchmark" pros perfis certos (Estoque ALM e Admin, não Consultor
+— igual ao SESMT); abrir a página usa a tela de Consulta de Itens com
+crachá "🏭 Depósito Benchmark" e `depositoAtual = 'benchmark'`; Controle EXP
+Acessórios continua intacto (`setorExpAtual` fica `'exp'`, tela própria);
+colar uma planilha na aba Benchmark do lote monta blocos com
+`deposito: 'benchmark'`, e Almoxarifado/SESMT continuam com o depósito
+certo (sem regressão). Zero erro de console.

@@ -592,8 +592,14 @@ const UNIDADES = {
 // mesmo item no mesmo endereço do almoxarifado sobrescreveria a contagem do
 // EPI, e "Limpar tudo" levaria os dois. Ver sql/fase23-sesmt-deposito.sql.
 const DEPOSITOS = {
-  alm:   { rotulo: 'Almoxarifado', icone: '📦' },
-  sesmt: { rotulo: 'SESMT (EPI)',  icone: '⛑️' }
+  alm:       { rotulo: 'Almoxarifado',       icone: '📦' },
+  sesmt:     { rotulo: 'SESMT (EPI)',        icone: '⛑️' },
+  // Antes era o setor 'benchmark' de exp_controle_itens (pedido/etiqueta,
+  // mesmo modelo do Controle EXP) -- virou saldo simples igual ao
+  // Almoxarifado/SESMT em 10/09/2026 (Robson: "quero que mude a estrutura
+  // igual como é do almoxarifado"). Ver PAGINAS.expbenchmark em
+  // js/navegacao.js.
+  benchmark: { rotulo: 'Depósito Benchmark', icone: '🏭' }
 };
 
 // Depósito da tela aberta agora. Trocado por js/navegacao.js ao abrir

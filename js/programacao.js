@@ -22,9 +22,20 @@ let progImportAba = 'A';
 let progPedidos = [];       // vw_pedidos_prioridade (pedido + contagem de itens)
 let progItens = [];         // pedido_itens dos pedidos carregados
 let progExpControle = [];   // exp_controle_itens -- localizacao por item, pro inventario
-// 'exp' (Controle EXP Acessórios) ou 'benchmark' (Depósito Benchmark) --
-// mesma tabela, mesma tela, só o que é listado muda (ver linhasDoSetorAtual).
-// Trocado por js/navegacao.js ao abrir cada uma das duas páginas.
+// 'exp' (Controle EXP Acessórios) ou 'benchmark' -- mesma tabela, mesma
+// tela, só o que é listado muda (ver linhasDoSetorAtual). Trocado por
+// js/navegacao.js ao abrir a página.
+//
+// ⚠️ 'benchmark' não é mais alcançável pelo menu (10/09/2026): o Robson
+// pediu pra trocar o Depósito Benchmark do modelo de pedido/etiqueta do
+// Controle EXP para saldo simples, igual ao Almoxarifado/SESMT -- ver
+// DEPOSITOS em js/estoque.js e o comentário em PAGINAS.expbenchmark
+// (js/navegacao.js). O código daqui pra baixo que trata 'benchmark' fica
+// no histórico (mesmo princípio do fase26 em sql/fase26-exp-em-lote.sql:
+// função que sobra é pior que código morto só se alguém a chamar de novo
+// sem querer -- aqui ninguém mais chama, `setorExpAtual` nunca mais vira
+// 'benchmark') -- remover é decisão pra tomar separada, se um dia
+// confirmar que não faz falta nenhuma.
 let setorExpAtual = 'exp';
 let expCtrlDescMap = new Map(); // codigo_item -> {descricao, um}, resolvido em cascata pra exibir a lista
 let catalogoExpItens = []; // catalogo_exp_itens -- planilha do sistema, carregada só ao entrar na página
