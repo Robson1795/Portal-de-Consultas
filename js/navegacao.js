@@ -154,7 +154,13 @@ document.getElementById('sidebarNav').addEventListener('click', (e) => {
   // Controle EXP Acessórios não abre direto: primeiro escolhe a unidade e
   // confere a senha dela (abrirGateExp, mais abaixo). Cada unidade só
   // enxerga o próprio estoque -- nunca mistura com as outras.
-  if (item.dataset.pagina === 'expacessorios' || item.dataset.pagina === 'expbenchmark') {
+  //
+  // Depósito Benchmark NÃO entra mais aqui (10/09/2026): virou a mesma tela
+  // de Consulta de Itens (Almoxarifado/SESMT), que nunca pediu senha própria
+  // -- a senha existia para proteger o registro de pedido/etiqueta do
+  // modelo antigo, que não existe mais nesta tela. A permissão de verdade
+  // continua sendo o RLS por unidade/perfil, igual ao Almoxarifado/SESMT.
+  if (item.dataset.pagina === 'expacessorios') {
     abrirGateExp(item.dataset.pagina);
     return;
   }
@@ -174,8 +180,11 @@ function marcarUnidadeExpDesbloqueada(cod) {
   try { sessionStorage.setItem('exp_ok_' + cod, '1'); } catch (err) { /* sem sessionStorage, so pede de novo */ }
 }
 
-// Qual das duas telas abrir depois da senha confirmada -- guardado aqui
-// porque o clique no botão "Entrar" do modal não sabe de onde veio.
+// Qual página abrir depois da senha confirmada -- guardado aqui porque o
+// clique no botão "Entrar" do modal não sabe de onde veio. Só
+// 'expacessorios' usa o gate desde 10/09/2026 (Depósito Benchmark deixou de
+// pedir senha, ver PAGINAS.expbenchmark), mas o parâmetro continua genérico
+// caso outra página precise um dia.
 let gateAlvoPagina = 'expacessorios';
 
 function abrirGateExp(alvoPagina) {
@@ -326,10 +335,11 @@ function montarCabecalho() {
       ).join('')}</select>` + cracha;
     document.getElementById('unitSelect').addEventListener('change', (e) => {
       // Trocar a unidade pelo seletor do topo enquanto está no Controle EXP
-      // Acessórios ou no Depósito Benchmark não pode pular a senha daquela
-      // unidade -- senão bastava trocar aqui em vez de usar o botão do menu
-      // pra escapar da senha.
-      if (paginaAtual === 'expacessorios' || paginaAtual === 'expbenchmark') {
+      // Acessórios não pode pular a senha daquela unidade -- senão bastava
+      // trocar aqui em vez de usar o botão do menu pra escapar da senha.
+      // Depósito Benchmark NÃO entra mais aqui (10/09/2026): não tem senha
+      // pra pular, igual ao Almoxarifado/SESMT logo abaixo.
+      if (paginaAtual === 'expacessorios') {
         const escolhida = e.target.value;
         e.target.value = unidadeAtual; // volta o seletor pra unidade atual até confirmar a senha
         abrirGateExp(paginaAtual); // popula as opções e reseta o modal, mantendo a mesma tela de destino
@@ -353,18 +363,25 @@ function montarCabecalho() {
 function aplicarTema(tema) {
   const escuro = tema === 'escuro';
   document.documentElement.setAttribute('data-tema', escuro ? 'escuro' : 'claro');
-  const b = document.getElementById('temaToggle');
-  if (b) {
+  // Os DOIS botoes recebem o icone: o do cabecalho do portal e o do hero
+  // do login. So um deles esta na tela em cada momento, mas quem troca o
+  // tema no login ja entra no portal com o botao certo.
+  ['temaToggle', 'temaToggleLogin'].forEach(id => {
+    const b = document.getElementById(id);
+    if (!b) return;
     b.textContent = escuro ? '\u2600\uFE0F' : '\u{1F319}';
     b.title = escuro ? 'Voltar para o modo claro' : 'Alternar para o modo escuro';
-  }
+  });
   try { localStorage.setItem('portal_tema', escuro ? 'escuro' : 'claro'); }
   catch (e) { /* sem localStorage: vale so nesta aba */ }
 }
 
-document.getElementById('temaToggle').addEventListener('click', () => {
-  const escuroAgora = document.documentElement.getAttribute('data-tema') === 'escuro';
-  aplicarTema(escuroAgora ? 'claro' : 'escuro');
+['temaToggle', 'temaToggleLogin'].forEach(id => {
+  const b = document.getElementById(id);
+  if (b) b.addEventListener('click', () => {
+    const escuroAgora = document.documentElement.getAttribute('data-tema') === 'escuro';
+    aplicarTema(escuroAgora ? 'claro' : 'escuro');
+  });
 });
 
 // Acerta o icone na carga: o <head> ja aplicou o tema, mas o botao ainda nao

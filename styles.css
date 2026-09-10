@@ -126,13 +126,54 @@
 :root[data-tema="escuro"] input::placeholder,
 :root[data-tema="escuro"] textarea::placeholder { color: var(--muted); }
 
-/* 2. As imagens do portal são o logo em PNG com fundo claro embutido: no tema
-      escuro elas apareceriam como retângulo branco. Um leve escurecimento
-      resolve sem trocar o arquivo. Não vale para foto de item (ficha técnica),
-      que precisa ser vista como é -- daí o recorte por classe. */
-:root[data-tema="escuro"] .logo-topo,
-:root[data-tema="escuro"] .logo-login { filter: brightness(.92) contrast(1.05); }
+/* 2. A troca da logo por tema NAO fica aqui: ela precisa vir depois da
+      regra `.logo`, mais abaixo neste arquivo. Procure por
+      `.logo-tema-escuro`. O motivo esta comentado la. */
 /* ===================== FIM DO TEMA ESCURO ===================== */
+
+/* ===================== TOUR GUIADO =====================
+   Cores por token, como o resto: o tour aparece nos dois temas, e o cartao
+   tem de assentar no painel de cada um. */
+#tourFundo { display: none; }
+#tourFundo.aberto { display: block; }
+#tourFoco {
+  position: fixed;
+  z-index: 4000;
+  border-radius: 10px;
+  pointer-events: none;                 /* o recorte nao rouba o clique do alvo */
+  border: 2px solid var(--sobre-acento);
+  /* O escuro da tela inteira MENOS este retangulo. Muda de tamanho e posicao
+     junto com o alvo, sem precisar de quatro divs em volta. */
+  box-shadow: 0 0 0 9999px rgba(0,0,0,0.62);
+  transition: top .18s ease, left .18s ease, width .18s ease, height .18s ease;
+}
+#tourCaixa {
+  position: fixed;
+  z-index: 4001;
+  width: 360px; max-width: calc(100vw - 24px);
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.32);
+}
+#tourTitulo { font-weight: 800; font-size: 16px; margin-bottom: 8px; }
+#tourTexto { font-size: 13.5px; line-height: 1.5; color: var(--ink); }
+#tourRodape {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-top: 14px;
+}
+/* "Pular tutorial" fica na ESQUERDA e discreto: e uma saida, nao a acao
+   principal -- quem quer sair acha, e quem esta seguindo o tour nao clica
+   nele por engano no lugar do Proximo. */
+#tourPular { font-size: 12px; opacity: 0.75; }
+#tourContagem { margin-left: auto; font-size: 12px; color: var(--muted); }
+
+@media (max-width: 520px) {
+  #tourCaixa { padding: 14px; }
+  #tourTitulo { font-size: 15px; }
+}
 
 /* ===================== IMPRESSAO SEMPRE CLARA =====================
    Papel é branco nos dois temas. A Consulta de Itens e o Estoque de Aço
@@ -149,6 +190,8 @@
    não dependem disto -- são outro documento, sem o `data-tema` -- mas o
    reset aqui não as prejudica. */
 @media print {
+  /* Nada do tour no papel: o recorte escuro cobriria a folha inteira. */
+  #tourFundo { display: none !important; }
   :root, :root[data-tema="escuro"] {
     --bg: #ffffff;
     --panel: #ffffff;
@@ -219,11 +262,37 @@
     background: radial-gradient(circle, rgba(199,166,121,0.35) 0%, rgba(199,166,121,0) 70%);
   }
   .hero-top { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; position: relative; z-index: 1; flex-wrap: wrap; }
-  .logo-card {
-    background: var(--panel); border-radius: 10px; padding: 8px 14px;
-    display: flex; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.12);
-  }
-  .logo-card img { height: 32px; width: auto; display: block; }
+  /* A logo NAO fica mais num quadrado branco: os PNG tem fundo transparente
+     (logo.png e logo-branca.png) e assentam direto sobre o gradiente do hero
+     e sobre o painel da sidebar. O quadrado era do ARQUIVO, nao do CSS: o
+     PNG antigo era 100% opaco, com o branco embutido. */
+  .logo { height: 34px; width: auto; display: block; }
+/* 2. A logo tem duas versões, e qual aparece depende do FUNDO, não do tema:
+
+      * no hero do login e da conta pendente o fundo é o gradiente AZUL nos
+        dois temas, então ali vale sempre a branca (`logo-sempre-branca`) -- a
+        colorida tem o "Kingspan" em azul-escuro, que desapareceria;
+      * na sidebar o fundo é `--panel`, que muda com o tema, então a logo troca
+        junto.
+
+      Duas imagens, e não um filtro CSS: `brightness(0) invert(1)` clareia tudo
+      e funde o oval azul do ISOESTE com as letras brancas -- vira uma bolha
+      ilegível (conferido no navegador). A versão branca tem as letras
+      RECORTADAS, que é como logo monocromática funciona.
+
+      ⚠️ A regra que estava aqui antes mirava `.logo-topo` e `.logo-login`,
+      classes que não existem no HTML -- nunca surtiu efeito nenhum, e era por
+      isso que o quadrado branco continuava no tema escuro. */
+
+/* ⚠️ Estas tres regras TEM de vir depois de `.logo`, e nao junto do resto do
+   tema escuro no topo do arquivo: `.logo { display: block }` e
+   `.logo-tema-escuro { display: none }` tem a MESMA especificidade (uma
+   classe cada), e nesse empate o CSS fica com a ultima que aparece. Com o
+   bloco no topo, `display: block` vencia e as DUAS logos da sidebar
+   apareciam ao mesmo tempo no tema claro. */
+.logo-tema-escuro { display: none; }
+:root[data-tema="escuro"] .logo-tema-claro { display: none; }
+:root[data-tema="escuro"] .logo-tema-escuro { display: block; }
   .hero h1 {
     color: var(--ink); background: var(--panel); display: inline-block; margin: 0;
     font-size: 22px; padding: 6px 14px; border-radius: 8px; position: relative; z-index: 1;
@@ -314,8 +383,7 @@
     body { padding: 12px; }
     .hero { padding: 16px; border-radius: 12px; }
     .hero-top { gap: 10px; margin-bottom: 10px; }
-    .logo-card { padding: 6px 10px; }
-    .logo-card img { height: 24px; }
+    .logo { height: 26px; }
     #userNameDisplay { font-size: 13px; }
     .hero h1 { font-size: 17px; padding: 5px 10px; display: block; width: fit-content; }
     .hero .subtitle { font-size: 12px; }
@@ -750,6 +818,7 @@ td.col-acoes { white-space: nowrap; text-align: center; }
   min-height: 66px;
   display: flex;
   align-items: center;
+  justify-content: center;   /* pedido do Victor: centralizada na aba */
 }
 .sidebar-logo img { max-width: 130px; height: auto; }
 .sidebar-nav { padding: 12px 10px; display: flex; flex-direction: column; gap: 4px; }

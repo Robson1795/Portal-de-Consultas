@@ -207,6 +207,16 @@ function renderConfigUnidades() {
   }).join('');
 }
 
+// ENTER em qualquer campo da linha salva AQUELA linha. Aqui a senha e
+// digitada para ser CADASTRADA, e a tabela tem seis campos por unidade --
+// e o Salvar da propria linha que e clicado, nao um generico, senao
+// gravaria a unidade errada.
+document.getElementById('cfgUniCorpo').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' || e.target.tagName !== 'INPUT') return;
+  const botao = e.target.closest('tr').querySelector('.cfgu-salvar');
+  if (botao) botao.click();
+});
+
 document.getElementById('cfgUniCorpo').addEventListener('click', async (e) => {
   if (!e.target.closest('.cfgu-salvar')) return;
   const tr = e.target.closest('tr');

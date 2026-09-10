@@ -37,6 +37,11 @@ let progExpControle = [];   // exp_controle_itens -- localizacao por item, pro i
 // 'benchmark') -- remover é decisão pra tomar separada, se um dia
 // confirmar que não faz falta nenhuma.
 let setorExpAtual = 'exp';
+// Itens marcados para imprimir na aba Entrada, por id. E um Set, e nao um
+// atributo no DOM, porque a tabela e redesenhada inteira a cada tecla da
+// busca -- o que foi marcado antes de filtrar tem de continuar marcado
+// depois. Mesmo motivo de `etiquetasTrading` em js/estoque.js.
+let expCtrlSelecionadas = new Set();
 let expCtrlDescMap = new Map(); // codigo_item -> {descricao, um}, resolvido em cascata pra exibir a lista
 let catalogoExpItens = []; // catalogo_exp_itens -- planilha do sistema, carregada só ao entrar na página
 let expPedidoProntoMap = new Map(); // numero_pedido -> {pronto_em, pronto_por} -- ver marcarPedidoAnteriorComoPronto()
@@ -1187,6 +1192,32 @@ function contarPedidosNaExpedicao(linhas) {
   return pedidos.size;
 }
 
+// Diz na barra o que vai sair da impressora, e acerta a caixa do cabecalho.
+//
+// O rotulo do botao TROCA ("Imprimir tudo" / "Imprimir marcados") em vez de
+// so ganhar um numero: sai uma folha por item, e clicar achando que ia sair
+// um pallet e sair a lista inteira e resma -- quem clicou merece saber pela
+// tela, nao pela impressora. Mesma regra da etiqueta da Trading.
+//
+// A caixa do cabecalho fica INDETERMINADA quando a selecao e parcial. Sem
+// isso ela apareceria vazia com itens marcados na lista, e o proximo clique
+// pareceria "marcar tudo" quando na verdade limpa.
+function atualizarSelecaoExpControle() {
+  const naBusca = linhasFiltradasExpControle();
+  const marcadosNaBusca = naBusca.filter(l => expCtrlSelecionadas.has(String(l.id))).length;
+
+  const botao = document.getElementById('expCtrlImprimirBtn');
+  if (botao) botao.textContent = marcadosNaBusca
+    ? '\u{1F5A8}\uFE0F Imprimir marcados (' + marcadosNaBusca + ')'
+    : '\u{1F5A8}\uFE0F Imprimir tudo (' + naBusca.length + ')';
+
+  const todos = document.getElementById('expCtrlMarcarTodos');
+  if (todos) {
+    todos.checked = naBusca.length > 0 && marcadosNaBusca === naBusca.length;
+    todos.indeterminate = marcadosNaBusca > 0 && marcadosNaBusca < naBusca.length;
+  }
+}
+
 function renderExpControle(erroCarregamento) {
   const corpo = document.getElementById('expCtrlBody');
   const vazio = document.getElementById('expCtrlVazio');
@@ -1197,8 +1228,17 @@ function renderExpControle(erroCarregamento) {
       + ' — se a mensagem falar em tabela inexistente, sql/programacao-03-controle-exp.sql ainda não foi rodado no Supabase.';
     corpo.innerHTML = '';
     document.getElementById('expCtrlPedidosCount').textContent = '';
+    atualizarSelecaoExpControle();
     return;
   }
+
+  // Tira da selecao o que nao esta mais nesta tela: registro excluido, troca
+  // de unidade (a lista e recarregada) e troca de setor (Controle EXP <->
+  // Deposito Benchmark). Sem isso, marcar na Benchmark e voltar pro EXP
+  // imprimiria item do outro deposito. A BUSCA nao poda nada -- filtrar e
+  // desfiltrar tem de devolver o que estava marcado.
+  const idsDaTela = new Set(linhasDoSetorAtual().map(l => String(l.id)));
+  expCtrlSelecionadas.forEach(id => { if (!idsDaTela.has(id)) expCtrlSelecionadas.delete(id); });
 
   const linhas = linhasFiltradasExpControle();
   const totalPedidos = contarPedidosNaExpedicao(linhas);
@@ -1210,6 +1250,7 @@ function renderExpControle(erroCarregamento) {
       ? 'Nenhum item bate com a busca.'
       : 'Nenhum item registrado ainda.';
     corpo.innerHTML = '';
+    atualizarSelecaoExpControle();
     return;
   }
 
@@ -1218,6 +1259,9 @@ function renderExpControle(erroCarregamento) {
     const retirado = l.status === 'retirado';
     return `
     <tr${retirado ? ' style="opacity:0.6;"' : ''}>
+      <td><input type="checkbox" class="expctrl-marcar" data-id="${escapeHtml(l.id)}"
+                   ${expCtrlSelecionadas.has(String(l.id)) ? 'checked' : ''}
+                   aria-label="Marcar este item para imprimir"></td>
       <td class="loc"><input type="text" class="expctrl-loc-input" data-id="${escapeHtml(l.id)}"
              value="${escapeHtml(l.localizacao || '')}" placeholder="—"
              style="width:90px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px;"></td>
@@ -1251,6 +1295,7 @@ function renderExpControle(erroCarregamento) {
       </td>
     </tr>`;
   }).join('');
+  atualizarSelecaoExpControle();
 }
 
 // Grava etiqueta em lote: `marcar = true` marca como emitida. Chamada pelo
@@ -1327,6 +1372,25 @@ async function marcarSaidaExpControle(id, conferente, novoStatus) {
 }
 
 document.getElementById('expCtrlBusca').addEventListener('input', () => renderExpControle(null));
+
+// Marcar/desmarcar um item. Guarda o id, nao a posicao da linha: a ordem e
+// o conjunto mudam com a busca.
+document.getElementById('expCtrlBody').addEventListener('change', (e) => {
+  const caixa = e.target.closest('.expctrl-marcar');
+  if (!caixa) return;
+  const id = String(caixa.dataset.id);
+  if (caixa.checked) expCtrlSelecionadas.add(id); else expCtrlSelecionadas.delete(id);
+  atualizarSelecaoExpControle();
+});
+
+// "Marcar todos" vale pra tudo o que esta NA BUSCA, e nao so pro trecho
+// visivel da rolagem -- e o mesmo criterio que o Imprimir sempre usou.
+document.getElementById('expCtrlMarcarTodos').addEventListener('change', (e) => {
+  const naBusca = linhasFiltradasExpControle();
+  if (e.target.checked) naBusca.forEach(l => expCtrlSelecionadas.add(String(l.id)));
+  else naBusca.forEach(l => expCtrlSelecionadas.delete(String(l.id)));
+  renderExpControle(null);
+});
 
 // Digitação manual, item a item -- pra quando o dado nao vem de planilha
 // nenhuma (a pessoa esta com o material na mao e so quer registrar o
@@ -1762,8 +1826,22 @@ document.getElementById('expCtrlBody').addEventListener('keydown', (e) => {
 // colar num e-mail ou imprimir/"salvar como PDF" do próprio navegador).
 const EXP_EXPORT_CABECALHO = ['Localização', 'Item', 'Descrição', 'UM', 'Nº Pedido', 'Quantidade', 'Nº OP', 'Lote', 'Referência', 'Status', 'Entrada em', 'Saída em'];
 
+// O que vai para o papel (e para o Exportar): os itens MARCADOS, e a lista
+// inteira da busca quando nada esta marcado.
+//
+// Nada marcado = imprimir tudo de proposito: era assim antes de existir a
+// caixa de selecao, e quem so quer a folha do dia nao precisa marcar nada.
+// A selecao e um recorte a mais DENTRO da busca, nao em vez dela -- item
+// marcado que a busca escondeu nao sai na folha, senao a folha traria
+// item que a pessoa nao esta vendo na tela.
+function linhasParaImprimirExpControle() {
+  const linhas = linhasFiltradasExpControle();
+  if (!expCtrlSelecionadas.size) return linhas;
+  return linhas.filter(l => expCtrlSelecionadas.has(String(l.id)));
+}
+
 function linhasExportacaoExpControle() {
-  return linhasFiltradasExpControle().map(l => {
+  return linhasParaImprimirExpControle().map(l => {
     const desc = expCtrlDescMap.get(l.codigo_item);
     return [
       l.localizacao || '', l.codigo_item, desc && desc.descricao ? desc.descricao : '', desc && desc.um ? desc.um : '',
@@ -1812,7 +1890,7 @@ async function exportarExpControleXlsx(nomeBase) {
 // abre pra imprimir; no arquivo baixado ninguém quer isso disparando
 // sozinho toda vez que a pessoa só quer abrir o arquivo pra olhar.
 function montarHtmlExpControle(scriptAutoImprimir) {
-  const linhasFiltradas = linhasFiltradasExpControle();
+  const linhasFiltradas = linhasParaImprimirExpControle();
   // Uma FICHA por item, e não uma linha de tabela. A folha vai colada no
   // pallet no nível 3 do porta-pallet e é lida do chão (Robson, 09/09/2026:
   // "preciso que aumente a letra para visualizar até 03 metros de altura").
@@ -1834,10 +1912,13 @@ function montarHtmlExpControle(scriptAutoImprimir) {
       <div class="ficha-detalhes">${detalhe('Local', localizacao)}${detalhe('Pedido', pedido)}${detalhe('OP', op)}${detalhe('Lote', lote)}${detalhe('Ref.', referencia)}${detalhe('Status', status)}${detalhe('Entrada', entrada)}${detalhe('Saída', saida)}</div>
     </article>`).join('');
   const busca = document.getElementById('expCtrlBusca').value.trim();
-  // Mostra o filtro no papel: se a folha vai pro pallet (o Robson: "essa
-  // folha coloco no pallet"), precisa deixar claro que é só daquela
-  // localização, não a lista inteira.
-  const subtitulo = busca ? ` — busca: "${escapeHtml(busca)}"` : '';
+  // Diz no papel DE ONDE veio este recorte -- a folha vai colada no pallet
+  // (o Robson: "essa folha coloco no pallet"), e uma folha parcial sem dizer
+  // que e parcial passa por lista completa na conferencia.
+  const marcados = linhasFiltradasExpControle()
+    .filter(l => expCtrlSelecionadas.has(String(l.id))).length;
+  const subtitulo = (busca ? ` — busca: "${escapeHtml(busca)}"` : '')
+    + (marcados ? ` — ${marcados} item(ns) escolhido(s) na tela` : '');
 
   // Se der pra filtrar pra UMA localização só, ela some no fim da folha,
   // gigante, ocupando o espaço que sobra embaixo da tabela -- é a etiqueta
@@ -1907,9 +1988,12 @@ function exportarExpControleHtml(nomeBase) {
 // que tem numa localização, é só digitar ela na busca antes de clicar
 // (mesmo filtro que já estreita a lista na tela).
 document.getElementById('expCtrlExportarBtn').addEventListener('click', async () => {
-  const linhas = linhasFiltradasExpControle();
+  const linhas = linhasParaImprimirExpControle();
   if (!linhas.length) {
-    alert(linhasDoSetorAtual().length ? 'Nenhum item bate com a busca atual.' : 'Nenhum item para exportar.');
+    alert(expCtrlSelecionadas.size
+      ? 'Nenhum item marcado bate com a busca atual \u2014 limpe a busca ou desmarque os itens.'
+      : (linhasDoSetorAtual().length ? 'Nenhum item bate com a busca atual.'
+                                     : 'Nenhum item para exportar.'));
     return;
   }
 
@@ -1942,9 +2026,12 @@ document.getElementById('expCtrlExportarBtn').addEventListener('click', async ()
 // própria caixa de impressão do navegador tem "Salvar como PDF", então
 // cobre o PDF de graça, sem precisar de outra biblioteca.
 document.getElementById('expCtrlImprimirBtn').addEventListener('click', async () => {
-  const linhas = linhasFiltradasExpControle();
+  const linhas = linhasParaImprimirExpControle();
   if (!linhas.length) {
-    alert(linhasDoSetorAtual().length ? 'Nenhum item bate com a busca atual.' : 'Nenhum item para imprimir.');
+    alert(expCtrlSelecionadas.size
+      ? 'Nenhum item marcado bate com a busca atual \u2014 limpe a busca ou desmarque os itens.'
+      : (linhasDoSetorAtual().length ? 'Nenhum item bate com a busca atual.'
+                                     : 'Nenhum item para imprimir.'));
     return;
   }
 
@@ -1960,6 +2047,7 @@ document.getElementById('expCtrlImprimirBtn').addEventListener('click', async ()
   // Só as linhas desta impressão (respeita a busca) e só as que ainda não
   // tinham etiqueta -- reimprimir não reescreve a data da primeira emissão,
   // que é a que responde "desde quando este item está etiquetado?".
+  const msg = document.getElementById('expEtiquetaMsg');
   const { marcados, naoGravados, error } = await gravarEtiquetaEmLote(linhas);
   if (!marcados && !naoGravados && !error) return;
 
@@ -1982,6 +2070,10 @@ document.getElementById('expCtrlImprimirBtn').addEventListener('click', async ()
       + naoGravados + ' — recarregue a página para ver quais valeram.'
     : marcados + ' etiqueta(s) marcada(s) como emitida(s).';
   msg.className = naoGravados ? 'status-msg status-err' : 'status-msg status-ok';
+
+  // A etiqueta destes itens acabou de sair: deixar tudo marcado convida a
+  // reimprimir o mesmo pallet no clique seguinte.
+  if (expCtrlSelecionadas.size) { expCtrlSelecionadas.clear(); renderExpControle(null); }
 });
 
 // Detecta sozinho quando um pedido está pronto: se o pedido que acabou de

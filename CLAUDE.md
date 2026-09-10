@@ -3,7 +3,7 @@
 Contexto do projeto para qualquer agente de IA ou pessoa que for mexer neste repositório.
 Sempre em **português do Brasil**.
 
-**Atualizado:** 09/09/2026 (Depósito Benchmark, Análise de Compras)
+**Atualizado:** 10/09/2026 (logo em arquivo, tour do primeiro acesso)
 **Mantenedores:** Robson (dono do projeto e admin geral) · Victor Dobner (colaborador)
 
 > Este arquivo é lido automaticamente pelo Claude Code ao abrir a pasta do projeto.
@@ -459,8 +459,9 @@ Hoje ele cria só estrutura, e o RLS é assunto dos scripts da Fase 1.
 
 5. **Pessoas com nome fixo no código** (M2): `ADMIN_EMAIL` em `js/config.js` e
    `j.lisboa@kingspanisoeste.com.br` em `js/estoque.js`. Já existe o padrão certo no projeto —
-   tabelas como `gerentes_unidade` e `editores_bobinas`. E **os três logos idênticos em base64**
-   no `index.html` (M3): 24 KB baixados sem necessidade a cada acesso.
+   tabelas como `gerentes_unidade` e `editores_bobinas`.
+   *(Os três logos em base64 dentro do `index.html` — o antigo M3 — saíram em
+   10/09/2026: hoje são `logo.png` e `logo-branca.png`, ver seção 16.)*
 
 **De operação:**
 
@@ -1448,6 +1449,127 @@ O auditor pegou seis defeitos que passariam numa conferência a olho:
 5. `background:white` e `color:var(--blue)` **inline** no `index.html`.
 6. O verde do "Sincronizado", que usava tom de borda em texto (3,23:1).
 
+
+### A logo saiu do base64 e ficou transparente (10/09/2026)
+
+O Victor mandou as duas versões (colorida e branca) e pediu: *"Tem como manter
+a logo com o fundo transparente? Sem ser nesse quadrado branco. Além disso
+alinhe ela no centro da aba de navegação. Na tela de login, também deixe ela
+sem esse quadrado branco e com fundo transparente. Coloque também o botão de
+alternar modo claro/escuro na tela de login."*
+
+**O quadrado branco era do ARQUIVO, não do CSS.** O PNG embutido era 205×66
+RGBA e **100% opaco** — o branco estava na imagem. Tirar o `.logo-card` não
+resolveria nada: apareceria o retângulo do próprio arquivo. Foram gerados dois
+arquivos de verdade:
+
+| Arquivo | Como foi feito | Onde entra |
+|---|---|---|
+| `logo.png` | fundo removido por **preenchimento a partir da borda** | sidebar, tema claro |
+| `logo-branca.png` | o colorido virou branco, o branco virou vazio | os dois heros (azuis) e a sidebar no tema escuro |
+
+- **Preenchimento a partir da borda, e não "todo branco vira transparente":**
+  as letras ISOESTE são **brancas dentro do oval azul** e virariam buracos. Só
+  sai o branco ligado ao lado de fora.
+- **As beiradas foram suavizadas contra branco.** Cortar seco deixaria um halo
+  claro em volta, visível justamente no tema escuro. Nesses pixels o alfa é
+  estimado por `1 - min(r,g,b)/255` e a cor é desmultiplicada do branco — a
+  conta inversa da composição original.
+- **Duas imagens, e não um filtro CSS.** `filter: brightness(0) invert(1)`
+  clareia tudo e funde o oval azul do ISOESTE com as letras brancas: vira uma
+  bolha ilegível (conferido no navegador). Logo monocromática precisa das
+  letras **recortadas**.
+- **Qual aparece depende do FUNDO, não do tema:** os heros do login e da conta
+  pendente são gradiente azul nos dois temas, então ali vale sempre a branca
+  (`logo-sempre-branca`); a sidebar é `var(--panel)`, que muda, então a logo
+  troca junto (`logo-tema-claro` / `logo-tema-escuro`).
+- ⚠️ **As três regras da troca por tema TÊM de vir depois de `.logo`** no
+  `styles.css`, e não junto do resto do tema escuro no topo. `.logo { display:
+  block }` e `.logo-tema-escuro { display: none }` têm a **mesma
+  especificidade** (uma classe cada), e nesse empate vale a última do arquivo:
+  com o bloco no topo, as **duas** logos da sidebar apareciam ao mesmo tempo no
+  tema claro. Pego comparando `getComputedStyle` nos dois temas.
+- A regra que estava ali antes mirava `.logo-topo` e `.logo-login`, **classes
+  que não existem no HTML** — erro meu do commit do tema, e a razão de o
+  quadrado branco continuar aparecendo no escuro.
+
+**O botão de tema também está na tela de login** (`#temaToggleLogin`). Os dois
+botões chamam o mesmo alternador e `aplicarTema()` acerta o ícone dos dois:
+quem escurece no login já entra no portal com o botão certo.
+
+### ENTER confirma em todo campo de senha (10/09/2026)
+
+O Victor: *"Em todos os campos onde pode inserir a senha, incluindo a tela de
+login, não está confirmando ao apertar ENTER, somente ao clicar no botão."*
+
+Já funcionava em dois (`contagemPinInput`, `expGateSenhaInput`) e faltava em
+três: **login** (usuário, senha e, no cadastro, o nome completo), **PIN de
+edição** e a **linha de senhas da aba Configurações**.
+
+- O Enter **clica no botão** em vez de repetir a lógica. Duplicar a chamada
+  daria dois caminhos para a mesma validação e a mesma mensagem de erro — e um
+  deles ficaria para trás na próxima mudança.
+- Na aba Configurações o Enter salva **aquela linha**: são seis campos por
+  unidade e um Salvar por linha, então o clique tem de sair do `Salvar` do
+  `<tr>` onde o Enter foi digitado, não de um botão genérico — senão gravaria a
+  unidade errada.
+- Os `<select>` de unidade e cargo ficam de fora: ali o Enter é do próprio menu
+  do navegador.
+
+### Controle EXP → Entrada: escolher o que imprimir (10/09/2026)
+
+O Victor: *"Na tela 'controle EXP acessórios', aba entrada, coloque caixas de
+seleção para poder escolher os materiais para imprimir. Coloque também uma
+opção para imprimir tudo."*
+
+Caixa de seleção por linha, mais a caixa do cabeçalho que marca **todos os que
+estão na busca**. O botão diz o que vai sair: `🖨️ Imprimir tudo (N)` sem nada
+marcado, `🖨️ Imprimir marcados (N)` com seleção.
+
+- **`expCtrlSelecionadas` é um `Set` de ids**, não um atributo no DOM: a tabela
+  é redesenhada inteira a cada tecla da busca, e o que foi marcado antes de
+  filtrar tem de continuar marcado depois. Mesmo motivo de `etiquetasTrading`
+  na etiqueta da Trading.
+- **A seleção é um recorte DENTRO da busca, não em vez dela.** Item marcado que
+  a busca escondeu não sai na folha — senão a folha traria item que a pessoa
+  não está vendo na tela. Filtrar e desfiltrar devolve o que estava marcado.
+- **Nada marcado = imprimir tudo**, de propósito: era assim antes de a caixa
+  existir, e quem só quer a folha do dia não precisa marcar nada. É essa a
+  "opção para imprimir tudo" pedida, junto com a caixa do cabeçalho.
+- **Trocar de setor ou de unidade limpa a seleção** (`renderExpControle` poda
+  os ids que não estão mais na tela): marcar no Depósito Benchmark e voltar pro
+  Controle EXP imprimiria item do outro depósito. **A busca não poda nada.**
+- **A caixa do cabeçalho fica indeterminada** na seleção parcial. Vazia, com
+  itens marcados na lista, o próximo clique pareceria "marcar tudo" quando na
+  verdade limpa.
+- **A folha diz que é um recorte** (`— N item(ns) escolhido(s) na tela`, ao lado
+  da busca no subtítulo). Ela vai colada no pallet: folha parcial sem dizer que
+  é parcial passa por lista completa na conferência.
+- **Imprimir continua sendo o ato de emitir a etiqueta**, e agora marca só os
+  itens que realmente saíram no papel. Depois de imprimir, a seleção é limpa —
+  deixá-la marcada convidaria a reimprimir o mesmo pallet no clique seguinte.
+- Exportar usa o mesmo recorte: é a mesma listagem, só salva em vez de
+  impressa. Se um dia a etiqueta passar a sair do Excel, a regra de marcação
+  tem de mudar junto (já valia antes).
+
+**Dois defeitos antigos apareceram neste caminho e foram corrigidos:**
+
+1. **`msg` não existia no handler do Imprimir.** Ele escrevia
+   `msg.textContent = ...` sem declarar `msg`, e não há `msg` global neste
+   projeto: **toda** impressão que marcasse etiqueta estourava `ReferenceError`
+   na hora de escrever o resultado. A etiqueta era gravada (o ✓ aparecia
+   depois do render), mas a mensagem — inclusive a de **falha** ao marcar —
+   nunca chegava à tela. O `#expEtiquetaMsg` existe no HTML para isso e não era
+   lido em lugar nenhum.
+2. **O ordenador estava ligado a TODO `thead th` do documento.** Clique no
+   cabeçalho de qualquer outra tabela do portal caía nele: `th.dataset.key`
+   vinha `undefined`, as flechas da Consulta de Itens eram apagadas e
+   `th.querySelector('.arrow')` era `null` — `TypeError`. Ficou inofensivo
+   enquanto ninguém clicava nesses cabeçalhos; a caixa "marcar todos" torna
+   esse clique rotina. Agora é `#dataTable thead th`.
+
+---
+
 ## Filtro de Localização passou a filtrar ao digitar (10/09/2026)
 
 O Robson, na contagem, digitando "CANT" no filtro avançado de Localização:
@@ -1514,11 +1636,91 @@ função/caminho que sobra é pior que código morto só se alguém ainda o
 chamar sem querer — aqui ninguém mais chama. Remover de vez é decisão pra
 tomar separada, se confirmar que não faz falta nenhuma.
 
-Conferido no navegador (mocks de `sb.from`/`sb.rpc`): o menu mostra "🏭
-Depósito Benchmark" pros perfis certos (Estoque ALM e Admin, não Consultor
-— igual ao SESMT); abrir a página usa a tela de Consulta de Itens com
-crachá "🏭 Depósito Benchmark" e `depositoAtual = 'benchmark'`; Controle EXP
-Acessórios continua intacto (`setorExpAtual` fica `'exp'`, tela própria);
-colar uma planilha na aba Benchmark do lote monta blocos com
-`deposito: 'benchmark'`, e Almoxarifado/SESMT continuam com o depósito
-certo (sem regressão). Zero erro de console.
+**A senha por unidade saiu do Benchmark** (achada só ao mesclar com o "Tour
+guiado" logo abaixo, que trouxe pra dentro deste arquivo o trecho de
+`js/navegacao.js` com o "gate" de senha — antes vivia numa parte do arquivo
+que eu ainda não tinha lido nesta sessão). Entrar em "Controle EXP
+Acessórios" **ou** "Depósito Benchmark" pedia a mesma senha por unidade
+(`abrirGateExp`, `sql/fase9-senha-exp.sql`) antes de abrir a tela — fazia
+sentido proteger o registro de pedido/etiqueta do modelo antigo, mas o
+Almoxarifado e o SESMT nunca pediram senha nenhuma para o mesmo tipo de
+tela. Perguntado, o Robson confirmou tirar a senha do Benchmark:
+
+- O clique no menu ("🏭 Depósito Benchmark") não abre mais `abrirGateExp` —
+  vai direto para `mostrarPagina('expbenchmark')`, igual a `estoque`/`sesmt`.
+- Trocar de unidade pelo seletor do topo estando no Benchmark também não
+  reabre o gate — antes, o `if` que decidia isso incluía `'expbenchmark'`
+  ao lado de `'expacessorios'`; sem tirar dali, trocar de unidade pelo
+  seletor pediria senha mesmo depois de entrar sem ela, uma inconsistência
+  dentro da própria tela.
+- `Controle EXP Acessórios` continua pedindo a senha normalmente — só o
+  Benchmark saiu do gate.
+- A permissão de verdade continua sendo o RLS por unidade/perfil
+  (`pode_atualizar_estoque`), igual ao Almoxarifado/SESMT — a senha nunca
+  foi a proteção real, só um atrito a mais que deixou de fazer sentido
+  quando a tela virou saldo simples.
+
+Conferido no navegador (mocks de `sb.from`/`sb.rpc`, clique real no item do
+menu — não chamada direta a `mostrarPagina`): o menu mostra "🏭 Depósito
+Benchmark" pros perfis certos (Estoque ALM e Admin, não Consultor — igual
+ao SESMT); clicar nele abre a tela direto, sem o modal de senha, com crachá
+"🏭 Depósito Benchmark" e `depositoAtual = 'benchmark'`; clicar em Controle
+EXP Acessórios ainda abre o modal de senha, pedindo a unidade certa; trocar
+de unidade pelo seletor do topo estando no Benchmark também não reabre o
+modal; Controle EXP Acessórios continua intacto (`setorExpAtual` fica
+`'exp'`, tela própria); colar uma planilha na aba Benchmark do lote monta
+blocos com `deposito: 'benchmark'`, e Almoxarifado/SESMT continuam com o
+depósito certo (sem regressão). Zero erro de console.
+
+## 17. Tour guiado do primeiro acesso (10/09/2026)
+
+O Victor: *"Primeiro login fazer um mini tutorial ou um 'tour' pelo portal.
+Como tem em alguns jogos onde um pop up foca num menu especifico com uma breve
+explicação e ao clicar em próximo foca em outro, etc. Mas coloque também uma
+opção para 'pular tutorial' pra quem quiser."*
+
+Vive em **`js/tour.js`**, carregado por último (precisa de `PERFIS`, `PAGINAS`,
+`rotuloDoPerfil()` e `escapeHtml()`), e é aberto por `iniciarTourSePrimeiraVez()`
+em `js/auth.js`, **depois** de `montarMenu()` — os passos apontam para itens do
+menu que antes disso não existem no DOM.
+
+- ⚠️ **Não há lista fixa de passos.** Ela é montada a partir do menu que aquela
+  pessoa **realmente tem** (`PERFIS[perfilAtual].paginas`, já filtrado por
+  `podeVerAnaliseCache`), lendo rótulo e ícone de `PAGINAS`. Uma lista escrita à
+  mão explicaria tela que a pessoa não vê — um consultor receberia a explicação
+  da Análise de Compras e ficaria procurando o menu. Hoje: **9 passos** para
+  consultor, **15** para admin. Página nova em `PAGINAS` só precisa de uma frase
+  em `TOUR_EXPLICACAO`; sem frase, o passo usa o rótulo e não quebra nada.
+- **O escuro em volta é um `box-shadow` de 9999px no `#tourFoco`**, e não quatro
+  divs em volta do alvo: um retângulo com
+  `box-shadow: 0 0 0 9999px rgba(0,0,0,.62)` pinta a tela inteira menos ele
+  mesmo, então o recorte acompanha o alvo sozinho — só posição e tamanho mudam
+  em JS.
+  ⚠️ No passo **sem alvo** (a boas-vindas), o retângulo encolhe para nada **no
+  centro da tela**, e não jogado para `-9999px`: de lá a sombra de 9999px acaba
+  justo na borda e **a tela não escurece nada**. Foi o primeiro jeito, e o
+  navegador mostrou.
+- **Passo cujo alvo não está na tela é pulado ao andar**, não desenhado no
+  vazio: é o que cobre o perfil sem aquele botão e o celular, onde parte do
+  cabeçalho não aparece. Elemento escondido tem retângulo de tamanho zero — daí
+  a checagem de `width > 0 && height > 0`, não `if (el)`.
+- **No celular o tour abre o menu** (que começa fechado) e **devolve como
+  estava** ao terminar: metade dos passos aponta para itens do menu, e sair do
+  tutorial não pode deixar a tela diferente de como a pessoa a encontrou.
+- **Clicar no escuro em volta não fecha.** São até quinze passos, e perder tudo
+  num clique ao lado da caixa seria pior que um botão a mais. Fecha pelo Esc,
+  pelo **Pular tutorial** e pelo **Concluir**; as setas ← → também andam.
+- **"Pular tutorial" fica à esquerda e discreto**: é uma saída, não a ação
+  principal — quem quer sair acha, e quem está seguindo não clica nele por
+  engano no lugar do Próximo.
+- **O botão 🎓 no cabeçalho reabre o tour** quando a pessoa quiser. Sem ele, o
+  tutorial existiria uma vez na vida e não haveria como conferir uma mudança
+  nele sem limpar o `localStorage`.
+- ⚠️ **A marca de "já viu" é por pessoa e por NAVEGADOR**
+  (`localStorage['portal_tour_visto:<email>']`). Uma coluna em
+  `usuarios_permitidos` seguiria a pessoa entre computadores, mas pediria mais
+  um script de SQL para rodar no painel; o custo de errar aqui é ver o tour uma
+  segunda vez num computador novo, com o "pular" à mão. Se incomodar, a coluna
+  é a correção certa.
+- O tour **não vai para o papel** (`#tourFundo { display: none !important; }` no
+  `@media print`) — o recorte escuro cobriria a folha inteira.
