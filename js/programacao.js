@@ -42,6 +42,9 @@ let setorExpAtual = 'exp';
 // busca -- o que foi marcado antes de filtrar tem de continuar marcado
 // depois. Mesmo motivo de `etiquetasTrading` em js/estoque.js.
 let expCtrlSelecionadas = new Set();
+// Filtros da aba Conferir. `situacao` nasce em 'divergentes' -- ver o
+// comentario de montarConferirExp().
+const filtrosConf = { busca: '', situacao: 'divergentes' };
 // Segundo clique do Imprimir quando a impressão vai passar de LIMITE_FOLHAS.
 // Desde 10/09/2026 sai uma folha POR ITEM, então o número de folhas é o
 // número de itens -- "Imprimir tudo" numa unidade cheia é resma, e quem
@@ -85,7 +88,11 @@ async function carregarProgramacao() {
   // então filtra pelos IDs dos pedidos já filtrados.
   const [pedidos, expCtrl, pedidoStatus] = await Promise.all([
     sb.from('vw_pedidos_prioridade').select('*').eq('unidade', unidadeAtual),
-    sb.from('exp_controle_itens').select('*').eq('unidade', unidadeAtual).order('localizacao', { ascending: true }),
+    // Paginado: a movimentação da expedição é append-only de propósito (nunca
+    // apaga, vira histórico), então esta é a tabela que passa de 1.000 linhas
+    // primeiro -- e é um dos dois lados da aba Conferir.
+    buscarTudoPaginado((de, ate) => sb.from('exp_controle_itens').select('*')
+      .eq('unidade', unidadeAtual).order('id', { ascending: true }).range(de, ate)),
     sb.from('exp_pedido_status').select('*').eq('unidade', unidadeAtual)
   ]);
 
@@ -177,14 +184,18 @@ function trocarAbaExpAcessorios(aba) {
   document.querySelectorAll('#expAbas [data-exp-aba]').forEach(b => {
     b.className = b.dataset.expAba === aba ? 'btn btn-primary' : 'btn';
   });
-  // O formulário de registro (Entrada/Saída, os dois modos) não faz
-  // sentido na aba Catálogo -- lá só se importa/consulta a planilha do
-  // sistema, não se registra movimentação nenhuma.
-  document.getElementById('expRegistroContainer').style.display = aba === 'catalogo' ? 'none' : 'block';
+  // O formulário de registro (Entrada/Saída, os dois modos) não faz sentido nas
+  // abas Catálogo nem Conferir: as duas só LEEM -- uma é a planilha do sistema,
+  // a outra é o confronto entre as duas pontas. Registrar movimentação a partir
+  // de uma tela de conferência seria mexer no que se está medindo.
+  document.getElementById('expRegistroContainer').style.display =
+    (aba === 'catalogo' || aba === 'conferir') ? 'none' : 'block';
   document.getElementById('expEntradaAba').style.display = aba === 'entrada' ? 'block' : 'none';
   document.getElementById('progConferencia').style.display = aba === 'saida' ? 'block' : 'none';
   document.getElementById('expCatalogoAba').style.display = aba === 'catalogo' ? 'block' : 'none';
+  document.getElementById('expConferirAba').style.display = aba === 'conferir' ? 'block' : 'none';
   if (aba === 'saida') renderConferencia();
+  if (aba === 'conferir') renderConferirExp();
 }
 
 // Catálogo antes da Programação, mesmo motivo do carregamento inicial em
@@ -1335,6 +1346,189 @@ function renderExpControle(erroCarregamento) {
   atualizarSelecaoExpControle();
 }
 
+// ======================= ABA CONFERIR: SISTEMA x FÍSICO ==================
+//
+// O Victor, 10/09/2026: "faça um confronto do que existe no sistema e o que tem
+// no fisico, faça uma comparação e retorne indicadores. Quais tem diferença,
+// quanto é, se ta no sistema ou nao".
+//
+//   SISTEMA = `catalogo_exp_itens` desta unidade (a planilha do Datasul, colada
+//             na aba Catálogo). É a coluna `quantidade` dela.
+//   FÍSICO  = `exp_controle_itens` com status `na_expedicao`. Item já retirado
+//             saiu da expedição -- contá-lo diria que o material está lá quando
+//             ele foi embora no caminhão.
+//
+// ⚠️ POR ITEM, SOMANDO OS DOIS LADOS. O mesmo código aparece em várias linhas
+// dos dois lados (o sistema separa por lote e depósito, o físico por endereço e
+// pedido), então comparar linha a linha acusaria diferença onde só há material
+// espalhado. Mesma decisão da Análise de Compras, e pelo mesmo motivo.
+//
+// ⚠️ A CHAVE PASSA POR `normalizaCodigoItem()`. As duas pontas são planilhas
+// COLADAS À MÃO, de origens diferentes, e o projeto já perdeu uma tarde com o
+// item 996613I gravado como `996613i` numa e maiúsculo na outra (seção 14): o
+// `Map` do JavaScript diferencia a caixa, e a conta saía com saldo zero num
+// item que existia. Numa tela de conferência isso não seria um número errado --
+// seria uma divergência inventada, e alguém indo procurar material que está no
+// lugar.
+function montarConferirExp() {
+  const somar = (mapa, chave, valor) => mapa.set(chave, (mapa.get(chave) || 0) + valor);
+
+  // --- lado do sistema ---
+  const sistema = new Map();
+  const infoItem = new Map();   // codigo normalizado -> { codigo, descricao, um }
+  catalogoExpItens.forEach(c => {
+    const chave = normalizaCodigoItem(c.codigo_item);
+    if (!chave) return;
+    somar(sistema, chave, parseNum(c.quantidade));
+    if (!infoItem.has(chave)) {
+      infoItem.set(chave, { codigo: c.codigo_item, descricao: c.descricao || '', um: c.um || '' });
+    }
+  });
+
+  // --- lado do físico ---
+  const fisico = new Map();
+  const ondeEsta = new Map();   // codigo normalizado -> Set de localizações
+  linhasDoSetorAtual().forEach(l => {
+    if (l.status === 'retirado') return;
+    const chave = normalizaCodigoItem(l.codigo_item);
+    if (!chave) return;
+    somar(fisico, chave, parseNum(l.quantidade));
+    const local = (l.localizacao || '').trim();
+    if (local) {
+      if (!ondeEsta.has(chave)) ondeEsta.set(chave, new Set());
+      ondeEsta.get(chave).add(local);
+    }
+    // A descrição do catálogo é a preferida (é a do sistema); esta cobre o item
+    // que só existe no físico, e que por definição não está no catálogo.
+    if (!infoItem.has(chave)) {
+      const d = expCtrlDescMap.get(l.codigo_item) || {};
+      infoItem.set(chave, { codigo: l.codigo_item, descricao: d.descricao || '', um: d.um || '' });
+    }
+  });
+
+  // --- o confronto ---
+  // `noCatalogo`/`noFisico` olham a PRESENÇA da linha, não a quantidade: item
+  // cadastrado no sistema com saldo zero é diferente de item que o sistema não
+  // conhece, e a tela precisa dizer qual dos dois é.
+  return [...new Set([...sistema.keys(), ...fisico.keys()])].map(chave => {
+    const qtdSistema = sistema.get(chave) || 0;
+    const qtdFisico = fisico.get(chave) || 0;
+    const noCatalogo = sistema.has(chave);
+    const noFisico = fisico.has(chave);
+    const diferenca = qtdFisico - qtdSistema;
+
+    let situacao;
+    if (!noCatalogo) situacao = 'so_fisico';
+    else if (!noFisico) situacao = 'so_sistema';
+    else if (Math.abs(diferenca) > 0.0001) situacao = 'diferenca';
+    else situacao = 'ok';
+
+    const info = infoItem.get(chave) || { codigo: chave, descricao: '', um: '' };
+    return {
+      chave, codigo: info.codigo, descricao: info.descricao, um: info.um,
+      qtdSistema, qtdFisico, diferenca, situacao,
+      locais: [...(ondeEsta.get(chave) || [])].sort()
+    };
+  });
+}
+
+// `numeroBR()` vive em js/analise.js, que carrega DEPOIS deste arquivo. Vale
+// porque declaracao de funcao no topo de script classico entra no objeto
+// global, e nada aqui roda antes de todos os scripts terminarem de carregar.
+// Preferi reusar a duplicar: dois formatadores de quantidade divergiriam no
+// dia em que um deles ganhasse casa decimal.
+const SITUACOES_CONF = {
+  so_fisico:  { rotulo: 'Só no físico',  classe: 'st-atrasado' },
+  so_sistema: { rotulo: 'Só no sistema', classe: 'st-atencao'  },
+  diferenca:  { rotulo: 'Diferença',     classe: 'st-pendente' },
+  ok:         { rotulo: 'Confere',       classe: 'st-ativo'    }
+};
+
+// A ordem da lista é a ordem do risco, não a alfabética:
+//
+//   1. SÓ NO FÍSICO primeiro. Material guardado que o sistema não conhece é o
+//      que se perde no inventário -- ninguém vai procurar o que não está na
+//      lista.
+//   2. Depois DIFERENÇA, da maior para a menor em módulo: a diferença grande é
+//      a que muda decisão de compra e de carregamento.
+//   3. Depois SÓ NO SISTEMA, do maior saldo para o menor.
+//   4. O que confere vai por último -- não há o que fazer com ele.
+const ORDEM_SITUACAO = ['so_fisico', 'diferenca', 'so_sistema', 'ok'];
+function ordenarConferir(lista) {
+  return lista.slice().sort((a, b) =>
+    ORDEM_SITUACAO.indexOf(a.situacao) - ORDEM_SITUACAO.indexOf(b.situacao)
+    || Math.abs(b.diferenca) - Math.abs(a.diferenca)
+    || Math.max(b.qtdSistema, b.qtdFisico) - Math.max(a.qtdSistema, a.qtdFisico)
+    || String(a.codigo).localeCompare(String(b.codigo), 'pt-BR'));
+}
+
+// Teto de linhas desenhadas. O catálogo é o depósito INTEIRO (a mensagem de
+// substituição em lote já falava em 4.000 linhas), e "Tudo" numa unidade cheia
+// desenharia uma tabela que trava a aba sem ninguém conseguir ler. O número
+// aparece na tela junto com o total, então o corte nunca é silencioso.
+const LIMITE_LINHAS_CONF = 300;
+
+function renderConferirExp() {
+  const corpo = document.getElementById('confCorpo');
+  const vazio = document.getElementById('confVazio');
+  if (!corpo) return;
+
+  const todas = montarConferirExp();
+  const contar = s => todas.filter(l => l.situacao === s).length;
+  document.getElementById('conf-total').textContent = todas.length;
+  document.getElementById('conf-diferenca').textContent = contar('diferenca');
+  document.getElementById('conf-so-sistema').textContent = contar('so_sistema');
+  document.getElementById('conf-so-fisico').textContent = contar('so_fisico');
+  document.getElementById('conf-ok').textContent = contar('ok');
+
+  const busca = filtrosConf.busca.trim().toLowerCase();
+  let lista = todas.filter(l => {
+    if (filtrosConf.situacao === 'divergentes' && l.situacao === 'ok') return false;
+    if (filtrosConf.situacao && filtrosConf.situacao !== 'divergentes'
+        && l.situacao !== filtrosConf.situacao) return false;
+    if (busca && !String(l.codigo).toLowerCase().includes(busca)
+             && !String(l.descricao).toLowerCase().includes(busca)) return false;
+    return true;
+  });
+  lista = ordenarConferir(lista);
+
+  const cortou = lista.length > LIMITE_LINHAS_CONF;
+  const naTela = cortou ? lista.slice(0, LIMITE_LINHAS_CONF) : lista;
+
+  document.getElementById('confContagem').textContent = cortou
+    ? `Mostrando ${LIMITE_LINHAS_CONF} de ${lista.length} — use a busca para estreitar`
+    : `${lista.length} item(ns)`;
+
+  vazio.style.display = lista.length ? 'none' : 'block';
+  if (!lista.length) {
+    vazio.textContent = todas.length
+      ? 'Nenhum item bate com o filtro. Se o Catálogo EXP desta unidade estiver vazio, cole a planilha do sistema na aba Catálogo primeiro.'
+      : 'Nada para confrontar: nem o Catálogo EXP nem a expedição têm item nesta unidade.';
+    corpo.innerHTML = '';
+    return;
+  }
+
+  corpo.innerHTML = naTela.map(l => {
+    const s = SITUACOES_CONF[l.situacao];
+    // O sinal da diferença é a informação: + é sobra no físico, - é falta. Sem
+    // ele a pessoa lê "3" e não sabe para que lado.
+    const sinal = l.diferenca > 0 ? '+' : '';
+    return `
+    <tr>
+      <td class="item">${escapeHtml(l.codigo)}</td>
+      <td>${escapeHtml(l.descricao || '—')}</td>
+      <td class="loc">${escapeHtml(l.um || '—')}</td>
+      <td class="num">${l.situacao === 'so_fisico' ? '—' : numeroBR(l.qtdSistema)}</td>
+      <td class="num">${l.situacao === 'so_sistema' ? '—' : numeroBR(l.qtdFisico)}</td>
+      <td class="num" style="font-weight:800; color:${l.situacao === 'ok' ? 'var(--muted)' : 'var(--erro-texto)'};">
+        ${l.situacao === 'ok' ? '0' : sinal + numeroBR(l.diferenca)}</td>
+      <td><span class="cfg-status ${s.classe}">${s.rotulo}</span></td>
+      <td class="loc">${l.locais.length ? escapeHtml(l.locais.join(', ')) : '—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+
 // Grava etiqueta em lote: `marcar = true` marca como emitida. Chamada pelo
 // Imprimir, que marca sozinho a etiqueta de tudo que sai na impressão.
 //
@@ -1409,6 +1603,29 @@ async function marcarSaidaExpControle(id, conferente, novoStatus) {
 }
 
 document.getElementById('expCtrlBusca').addEventListener('input', () => renderExpControle(null));
+
+// Aba Conferir: filtra ao digitar, sem ir ao banco -- as duas pontas já estão
+// em memória (`catalogoExpItens` e `progExpControle`).
+document.getElementById('confBusca').addEventListener('input', (e) => {
+  filtrosConf.busca = e.target.value;
+  renderConferirExp();
+});
+document.getElementById('confFiltroSituacao').addEventListener('change', (e) => {
+  filtrosConf.situacao = e.target.value;
+  renderConferirExp();
+});
+// Recarregar busca as DUAS pontas de novo: a conferência só vale se os dois
+// lados forem do mesmo momento. Buscar um só deixaria a tela comparando o
+// catálogo de agora com o físico de dez minutos atrás.
+document.getElementById('confRecarregar').addEventListener('click', async () => {
+  const msg = document.getElementById('confMsg');
+  msg.textContent = 'Recarregando as duas pontas...';
+  msg.className = 'status-msg';
+  await carregarCatalogoExp();
+  await carregarProgramacao();
+  renderConferirExp();
+  msg.textContent = '';
+});
 
 // Marcar/desmarcar um item. Guarda o id, nao a posicao da linha: a ordem e
 // o conjunto mudam com a busca.
@@ -2529,7 +2746,12 @@ function parseCatalogoExpTexto(texto) {
 }
 
 async function carregarCatalogoExp() {
-  const { data, error } = await sb.from('catalogo_exp_itens').select('*').eq('unidade', unidadeAtual);
+  // Paginado pelo mesmo motivo: o catálogo do sistema tem milhares de linhas
+  // numa unidade cheia (a mensagem de substituição já falava em 4.000), e
+  // cortado em 1.000 ele viraria "item não existe no sistema" na aba Conferir.
+  const { data, error } = await buscarTudoPaginado((de, ate) =>
+    sb.from('catalogo_exp_itens').select('*').eq('unidade', unidadeAtual)
+      .order('id', { ascending: true }).range(de, ate));
   catalogoExpItens = error ? [] : (data || []);
   renderCatalogoExp(error ? error.message : null);
 }
