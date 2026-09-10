@@ -912,6 +912,7 @@
               <option value="ok">Conferem</option>
             </select>
             <button class="btn" id="confRecarregar">Recarregar</button>
+            <button class="btn" id="confVerExcluidosBtn" style="display:none;" title="Itens marcados como &quot;não preciso conferir&quot;">🚫 Ver excluídos</button>
             <span class="status-msg" id="confMsg"></span>
             <span class="status-msg" id="confContagem" style="margin-left:auto;"></span>
           </div>
@@ -922,7 +923,7 @@
                 <tr>
                   <th>Item</th><th>Descrição</th><th>UM</th>
                   <th>Sistema</th><th>Físico</th><th>Diferença</th>
-                  <th>Situação</th><th>Onde está</th>
+                  <th>Situação</th><th>Onde está</th><th>Observação</th>
                 </tr>
               </thead>
               <tbody id="confCorpo"></tbody>

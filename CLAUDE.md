@@ -2312,3 +2312,49 @@ ao desenho original é uma linha em `montarMenu()`, marcada no comentário.
 Passos por perfil depois desta mudança: consultor **15**, estoque_aco **9**,
 estoque_alm **21**, admin **23** (o admin não recebe o tour sozinho, só pelo
 🎓).
+
+## Observação e exclusão por item, na aba Conferir (10/09/2026)
+
+O Robson, apontando pro fim da tabela: *"preciso de uma coluna de
+observação"* — e, na sequência: *"e um botao se excluir, tem itens que não
+são do meu estoque dai limpo"*, esclarecido depois: *"excluo o item que não
+preciso contar no inventário, tem itens que são do pátio aí é outra
+equipe"*.
+
+**"Excluir" aqui NÃO apaga `catalogo_exp_itens` nem `exp_controle_itens`.**
+O pedido é parar de **conferir** o item nesta tela, não apagar o registro de
+outra equipe — o pátio continua sendo problema de quem cuida do pátio, só
+deixa de aparecer nesta conferência. Mesmo padrão do "não repor" da Análise
+de Compras: uma marca **reversível** (↺ restaura), guardada numa tabela
+própria — `sql/fase33-conferir-exp-observacao.sql` cria
+`conferir_exp_notas` (chave `unidade` + `codigo_item` **normalizado** por
+`normalizaCodigoItem()`, igual à chave que já monta a linha da tela).
+
+⚠️ **Não é a mesma tabela de `analise_item_notas`** (fase20) — são assuntos
+diferentes: lá a observação é sobre *"o que fazer pra comprar este item"*
+(já solicitei, não repor); aqui é sobre a **divergência sistema × físico**
+("já avisei o PCP", "é item de outra equipe"). Reaproveitar misturaria os
+dois na mesma linha.
+
+- **`carregarConferirExpNotas()`** busca as notas desta unidade ao entrar na
+  aba (`trocarAbaExpAcessorios('conferir')`), e de novo no "Recarregar" —
+  a tela já mostra rápido com o que tinha antes, redesenha quando a busca
+  nova chega.
+- **Item excluído sai dos cards e do filtro normal** — `renderConferirExp()`
+  separa `todas` (sem excluído) de `excluidos` **antes** de contar "Itens
+  confrontados"/"Com diferença"/etc.: excluído não é mais problema desta
+  conferência, não devia inflar nem esconder número nenhum dela.
+- **Botão "🚫 Ver excluídos (N)"**, mesmo padrão do "Ver não repor" da
+  Análise de Compras: troca a lista inteira para só os excluídos (ignorando
+  o filtro de situação, que não faz sentido ali), com a observação e quem/
+  quando excluiu no lugar do campo editável, e o ↺ Restaurar no lugar do 🗑️.
+- **Falha ao carregar não trava a aba** (`console.warn`, tabela some sozinha
+  se o fase33 ainda não rodou) — mesmo princípio de
+  `limparObservacoesResolvidas()` em `js/analise.js`.
+
+Conferido no navegador (mock de `sb.from`): os 4 itens de teste aparecem
+todos; excluir um item some da lista normal e ele aparece em "Ver excluídos
+(1)", com a observação e o ↺; restaurar devolve à lista normal; a
+observação digitada e salva sobrevive a um redesenho da tela
+(`renderConferirExp()` de novo, simulando reabrir a aba); o card "Itens
+confrontados" cai de 4 para 3 ao excluir. Zero erro de console.

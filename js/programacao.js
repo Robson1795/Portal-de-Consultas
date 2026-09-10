@@ -45,6 +45,14 @@ let expCtrlSelecionadas = new Set();
 // Filtros da aba Conferir. `situacao` nasce em 'divergentes' -- ver o
 // comentario de montarConferirExp().
 const filtrosConf = { busca: '', situacao: 'divergentes' };
+// Observação e exclusão por item da aba Conferir (sql/fase33-conferir-exp-
+// observacao.sql) -- chave normalizada (normalizaCodigoItem), igual à linha
+// da tela. "Excluir" aqui NUNCA apaga catalogo_exp_itens/exp_controle_itens:
+// é só uma marca (reversível) de "não preciso conferir este item nesta
+// unidade" -- Robson, 10/09/2026: "tem itens que são do pátio aí é outra
+// equipe". Mesmo padrão do "não repor" da Análise de Compras.
+let conferirExpNotas = new Map();
+let confVerExcluidos = false; // mostrando a lista dos excluídos em vez da normal
 // Segundo clique do Imprimir quando a impressão vai passar de LIMITE_FOLHAS.
 // Desde 10/09/2026 sai uma folha POR ITEM, então o número de folhas é o
 // número de itens -- "Imprimir tudo" numa unidade cheia é resma, e quem
@@ -195,7 +203,10 @@ function trocarAbaExpAcessorios(aba) {
   document.getElementById('expCatalogoAba').style.display = aba === 'catalogo' ? 'block' : 'none';
   document.getElementById('expConferirAba').style.display = aba === 'conferir' ? 'block' : 'none';
   if (aba === 'saida') renderConferencia();
-  if (aba === 'conferir') renderConferirExp();
+  if (aba === 'conferir') {
+    renderConferirExp(); // mostra rápido com o que já tem em memória (a 1ª vez, sem observação/exclusão ainda)
+    carregarConferirExpNotas().then(renderConferirExp);
+  }
 }
 
 // Catálogo antes da Programação, mesmo motivo do carregamento inicial em
@@ -1370,6 +1381,23 @@ function renderExpControle(erroCarregamento) {
 // item que existia. Numa tela de conferência isso não seria um número errado --
 // seria uma divergência inventada, e alguém indo procurar material que está no
 // lugar.
+async function carregarConferirExpNotas() {
+  const { data, error } = await sb.from('conferir_exp_notas').select('*').eq('unidade', unidadeAtual);
+  conferirExpNotas = new Map();
+  if (error) {
+    // Silencioso de propósito (como limparObservacoesResolvidas() em
+    // js/analise.js): se o fase33 ainda não rodou, a tela continua
+    // funcionando sem observação/exclusão em vez de travar a aba inteira.
+    console.warn('Não foi possível carregar as notas da conferência:', error.message);
+    return;
+  }
+  (data || []).forEach(r => conferirExpNotas.set(normalizaCodigoItem(r.codigo_item), r));
+}
+
+function notaConferirDoItem(chave) {
+  return conferirExpNotas.get(chave) || { observacao: '', excluido_em: null, excluido_por: '' };
+}
+
 function montarConferirExp() {
   const somar = (mapa, chave, valor) => mapa.set(chave, (mapa.get(chave) || 0) + valor);
 
@@ -1473,7 +1501,13 @@ function renderConferirExp() {
   const vazio = document.getElementById('confVazio');
   if (!corpo) return;
 
-  const todas = montarConferirExp();
+  // Item excluído (Robson, 10/09/2026: "tem itens que são do pátio aí é
+  // outra equipe") sai dos cards e do filtro normal -- não é mais problema
+  // desta conferência. Só reaparece no modo "Ver excluídos".
+  const todasComExcluidos = montarConferirExp();
+  const todas = todasComExcluidos.filter(l => !notaConferirDoItem(l.chave).excluido_em);
+  const excluidos = todasComExcluidos.filter(l => !!notaConferirDoItem(l.chave).excluido_em);
+
   const contar = s => todas.filter(l => l.situacao === s).length;
   document.getElementById('conf-total').textContent = todas.length;
   document.getElementById('conf-diferenca').textContent = contar('diferenca');
@@ -1481,11 +1515,22 @@ function renderConferirExp() {
   document.getElementById('conf-so-fisico').textContent = contar('so_fisico');
   document.getElementById('conf-ok').textContent = contar('ok');
 
+  const btnExcluidos = document.getElementById('confVerExcluidosBtn');
+  if (btnExcluidos) {
+    btnExcluidos.style.display = (excluidos.length || confVerExcluidos) ? 'inline-block' : 'none';
+    btnExcluidos.className = confVerExcluidos ? 'btn btn-primary' : 'btn';
+    btnExcluidos.textContent = confVerExcluidos
+      ? '← Voltar pra conferência'
+      : `🚫 Ver excluídos (${excluidos.length})`;
+  }
+
   const busca = filtrosConf.busca.trim().toLowerCase();
-  let lista = todas.filter(l => {
-    if (filtrosConf.situacao === 'divergentes' && l.situacao === 'ok') return false;
-    if (filtrosConf.situacao && filtrosConf.situacao !== 'divergentes'
-        && l.situacao !== filtrosConf.situacao) return false;
+  let lista = (confVerExcluidos ? excluidos : todas).filter(l => {
+    if (!confVerExcluidos) {
+      if (filtrosConf.situacao === 'divergentes' && l.situacao === 'ok') return false;
+      if (filtrosConf.situacao && filtrosConf.situacao !== 'divergentes'
+          && l.situacao !== filtrosConf.situacao) return false;
+    }
     if (busca && !String(l.codigo).toLowerCase().includes(busca)
              && !String(l.descricao).toLowerCase().includes(busca)) return false;
     return true;
@@ -1501,15 +1546,18 @@ function renderConferirExp() {
 
   vazio.style.display = lista.length ? 'none' : 'block';
   if (!lista.length) {
-    vazio.textContent = todas.length
-      ? 'Nenhum item bate com o filtro. Se o Catálogo EXP desta unidade estiver vazio, cole a planilha do sistema na aba Catálogo primeiro.'
-      : 'Nada para confrontar: nem o Catálogo EXP nem a expedição têm item nesta unidade.';
+    vazio.textContent = confVerExcluidos
+      ? 'Nenhum item excluído da conferência ainda.'
+      : todasComExcluidos.length
+        ? 'Nenhum item bate com o filtro. Se o Catálogo EXP desta unidade estiver vazio, cole a planilha do sistema na aba Catálogo primeiro.'
+        : 'Nada para confrontar: nem o Catálogo EXP nem a expedição têm item nesta unidade.';
     corpo.innerHTML = '';
     return;
   }
 
   corpo.innerHTML = naTela.map(l => {
     const s = SITUACOES_CONF[l.situacao];
+    const nota = notaConferirDoItem(l.chave);
     // O sinal da diferença é a informação: + é sobra no físico, - é falta. Sem
     // ele a pessoa lê "3" e não sabe para que lado.
     const sinal = l.diferenca > 0 ? '+' : '';
@@ -1524,6 +1572,20 @@ function renderConferirExp() {
         ${l.situacao === 'ok' ? '0' : sinal + numeroBR(l.diferenca)}</td>
       <td><span class="cfg-status ${s.classe}">${s.rotulo}</span></td>
       <td class="loc">${l.locais.length ? escapeHtml(l.locais.join(', ')) : '—'}</td>
+      <td>
+        ${confVerExcluidos
+          ? `<div style="font-size:12px; color:var(--muted); margin-bottom:4px;"
+                title="${nota.excluido_por ? escapeHtml(nota.excluido_por) + ' — ' : ''}${nota.excluido_em ? escapeHtml(formatarDataHoraBR(nota.excluido_em)) : ''}">
+               ${escapeHtml(nota.observacao || '—')}
+             </div>
+             <button class="acao-btn conf-restaurar" data-chave="${escapeHtml(l.chave)}" data-item="${escapeHtml(l.codigo)}"
+                     title="Restaurar -- volta a aparecer na conferência">↺ Restaurar</button>`
+          : `<input type="text" class="conf-obs-input" data-chave="${escapeHtml(l.chave)}" data-item="${escapeHtml(l.codigo)}"
+                    value="${escapeHtml(nota.observacao || '')}" placeholder="—"
+                    style="width:160px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px;">
+             <button class="acao-btn conf-excluir" data-chave="${escapeHtml(l.chave)}" data-item="${escapeHtml(l.codigo)}"
+                     title="Não preciso conferir este item nesta unidade (ex.: item de outra equipe/pátio) -- reversível">🗑️</button>`}
+      </td>
     </tr>`;
   }).join('');
 }
@@ -1623,8 +1685,70 @@ document.getElementById('confRecarregar').addEventListener('click', async () => 
   msg.className = 'status-msg';
   await carregarCatalogoExp();
   await carregarProgramacao();
+  await carregarConferirExpNotas();
   renderConferirExp();
   msg.textContent = '';
+});
+
+document.getElementById('confVerExcluidosBtn').addEventListener('click', () => {
+  confVerExcluidos = !confVerExcluidos;
+  renderConferirExp();
+});
+
+// Observação: salva ao sair do campo (mesmo padrão da Análise de Compras) --
+// upsert por (unidade, item), então funciona igual pra criar e pra editar.
+document.getElementById('confCorpo').addEventListener('focusout', async (e) => {
+  const input = e.target.closest('.conf-obs-input');
+  if (!input) return;
+  const chave = input.dataset.chave;
+  const nota = notaConferirDoItem(chave);
+  const novoValor = input.value.trim();
+  if (novoValor === (nota.observacao || '')) return; // nada mudou
+
+  input.disabled = true;
+  const { error } = await sb.from('conferir_exp_notas').upsert({
+    unidade: unidadeAtual, codigo_item: input.dataset.item, observacao: novoValor || null,
+    atualizado_por: nomeUsuarioAtual, atualizado_em: new Date().toISOString()
+  }, { onConflict: 'unidade,codigo_item' });
+  input.disabled = false;
+
+  if (error) {
+    alert('Não foi possível salvar a observação: ' + error.message
+      + ' — se a mensagem falar em tabela inexistente, sql/fase33-conferir-exp-observacao.sql ainda não foi rodado no Supabase.');
+    input.value = nota.observacao || '';
+    return;
+  }
+  conferirExpNotas.set(chave, { ...nota, unidade: unidadeAtual, codigo_item: input.dataset.item, observacao: novoValor || null });
+  input.style.borderColor = 'var(--blue)';
+  setTimeout(() => { input.style.borderColor = ''; }, 1200);
+});
+
+// Excluir/restaurar: mesma tabela, só muda excluido_em/excluido_por. Nunca
+// mexe em catalogo_exp_itens nem exp_controle_itens -- ver sql/fase33.
+document.getElementById('confCorpo').addEventListener('click', async (e) => {
+  const btnExcluir = e.target.closest('.conf-excluir');
+  const btnRestaurar = e.target.closest('.conf-restaurar');
+  const btn = btnExcluir || btnRestaurar;
+  if (!btn) return;
+
+  const chave = btn.dataset.chave;
+  const nota = notaConferirDoItem(chave);
+  const patch = btnExcluir
+    ? { excluido_em: new Date().toISOString(), excluido_por: nomeUsuarioAtual }
+    : { excluido_em: null, excluido_por: null };
+
+  btn.disabled = true;
+  const { error } = await sb.from('conferir_exp_notas').upsert({
+    unidade: unidadeAtual, codigo_item: btn.dataset.item, observacao: nota.observacao || null, ...patch
+  }, { onConflict: 'unidade,codigo_item' });
+  btn.disabled = false;
+
+  if (error) {
+    alert((btnExcluir ? 'Não foi possível excluir: ' : 'Não foi possível restaurar: ') + error.message);
+    return;
+  }
+  conferirExpNotas.set(chave, { ...nota, unidade: unidadeAtual, codigo_item: btn.dataset.item, ...patch });
+  renderConferirExp();
 });
 
 // Marcar/desmarcar um item. Guarda o id, nao a posicao da linha: a ordem e
