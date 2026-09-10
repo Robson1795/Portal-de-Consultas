@@ -89,8 +89,14 @@ function render(rows, intervalo) {
   // pode colocar no lugar de estoque seguro um botão para impressão de cada
   // item por localização"). Coluna nova custaria mais uma coluna de rolagem
   // horizontal numa tabela que já avisa "arraste para o lado".
+  //
+  // Some inteira no modo Contagem (Robson, 10/09/2026: "na aba de contagem
+  // retira a coluna de estoque seguro"): a tela de contagem já é a mais
+  // apertada (some a coluna Ações e entra a de Estoque Físico) e o Estoque
+  // Seguro não ajuda quem está conferindo saldo físico -- só disputa espaço
+  // com o que importa ali.
   const cabecalhoEstmin = document.querySelector('.col-estmin');
-  cabecalhoEstmin.style.display = (ehTrading() || podeVerEstoqueMinimo()) ? 'table-cell' : 'none';
+  cabecalhoEstmin.style.display = mostraColunaEstmin() ? 'table-cell' : 'none';
   cabecalhoEstmin.innerHTML = ehTrading()
     ? `<label style="display:flex; align-items:center; gap:6px; cursor:pointer; white-space:nowrap;" title="Marcar todos os itens do filtro atual">
          <input type="checkbox" id="etqTodos" ${marcouTodasAsEtiquetas(rows) ? 'checked' : ''}> Etiqueta
@@ -154,7 +160,7 @@ function render(rows, intervalo) {
         ? `<button class="padrao-btn" data-item="${escapeHtml(r.item)}" data-qtd="${escapeHtml(r.quantidade)}" title="Ver padrão de caixas esperado">📦</button>`
         : (podeEditarEmbalagem() ? `<button class="avulso-btn" data-item="${escapeHtml(r.item)}" title="Marcar como item avulso, sem padrão de caixa">AVULSO</button>` : '')}</td>
       <td class="num">${escapeHtml(r.quantidade)}</td>
-      <td class="col-estmin" style="display:${(ehTrading() || podeVerEstoqueMinimo()) ? 'table-cell' : 'none'};">
+      <td class="col-estmin" style="display:${mostraColunaEstmin() ? 'table-cell' : 'none'};">
         ${ehTrading()
           ? `<div style="display:flex; align-items:center; gap:6px;">
                <input type="checkbox" class="etq-check" data-id="${escapeHtml(r.id)}" ${etiquetasTrading.has(String(r.id)) ? 'checked' : ''}
@@ -808,6 +814,13 @@ async function atualizarPermissaoEstoqueMinimo() {
 
 function podeVerEstoqueMinimo() {
   return _podeVerEstoqueMinimoCache;
+}
+
+// A coluna do meio (Estoque Seguro na maioria das unidades, Etiqueta na
+// Trading) não aparece durante a contagem física -- ver render() e o
+// template da linha, os dois usam esta função pra decidir o mesmo jeito.
+function mostraColunaEstmin() {
+  return !modoContagemAtivo && (ehTrading() || podeVerEstoqueMinimo());
 }
 
 async function salvarEstoqueMinimo(id, valorBruto, input) {
@@ -2123,6 +2136,21 @@ document.getElementById('filterApplyBtn').addEventListener('click', () => {
   atualizarBadgeFiltros();
   applyFilterAndSort();
   painelFiltros.classList.remove('aberto');
+});
+
+// Localização filtra ao digitar, sem precisar de "Aplicar filtros" -- mesmo
+// padrão do campo de busca (#searchBox). Robson, 10/09/2026, digitando "CANT"
+// na contagem: "quando eu escrever CANT aparecer todos" / "faça para as
+// outras localizações também" / "deixe bem inteligente". Já era um filtro
+// por trecho (`.includes()`, ver applyFilterAndSort) -- "CANT" já batia com
+// "CANT A-01" e "CANT B-03" ao mesmo tempo; faltava só reagir à digitação em
+// vez de esperar o clique no botão, que é o que fazia parecer que não
+// "aparecia tudo" (o painel ficava mostrando o filtro de antes até clicar).
+document.getElementById('filterLocalizacao').addEventListener('input', (e) => {
+  filtros.localizacao = e.target.value;
+  pagina = 1;
+  atualizarBadgeFiltros();
+  applyFilterAndSort();
 });
 
 document.getElementById('filterClearAllBtn').addEventListener('click', () => {

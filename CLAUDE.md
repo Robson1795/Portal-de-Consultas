@@ -1570,6 +1570,27 @@ marcado, `🖨️ Imprimir marcados (N)` com seleção.
 
 ---
 
+## Filtro de Localização passou a filtrar ao digitar (10/09/2026)
+
+O Robson, na contagem, digitando "CANT" no filtro avançado de Localização:
+*"quando eu escrever CANT aparecer todos"* — depois *"faça para as outras
+localizações também"* e *"deixe bem inteligente"*.
+
+O casamento por trecho já existia (`applyFilterAndSort()`, `.includes()`
+sobre a localização em minúsculas) — "CANT" já batia com "CANT A-01" e
+"CANT B-03" ao mesmo tempo, sem precisar de tratamento por letra/grupo. O que
+faltava era **reagir à digitação**: o campo só valia depois de clicar em
+"Aplicar filtros", então a lista continuava mostrando o filtro anterior
+enquanto a pessoa digitava — parecia que "não aparecia tudo".
+
+`#filterLocalizacao` ganhou um listener de `input` (mesmo padrão do
+`#searchBox`, que já era assim) que atualiza `filtros.localizacao` e
+reaplica a cada tecla — nenhuma lista de padrões por prefixo, então vale
+igual para "CANT", uma letra de corredor, um código de pallet ou qualquer
+outro texto que a planilha tiver. O botão "Aplicar filtros" continua
+funcionando (ainda é ele que aplica UM, Padrão e as caixas de status), só
+deixou de ser obrigatório para a Localização.
+
 ## 17. Tour guiado do primeiro acesso (10/09/2026)
 
 O Victor: *"Primeiro login fazer um mini tutorial ou um 'tour' pelo portal.
