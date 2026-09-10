@@ -3,7 +3,7 @@
 Contexto do projeto para qualquer agente de IA ou pessoa que for mexer neste repositório.
 Sempre em **português do Brasil**.
 
-**Atualizado:** 10/09/2026 (logo em arquivo, tour do primeiro acesso)
+**Atualizado:** 10/09/2026 (consultor só consulta, tour do primeiro acesso)
 **Mantenedores:** Robson (dono do projeto e admin geral) · Victor Dobner (colaborador)
 
 > Este arquivo é lido automaticamente pelo Claude Code ao abrir a pasta do projeto.
@@ -280,7 +280,19 @@ Rascunho para lançamento no **CD1406 do Datasul**. **Não abre requisição no 
 monta o pedido no portal, ele fica registrado, e um botão abre o e-mail já preenchido para o ALM
 da unidade, que lança lá.
 
-Disponível para **todos os perfis**: qualquer conta aprovada pode pedir material.
+⚠️ **Não é mais de todos os perfis.** Até 09/09/2026 era, de propósito — qualquer
+conta aprovada podia pedir material. Em 10/09/2026 o Victor recortou: *"Consultor
+apenas consulta de itens, restringir deposito SESMT e requisição ALM"*. Hoje veem
+esta tela `estoque_alm`, `estoque_aco` e `admin`; **`consultor` não**.
+
+A trava está nos **dois** lugares, e isso não é redundância: o menu decide o que
+aparece (`PERFIS` em `js/navegacao.js`) e o RLS decide o que a pessoa consegue
+gravar. A política `"Criar propria requisicao"` da fase6 exigia apenas
+`esta_aprovado()`, então tirar a página do menu **não impediria** um consultor de
+criar requisição pelo inspetor do navegador. Quem fecha isso é
+`sql/fase31-consultor-so-consulta.sql`, pela função `pode_pedir_material()`.
+**Se um dia voltar a ser de todos, tem de voltar nos dois** — devolver a página
+no menu não devolve a permissão do banco.
 
 | Tabela | Para quê |
 |---|---|
@@ -439,25 +451,31 @@ Hoje ele cria só estrutura, e o RLS é assunto dos scripts da Fase 1.
 
 **De painel — destrava o resto, e não é código:**
 
-1. **Rodar `sql/fase11-limpar-contagem-restrito.sql`** no Supabase. Sem ele, "Limpar tudo" está
+1. **Rodar `sql/fase31-consultor-so-consulta.sql`** no Supabase. Sem ele o menu
+   esconde o Depósito SESMT e a Requisição ALM do consultor, mas o banco continua
+   deixando: ele cria requisição (a política da fase6 pede só `esta_aprovado()`) e
+   lê o estoque de EPI (a leitura de `estoque` não olha a coluna `deposito`). Ver
+   a seção "Consultor só consulta" abaixo.
+
+2. **Rodar `sql/fase11-limpar-contagem-restrito.sql`** no Supabase. Sem ele, "Limpar tudo" está
    travado só na tela, e um inspetor de navegador contorna. O script **substitui** a política
    `for all` de `contagem_fisica` por três (insert, update, delete) — tem de ser substituição,
    porque política permissiva se soma e a aberta anularia a restrita.
 
-2. **Criar o balde `fotos-bobinas`** (Storage → New bucket). Enquanto não existir, toda foto de
+3. **Criar o balde `fotos-bobinas`** (Storage → New bucket). Enquanto não existir, toda foto de
    etiqueta do módulo de OCR é descartada — hoje com aviso na tela, mas descartada.
 
-3. **Cadastrar os e-mails do ALM e as senhas de contagem das oito unidades** na aba
+4. **Cadastrar os e-mails do ALM e as senhas de contagem das oito unidades** na aba
    Configurações. Unidade sem e-mail tem o envio da Requisição ALM desabilitado; unidade sem
    senha não abre o modo contagem. Foi o que travou a apresentação na 104.
 
 **De código:**
 
-4. **Veredito do OCR com vários lotes** (O3) — hoje é suprimido em vez de errado; corrigir de
+5. **Veredito do OCR com vários lotes** (O3) — hoje é suprimido em vez de errado; corrigir de
    verdade pede campo de lote no modal e em `contagem_bobinas_ocr`. E **o alerta de bobina não
    tem recorte por unidade** (O7): um consultor de Anápolis recebe o banner de Araquari.
 
-5. **Pessoas com nome fixo no código** (M2): `ADMIN_EMAIL` em `js/config.js` e
+6. **Pessoas com nome fixo no código** (M2): `ADMIN_EMAIL` em `js/config.js` e
    `j.lisboa@kingspanisoeste.com.br` em `js/estoque.js`. Já existe o padrão certo no projeto —
    tabelas como `gerentes_unidade` e `editores_bobinas`.
    *(Os três logos em base64 dentro do `index.html` — o antigo M3 — saíram em
@@ -465,19 +483,19 @@ Hoje ele cria só estrutura, e o RLS é assunto dos scripts da Fase 1.
 
 **De operação:**
 
-6. **Hospedagem com ponto único de falha.** O repositório está numa conta pessoal do GitHub e o
+7. **Hospedagem com ponto único de falha.** O repositório está numa conta pessoal do GitHub e o
    banco num projeto Supabase de conta pessoal, ambos com um único dono. Se aquela conta se
    perder, o acesso ao banco vai com ela e ninguém mais consegue recuperar. Duas melhorias
    baratas: adicionar um segundo membro ao projeto no Supabase (`Settings → Members`) e manter o
    export das tabelas em dia. Vale reavaliar a hospedagem antes de o sistema entrar em uso real.
 
-7. **Dados de produto:** cadastrar mais itens com foto e embalagem em `fichas_tecnicas`; fotos das
+8. **Dados de produto:** cadastrar mais itens com foto e embalagem em `fichas_tecnicas`; fotos das
    massas vedantes (Chemiseal); aguardando a Multi-Fix sobre catálogo de parafusos com códigos
    internos.
 
-8. **Unidades 101 e 105 sem dados reais** — só a estrutura está pronta.
+9. **Unidades 101 e 105 sem dados reais** — só a estrutura está pronta.
 
-9. **Confirmar as UF de 103, 104, 107 e 110 e a cidade da 109.** Até então `rotuloUnidade()`
+10. **Confirmar as UF de 103, 104, 107 e 110 e a cidade da 109.** Até então `rotuloUnidade()`
     imprime só o que sabe, em vez de `Unidade 107 — Loja ()`.
 
 ---
@@ -549,8 +567,38 @@ ficha por item** (Imprimir e Exportar HTML usam a mesma função):
   navegador quebraria **o código do item** no meio, que é exatamente o que não
   pode ficar ilegível; com ele, a quantidade desce inteira para a linha de
   baixo e o item mantém os 21 mm.
-- `page-break-inside: avoid` por ficha: item nenhum é partido entre duas
-  páginas. Cabem 3 a 5 fichas por folha A4.
+- **Uma folha por item** desde 10/09/2026 (o Victor: *"Quando selecionar mais de
+  um item para imprimir no 'Controle EXP Acessórios', não colocar tudo na mesma
+  página, mas fazer páginas separadas"*). Antes cabiam 3 a 5 fichas por folha A4,
+  e isso obrigava a **cortar o papel**: cada ficha vai colada num pallet
+  diferente, e o corte cai no meio da ficha de baixo ou tira a identificação
+  dela. `page-break-inside: avoid` continua, para item nenhum ser partido.
+- ⚠️ A regra é `.ficha + .ficha { page-break-before: always }`, e **não**
+  `page-break-after` em toda ficha: quebrando ANTES da segunda em diante, a
+  primeira divide a folha 1 com o cabeçalho e **nenhuma folha em branco sobra no
+  fim** — com `page-break-after: always` em todas, a última quebra depois de si
+  mesma e o navegador emite uma página vazia. Conferido pelo estilo computado:
+  a primeira ficha dá `auto`, as outras `page`.
+- ⚠️ **`Impresso por` passou a sair também no rodapé de CADA ficha.** O cabeçalho
+  só existe na folha 1, e agora cada folha é um item que vai para um pallet
+  diferente: sem isso, o pedido do Robson (*"quando imprimir quero que deixe
+  registrado o usuario que imprimiu"*) valeria só para a primeira folha da pilha.
+  A data/hora é lida do relógio **uma vez** e reusada no cabeçalho e nos rodapés
+  — duas chamadas a `new Date()` podem cair em minutos diferentes na virada, e a
+  folha 1 diria 13:59 e a folha 2, 14:00.
+- ⚠️ **Acima de 10 folhas o portal pede um segundo clique**, com o número na
+  frente da pessoa (`LIMITE_FOLHAS_EXP`). Uma folha por item quer dizer que o
+  número de folhas é o número de itens, e "Imprimir tudo" numa unidade cheia é
+  resma. **Não é `confirm()`**: com "impedir que esta página crie novos diálogos"
+  marcado, `confirm()` devolve `false` na hora e um `if (!confirm(...)) return`
+  deixa de imprimir sem dizer nada — indistinguível de botão quebrado (seção 7).
+  Mexer na busca ou na seleção cancela a confirmação: o número que ela leu na
+  tela deixou de valer.
+- ⚠️ **Comentário de CSS dentro do template literal não pode ter acento grave.**
+  O HTML da folha é montado por template string em `montarHtmlExpControle()`, e
+  uma crase num comentário **fecha a string** — foi como eu quebrei o
+  `js/programacao.js` ao escrever esta mudança. O erro aparece como
+  `SyntaxError: Unexpected token '.'`, longe da causa.
 - O endereço gigante no fim da folha (quando a busca deixou **uma** localização
   só) continua igual.
 
@@ -1732,8 +1780,9 @@ menu que antes disso não existem no DOM.
   pessoa **realmente tem** (`PERFIS[perfilAtual].paginas`, já filtrado por
   `podeVerAnaliseCache`), lendo rótulo e ícone de `PAGINAS`. Uma lista escrita à
   mão explicaria tela que a pessoa não vê — um consultor receberia a explicação
-  da Análise de Compras e ficaria procurando o menu. Hoje: **9 passos** para
-  consultor, **15** para admin. Página nova em `PAGINAS` só precisa de uma frase
+  da Análise de Compras e ficaria procurando o menu. Hoje o **consultor** vê 14
+  passos (a Consulta de Itens rende 7 deles, ver abaixo) e o `estoque_alm`, 19
+  ou 20 -- a Análise de Compras tem uma trava por pessoa, além do perfil.
   em `TOUR_EXPLICACAO`; sem frase, o passo usa o rótulo e não quebra nada.
 - **O escuro em volta é um `box-shadow` de 9999px no `#tourFoco`**, e não quatro
   divs em volta do alvo: um retângulo com
@@ -1830,3 +1879,128 @@ Conferido no navegador: com um item retirado e um na expedição, a lista
 da Entrada mostra só o segundo (contador "1 pedido na expedição" e botão
 "Imprimir tudo (1)" batendo), e o item retirado continua aparecendo no
 Histórico de Retiradas com quem retirou. Zero erro de console.
+
+## 18. Consultor só consulta, e o tour detalha a Consulta (10/09/2026)
+
+Três pedidos do Victor na mesma mensagem.
+
+### 1. Consultor perdeu o Depósito SESMT e a Requisição ALM
+
+*"Consultor apenas consulta de itens, restringir deposito SESMT e requisição
+ALM."* `PERFIS.consultor` passou de `['estoque', 'sesmt', 'requisicao']` para
+`['estoque']`.
+
+⚠️ **Isso reverte uma decisão anterior**, e as duas estão registradas de
+propósito: a Requisição ALM era aberta a todo perfil porque "qualquer pessoa
+aprovada pode pedir material" (seção 8). Não é o caso mais.
+
+⚠️ **O menu não é a tranca.** `sql/fase31-consultor-so-consulta.sql` é a
+metade que importa — sem ele, um consultor com o inspetor aberto continua
+criando requisição e lendo o EPI:
+
+| O que estava aberto | Por quê | O que o fase31 faz |
+|---|---|---|
+| criar requisição | `"Criar propria requisicao"` (fase6) exige só `esta_aprovado()` | refaz a política com `pode_pedir_material()` |
+| ler o estoque de EPI | a leitura de `estoque` (fase1c) não olha `deposito`, coluna que só nasceu na fase23 | `deposito = 'alm' or meu_perfil() <> 'consultor'` |
+| ler a contagem do EPI | idem em `contagem_fisica` | a mesma condição |
+
+- **`pode_pedir_material()`, e não `meu_perfil() <> 'consultor'` espalhado**:
+  no dia em que outro perfil entrar, a regra de "quem pede material" muda num
+  lugar só. Mesmo padrão de `pode_atualizar_estoque()` e
+  `pode_ver_analise_compras()`.
+- **Só o INSERT da requisição precisa de trava.** As políticas de update e
+  delete são do autor (`criado_por = auth.uid()`): quem não cria não tem o que
+  editar. E a **leitura** fica como está — um consultor sem requisição não vê
+  nada por ela, e se alguma foi criada antes desta fase, esconder do próprio
+  autor o que ele escreveu seria pior que deixar visível.
+- **As políticas de leitura são SUBSTITUÍDAS, não somadas.** Política
+  permissiva se soma (OR): criar uma restrita ao lado da antiga não restringe
+  nada. Mesma lição do comentário do fase11.
+- **A condição é `deposito = 'alm'`, não `deposito <> 'sesmt'`.** Desde o
+  `fase29` existe um terceiro depósito (`benchmark`). Escrita como está, o
+  consultor lê só o almoxarifado, e qualquer depósito que nasça amanhã já
+  entra fechado para ele — o lado certo de errar. `<> 'sesmt'` teria deixado o
+  Benchmark aberto sem ninguém notar.
+- **A leitura entre UNIDADES continua aberta.** O recorte novo é por
+  **depósito**, não por unidade — é o que mantém o botão ⇄ funcionando
+  (decisão de 03/09/2026, seção 5).
+- `atribuicoes_corredor` ficou de fora de propósito: é nome de pessoa e letra
+  de corredor, não saldo nem item, e a tela que a usa é o modo contagem, onde
+  o consultor só entra com a senha da unidade.
+- Independe do fase11 (ainda pendente): ele mexe na **escrita** de
+  `contagem_fisica`, o fase31 só na leitura. Qualquer ordem serve.
+
+### 2. O tour explica a tela de Consulta, não só o nome dela
+
+*"Melhorar tutorial para mostrar um pouco melhor a tela de consultas e
+detalhar como funciona, como por exemplo: explicar como funciona a
+visualização da foto ou mostrar quanto tem em cada unidade."*
+
+`PASSOS_CONSULTA` (`js/tour.js`) são **7 passos dentro da tela**, encaixados
+logo depois do item "Consulta de Itens" do menu: a busca (com os formatos
+`corredor A-B` e `CANT A-G`), os Filtros, o **👁** (foto e ficha, incluindo o
+que o olho apagado quer dizer), o **⇄** (quanto tem em cada unidade, e o
+botão de compartilhar de dentro), o **💡** (equivalente de mesma medida e
+material), o Exportar PDF e o **📋** da contagem.
+
+É a única tela que todo perfil tem, e a única do consultor — explicar só o
+nome dela no menu não ensinava nada.
+
+- **`pagina: 'estoque'` no passo** faz o tour abrir a tela antes de desenhar.
+  Sem isso, quem clicasse no 🎓 estando no Controle EXP veria todos estes
+  pulados. Só troca quando ainda não está na tela: `mostrarPagina()` recarrega
+  os dados, e chamar a cada passo faria sete consultas ao banco para andar
+  pelos sete passos.
+  Isso ficou mais importante depois do Depósito Benchmark virar saldo simples:
+  ele reusa o MESMO `estoqueContent` e o mesmo `#dataTable` (como o SESMT), então
+  os seletores destes passos casariam com a tabela do Benchmark se o tour não
+  trocasse de página. `mostrarPagina('estoque')` também devolve `depositoAtual`
+  para `'alm'` — a explicação é do almoxarifado, e é o almoxarifado que fica na
+  frente. Conferido abrindo o 🎓 a partir do Benchmark.
+- ⚠️ **Três alvos são botões da PRIMEIRA LINHA da tabela** e não existem com
+  a lista vazia (unidade sem dados, busca sem resultado). São pulados sozinhos
+  — e é por isso que a explicação de cada um não fala do item que estiver na
+  frente. O **💡** vai além: só existe para item com quantidade **zero**,
+  então some quando não há nenhum, o que está certo — não há o que explicar.
+- Conferido no navegador nos três cenários: com item zerado (14 passos, todos
+  com alvo), sem item zerado (o 💡 sai), e com a tabela vazia (os três de
+  linha saem, 11 passos andados).
+
+⚠️ **O tour saía sem esses três passos no primeiro login, e por corrida de
+tempo.** O Victor: *"o tutorial do consultor ainda ta incompleto"*.
+`montarMenu()` abre a Consulta de Itens, que dispara `loadData()` — uma ida ao
+Supabase que **ninguém espera**. O tour abria dois quadros de animação depois,
+com a tabela ainda vazia, e os passos do 👁, do ⇄ e do 💡 eram pulados: faltava
+justamente o que o pedido original queria explicar ("como funciona a
+visualização da foto", "quanto tem em cada unidade"). Meus testes não pegaram
+porque eu populava a tabela à mão **antes** de abrir o tour.
+
+Duas correções, e as duas são necessárias:
+
+1. **`iniciarTourSePrimeiraVez()` espera a tabela**, e não a primeira pintura:
+   procura `#dataTable tbody tr` a cada 250 ms, no máximo ~3 s. Não é
+   `await loadData()` — a carga pode falhar e a unidade pode não ter item
+   nenhum, e nos dois casos o tour tem de abrir. 3 s e não 6: a carga normal
+   chega em menos de 1 s, e a espera só estoura sem dados — aí a tela parada
+   pareceria portal travado.
+2. **`alvoAlternativo`**: os três passos apontam a tabela inteira (`#dataTable`)
+   quando não há linha. As unidades **101 e 105 não têm dado nenhum** hoje, e sem
+   isso a pessoa dali nunca receberia essas explicações — nem depois dos 3 s.
+
+E se a linha chegar **depois** de o tour abrir, os três passos passam a
+funcionar de todo jeito: `tourAlvoUtil()` é consultado na hora de avançar, não
+uma vez na montagem.
+
+⚠️ Ao testar isto no navegador, lembre que **aba de fundo estrangula
+`setTimeout`** (Chrome joga para ~1 s): a espera de 3 s virou 24 s no teste e
+pareceu que o tour não abria. Teste com a aba na frente.
+
+### 3. Admin não ganha o tour sozinho
+
+*"Admin não precisa de tutorial, pq só eu e o Robson somos admin e ambos
+sabemos como funciona."* `iniciarTourSePrimeiraVez()` sai na hora para
+`perfilAtual === 'admin'`.
+
+O botão **🎓** continua abrindo para eles, e não é cortesia: é por ele que se
+confere uma mudança no tour sem ter de limpar o `localStorage` — foi como
+estes 7 passos novos foram testados.

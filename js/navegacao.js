@@ -8,13 +8,18 @@
 // pessoa nao ver o que nao lhe diz respeito, nao para trancar a porta.
 
 // ---- Perfis e o que cada um enxerga ----------------------------------------
-// Requisicao ALM aparece para TODOS os perfis: qualquer pessoa aprovada pode
-// pedir material. Quem atende o pedido e o ALM da unidade.
+// ⚠️ CONSULTOR SO CONSULTA (10/09/2026, pedido do Victor: "Consultor apenas
+// consulta de itens, restringir deposito SESMT e requisicao ALM"). Ele perdeu
+// o Deposito SESMT e a Requisicao ALM -- e uma REVERSAO da decisao anterior,
+// que abria a Requisicao para todo perfil ("qualquer pessoa aprovada pode
+// pedir material"). Se a Requisicao voltar a ser de todos, mexa TAMBEM no
+// RLS: sql/fase31-consultor-so-consulta.sql fechou a criacao no banco, e so
+// devolver a pagina no menu nao devolveria a permissao.
 // Programacao de Separacao NAO aparece para consultor nem para estoque_aco:
 // ela move separacao, enderecamento e saida de material de verdade, diferente
 // da Requisicao (que e so pedir). Quem faz esse fluxo e o ALM da unidade.
 const PERFIS = {
-  consultor:   { rotulo: 'Consultor',   paginas: ['estoque', 'sesmt', 'requisicao'] },
+  consultor:   { rotulo: 'Consultor',   paginas: ['estoque'] },
   estoque_alm: { rotulo: 'Estoque ALM', paginas: ['estoque', 'sesmt', 'requisicao', 'programacao', 'expacessorios', 'expbenchmark', 'analise'] },
   estoque_aco: { rotulo: 'Estoque Aço', paginas: ['bobinas', 'requisicao'] },
   admin:       { rotulo: 'Admin',       paginas: ['estoque', 'sesmt', 'bobinas', 'requisicao', 'programacao', 'expacessorios', 'expbenchmark', 'analise', 'config'] }

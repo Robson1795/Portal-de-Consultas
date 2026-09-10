@@ -42,6 +42,19 @@ let setorExpAtual = 'exp';
 // busca -- o que foi marcado antes de filtrar tem de continuar marcado
 // depois. Mesmo motivo de `etiquetasTrading` em js/estoque.js.
 let expCtrlSelecionadas = new Set();
+// Segundo clique do Imprimir quando a impressão vai passar de LIMITE_FOLHAS.
+// Desde 10/09/2026 sai uma folha POR ITEM, então o número de folhas é o
+// número de itens -- "Imprimir tudo" numa unidade cheia é resma, e quem
+// clicou merece saber pela tela, não pela impressora. Mesma régua da etiqueta
+// da Trading.
+//
+// ⚠️ Não é `confirm()`, de propósito: marcado "impedir que esta página crie
+// novos diálogos", o Chrome faz `confirm()` devolver `false` na hora, e num
+// `if (!confirm(...)) return` o clique deixa de imprimir sem dizer nada --
+// indistinguível de botão quebrado. Aconteceu em 08/09/2026 na aba de lote.
+// Ver pedirConfirmacaoLote() em js/configuracoes.js.
+const LIMITE_FOLHAS_EXP = 10;
+let expImprimirConfirmar = false;
 let expCtrlDescMap = new Map(); // codigo_item -> {descricao, um}, resolvido em cascata pra exibir a lista
 let catalogoExpItens = []; // catalogo_exp_itens -- planilha do sistema, carregada só ao entrar na página
 let expPedidoProntoMap = new Map(); // numero_pedido -> {pronto_em, pronto_por} -- ver marcarPedidoAnteriorComoPronto()
@@ -1212,6 +1225,9 @@ function contarPedidosNaExpedicao(linhas) {
 // isso ela apareceria vazia com itens marcados na lista, e o proximo clique
 // pareceria "marcar tudo" quando na verdade limpa.
 function atualizarSelecaoExpControle() {
+  // Mexer na seleção ou na busca cancela a confirmação pendente: o número de
+  // folhas que ela leu na tela deixou de valer.
+  expImprimirConfirmar = false;
   const naBusca = linhasImprimiveisExpControle();
   const marcadosNaBusca = naBusca.filter(l => expCtrlSelecionadas.has(String(l.id))).length;
 
@@ -1918,6 +1934,10 @@ function montarHtmlExpControle(scriptAutoImprimir) {
   // ficha, código do item e quantidade ficam sozinhos na primeira linha e usam
   // a largura inteira; OP, lote, referência e datas continuam na folha, miúdos,
   // porque esses só são lidos de perto, na conferência.
+  // Uma leitura só do relógio: o cabeçalho e o rodapé de cada ficha usam a
+  // MESMA hora. Duas chamadas a new Date() podem cair em minutos diferentes
+  // na virada, e aí a folha 1 diria 13:59 e a folha 2, 14:00.
+  const impressoEm = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
   const detalhe = (rotulo, valor) => (valor !== null && valor !== undefined && String(valor).trim())
     ? `<span><b>${rotulo}</b> ${escapeHtml(valor)}</span>` : '';
   const fichasHtml = linhasExportacaoExpControle().map(
@@ -1929,6 +1949,7 @@ function montarHtmlExpControle(scriptAutoImprimir) {
       </div>
       <div class="ficha-desc">${escapeHtml(descricao || '')}</div>
       <div class="ficha-detalhes">${detalhe('Local', localizacao)}${detalhe('Pedido', pedido)}${detalhe('OP', op)}${detalhe('Lote', lote)}${detalhe('Ref.', referencia)}${detalhe('Status', status)}${detalhe('Entrada', entrada)}${detalhe('Saída', saida)}</div>
+      <div class="ficha-rodape">${escapeHtml(rotuloUnidade(unidadeAtual))} &middot; Impresso por ${escapeHtml(nomeUsuarioAtual || emailUsuarioAtual || '—')} &mdash; ${impressoEm}</div>
     </article>`).join('');
   const busca = document.getElementById('expCtrlBusca').value.trim();
   // Diz no papel DE ONDE veio este recorte -- a folha vai colada no pallet
@@ -1966,6 +1987,17 @@ function montarHtmlExpControle(scriptAutoImprimir) {
     border: 0.6mm solid #000; border-radius: 2mm; padding: 3mm 4mm; margin-bottom: 3mm;
     page-break-inside: avoid; break-inside: avoid;
   }
+  /* UMA FOLHA POR ITEM (pedido do Victor, 10/09/2026: "não colocar tudo na
+     mesma página, mas fazer páginas separadas"). Cada ficha vai colada num
+     pallet diferente, então duas na mesma folha obrigam a cortar o papel --
+     e o corte cai no meio da ficha de baixo ou tira a identificação dela.
+
+     A regra e "ficha + ficha", e nao page-break-after em toda ficha: quebrando
+     ANTES da segunda em diante, a primeira divide a folha 1 com o cabeçalho
+     e nenhuma folha em branco sobra no fim. Com page-break-after: always
+     em todas, a última quebra depois de si mesma e o navegador emite uma
+     página vazia. */
+  .ficha + .ficha { page-break-before: always; break-before: page; }
   /* flex-wrap em vez de encolher a letra: com item de 8 dígitos e quantidade de
      6 (ex.: 120918iT + 1284.5 Kg) a linha dá 183mm e no A4 só cabem 178mm --
      sem o wrap o navegador quebraria o CÓDIGO DO ITEM no meio, que é
@@ -1984,6 +2016,15 @@ function montarHtmlExpControle(scriptAutoImprimir) {
     display: flex; flex-wrap: wrap; gap: 1mm 6mm;
   }
   .ficha-detalhes b { color: #555; font-weight: 700; }
+  /* Cada folha agora é UM item e vai para um pallet diferente, então a
+     identificação tem de estar em todas -- o cabeçalho só sai na folha 1. Era
+     pedido do Robson que o papel colado no pallet dissesse quem imprimiu
+     ("quando imprimir quero que deixe registrado o usuario que imprimiu"), e
+     sem esta linha isso valeria só para a primeira folha da pilha. */
+  .ficha-rodape {
+    font-size: 3.5mm; margin-top: 2mm; padding-top: 1.5mm;
+    border-top: 0.2mm solid #bbb; color: #555;
+  }
   .endereco-grande {
     text-align: center; page-break-before: avoid; page-break-inside: avoid;
     font-size: 15vw; line-height: 1; font-weight: 900; letter-spacing: 0.05em;
@@ -1991,7 +2032,7 @@ function montarHtmlExpControle(scriptAutoImprimir) {
   }
 </style></head><body>
 <h2>Controle EXP Acessórios — ${escapeHtml(rotuloUnidade(unidadeAtual))} — ${new Date().toLocaleDateString('pt-BR')}${subtitulo}</h2>
-<div class="impresso-por">Impresso por ${escapeHtml(nomeUsuarioAtual || emailUsuarioAtual || '—')} — ${new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</div>
+<div class="impresso-por">Impresso por ${escapeHtml(nomeUsuarioAtual || emailUsuarioAtual || '—')} &mdash; ${impressoEm}</div>
 ${fichasHtml}
 ${enderecoGrande}
 ${scriptAutoImprimir ? '<script>window.onload = () => window.print();<' + '/script>' : ''}
@@ -2046,6 +2087,7 @@ document.getElementById('expCtrlExportarBtn').addEventListener('click', async ()
 // cobre o PDF de graça, sem precisar de outra biblioteca.
 document.getElementById('expCtrlImprimirBtn').addEventListener('click', async () => {
   const linhas = linhasParaImprimirExpControle();
+  const msg = document.getElementById('expEtiquetaMsg');
   if (!linhas.length) {
     alert(expCtrlSelecionadas.size
       ? 'Nenhum item marcado bate com a busca atual \u2014 limpe a busca ou desmarque os itens.'
@@ -2053,6 +2095,19 @@ document.getElementById('expCtrlImprimirBtn').addEventListener('click', async ()
                                      : 'Nenhum item para imprimir.'));
     return;
   }
+
+  // Sai uma folha por item: acima de LIMITE_FOLHAS_EXP, pede um segundo
+  // clique com o número na frente da pessoa.
+  if (linhas.length > LIMITE_FOLHAS_EXP && !expImprimirConfirmar) {
+    expImprimirConfirmar = true;
+    document.getElementById('expCtrlImprimirBtn').textContent =
+      '\u26A0\uFE0F Confirmar ' + linhas.length + ' folhas';
+    msg.textContent = 'Vai sair uma folha por item: ' + linhas.length
+      + ' folhas. Clique de novo para imprimir, ou marque só o que precisa.';
+    msg.className = 'status-msg status-err';
+    return;
+  }
+  expImprimirConfirmar = false;
 
   const aba = window.open('', '_blank');
   if (!aba) { alert('O navegador bloqueou a nova aba. Libere pop-ups pra este site e tente de novo.'); return; }
@@ -2066,7 +2121,6 @@ document.getElementById('expCtrlImprimirBtn').addEventListener('click', async ()
   // Só as linhas desta impressão (respeita a busca) e só as que ainda não
   // tinham etiqueta -- reimprimir não reescreve a data da primeira emissão,
   // que é a que responde "desde quando este item está etiquetado?".
-  const msg = document.getElementById('expEtiquetaMsg');
   const { marcados, naoGravados, error } = await gravarEtiquetaEmLote(linhas);
   if (!marcados && !naoGravados && !error) return;
 
