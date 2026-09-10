@@ -83,10 +83,16 @@ select column_name, data_type
  where table_name = 'sugestoes_melhoria'
  order by ordinal_position;
 
-select polname as politica, cmd as comando
-  from pg_policy p join pg_class c on c.oid = p.polrelid
- where c.relname = 'sugestoes_melhoria'
- order by polname;
+-- `pg_policies` (a VIEW), e não `pg_policy` (a tabela do catálogo): a coluna
+-- `cmd` só existe na view -- na tabela ela se chama `polcmd`. A primeira
+-- versão deste script usava a tabela com o nome da view e morria aqui com
+-- "column cmd does not exist" -- e, como o editor do Supabase roda o script
+-- inteiro numa transação, o erro na ÚLTIMA linha desfez a criação da tabela
+-- também. Mesma pegadinha do fase23 (Victor, 09/09/2026).
+select policyname as politica, cmd as comando
+  from pg_policies
+ where tablename = 'sugestoes_melhoria'
+ order by policyname;
 
 select count(*) as sugestoes, count(*) filter (where lida_em is null) as nao_lidas
   from sugestoes_melhoria;
