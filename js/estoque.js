@@ -2167,7 +2167,11 @@ document.getElementById('filterClearAllBtn').addEventListener('click', () => {
   applyFilterAndSort();
 });
 
-document.querySelectorAll('thead th').forEach(th => {
+// So o cabecalho da Consulta de Itens ordena. Antes era `thead th` sem
+// recorte, e o clique em qualquer OUTRA tabela do portal caia aqui:
+// `th.dataset.key` vinha undefined, as flechas desta tabela eram apagadas e
+// `th.querySelector('.arrow')` era null -- TypeError.
+document.querySelectorAll('#dataTable thead th').forEach(th => {
   th.addEventListener('click', () => {
     const key = th.dataset.key;
     if (sortKey === key) { sortDir *= -1; } else { sortKey = key; sortDir = 1; }
@@ -2187,6 +2191,10 @@ const saveMsg = document.getElementById('saveMsg');
 
 document.getElementById('toggleEditBtn').addEventListener('click', () => {
   editPanel.classList.toggle('open');
+});
+
+pinInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('pinSubmitBtn').click();
 });
 
 document.getElementById('pinSubmitBtn').addEventListener('click', async () => {
