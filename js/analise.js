@@ -583,6 +583,13 @@ function pedidosDoItemHtml(codigoItem) {
               <td style="padding:4px 6px;">${escapeHtml(l.data_embarque || '—')}</td>
             </tr>`).join('')}
         </tbody>
+        <tfoot>
+          <tr style="border-top:2px solid var(--border);">
+            <td style="padding:6px; font-weight:700;" colspan="2">Total a atender</td>
+            <td style="padding:6px; text-align:right; font-weight:700;">${numeroBR(ordenadas.reduce((soma, l) => soma + (Number(l.qt_pedido) || 0), 0))}</td>
+            <td></td>
+          </tr>
+        </tfoot>
       </table>
     </div>`;
 }

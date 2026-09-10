@@ -821,6 +821,15 @@ transferência.
 - Ficou na função existente, e não num modal novo, pra não duplicar a
   montagem da tabela de unidades (mesmo motivo de reaproveitar o modal
   inteiro, ver acima).
+- **Rodapé com o total (10/09/2026)**: o Robson, apontando pro fim dessa
+  mesma tabela: *"coloque a qtd total que preciso atender faça soma de
+  todos os itens"*. `pedidosDoItemHtml()` ganhou um `<tfoot>` somando
+  `qt_pedido` de todas as linhas ordenadas. `qt_pedido` é `numeric` de
+  verdade (não texto formatado à brasileira, ao contrário de
+  `estoque.quantidade`) — a soma usa `Number(l.qt_pedido) || 0` direto,
+  **não** o `parseFloat`+troca de vírgula usado noutros lugares deste
+  arquivo pra campos de texto; usar aquele padrão aqui teria corrompido
+  qualquer quantidade com ponto decimal de verdade.
 
 - **Soma os endereços da mesma unidade**: `estoque` tem uma linha por
   endereço; sem somar, a tela ofereceria transferir só o que está na primeira
@@ -1849,6 +1858,67 @@ menu que antes disso não existem no DOM.
 - O tour **não vai para o papel** (`#tourFundo { display: none !important; }` no
   `@media print`) — o recorte escuro cobriria a folha inteira.
 
+## Item já retirado não entra mais na impressão do Controle EXP (10/09/2026)
+
+O Robson, vendo um item com status "Saiu p/ carregamento": *"itens que ja
+carregou bloqueie para impressao"*.
+
+Reimprimir a etiqueta de um item que já saiu fisicamente da expedição não
+faz sentido — o material não está mais lá para colar nada nele, e a folha
+só confundiria quem conferisse a pilha depois. `linhasImprimiveisExpControle()`
+(`js/programacao.js`) é `linhasFiltradasExpControle()` (o mesmo filtro de
+busca de sempre) **menos** as linhas com `status === 'retirado'`, e passou a
+ser a fonte única para tudo que decide o que vai pra impressora:
+
+- **`linhasParaImprimirExpControle()`** (o que sai no Imprimir/Exportar) usa
+  ela em vez da lista sem filtro — item retirado nunca sai, esteja marcado
+  ou não, mesmo que tenha ficado marcado de antes (a seleção é limpa disso
+  também, ver abaixo).
+- **`atualizarSelecaoExpControle()`** (o texto do botão "Imprimir tudo (N)" /
+  "Imprimir marcados (N)" e o estado do "marcar todos" do cabeçalho) conta
+  só sobre ela — o número já sai certo, sem incluir o que não vai imprimir.
+- **"Marcar todos" do cabeçalho** só marca os imprimíveis — item retirado
+  nunca entra na seleção por essa via.
+- **A caixa de cada linha retirada vem `disabled`**, com o título "Já saiu
+  para carregamento — não imprime de novo" — em vez de deixar marcar e não
+  imprimir depois (o que pareceria bug), a tela já impede na hora.
+- **Confirmar a saída de um item já marcado tira ele da seleção** (o mesmo
+  trecho que já limpava a seleção ao trocar de unidade/setor, em
+  `renderExpControle()`, ganhou mais um motivo) — sem isso, o item ficaria
+  "preso" selecionado sem nunca poder imprimir, e sujaria a contagem do
+  cabeçalho pra sempre.
+
+Conferido no navegador: item retirado nasce com a caixa desabilitada e
+some do "Imprimir tudo (N)"; "marcar todos" não o inclui; forçando o id
+dele na seleção mesmo assim (simulando estado antigo), a impressão o
+filtra fora igual. Zero erro de console.
+
+### Item retirado some da própria lista da aba Entrada (10/09/2026)
+
+Na mesma conversa, o Robson foi direto ao ponto: *"os itenms marcado como
+saida deixe só nessa aba"* — a aba sendo "Saída / Conferência" — e depois
+*"só quero na aba entrada o que realmente tem la no físico"*.
+
+`renderExpControle()` (a lista da aba Entrada — o `expCtrlBody`, que o
+ajuste acima já tinha ensinado a não IMPRIMIR retirado) passou a usar
+`linhasImprimiveisExpControle()` como fonte da própria lista, não só do
+que vai pra impressora — item que já saiu não aparece mais ali nem
+apagado nem acinzentado, simplesmente não está na lista, porque não está
+mais no físico da expedição.
+
+**Nada se perde**: quem já saiu tem histórico completo na aba Saída/
+Conferência (`renderHistoricoRetiradas()`) — pedido, item, descrição,
+quantidade, localização, quem retirou, quando, e um ↺ pra desfazer. A
+mudança só tira da aba Entrada o que não precisa mais ser conferido ali.
+De quebra, **Exportar (Excel/CSV/HTML) também parou de trazer retirado**
+— usa `linhasParaImprimirExpControle()` por baixo, então a planilha
+exportada da Entrada passou a refletir só o que está fisicamente lá,
+igual à tela.
+
+Conferido no navegador: com um item retirado e um na expedição, a lista
+da Entrada mostra só o segundo (contador "1 pedido na expedição" e botão
+"Imprimir tudo (1)" batendo), e o item retirado continua aparecendo no
+Histórico de Retiradas com quem retirou. Zero erro de console.
 
 ## 18. Consultor só consulta, e o tour detalha a Consulta (10/09/2026)
 
