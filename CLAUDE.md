@@ -567,8 +567,38 @@ ficha por item** (Imprimir e Exportar HTML usam a mesma função):
   navegador quebraria **o código do item** no meio, que é exatamente o que não
   pode ficar ilegível; com ele, a quantidade desce inteira para a linha de
   baixo e o item mantém os 21 mm.
-- `page-break-inside: avoid` por ficha: item nenhum é partido entre duas
-  páginas. Cabem 3 a 5 fichas por folha A4.
+- **Uma folha por item** desde 10/09/2026 (o Victor: *"Quando selecionar mais de
+  um item para imprimir no 'Controle EXP Acessórios', não colocar tudo na mesma
+  página, mas fazer páginas separadas"*). Antes cabiam 3 a 5 fichas por folha A4,
+  e isso obrigava a **cortar o papel**: cada ficha vai colada num pallet
+  diferente, e o corte cai no meio da ficha de baixo ou tira a identificação
+  dela. `page-break-inside: avoid` continua, para item nenhum ser partido.
+- ⚠️ A regra é `.ficha + .ficha { page-break-before: always }`, e **não**
+  `page-break-after` em toda ficha: quebrando ANTES da segunda em diante, a
+  primeira divide a folha 1 com o cabeçalho e **nenhuma folha em branco sobra no
+  fim** — com `page-break-after: always` em todas, a última quebra depois de si
+  mesma e o navegador emite uma página vazia. Conferido pelo estilo computado:
+  a primeira ficha dá `auto`, as outras `page`.
+- ⚠️ **`Impresso por` passou a sair também no rodapé de CADA ficha.** O cabeçalho
+  só existe na folha 1, e agora cada folha é um item que vai para um pallet
+  diferente: sem isso, o pedido do Robson (*"quando imprimir quero que deixe
+  registrado o usuario que imprimiu"*) valeria só para a primeira folha da pilha.
+  A data/hora é lida do relógio **uma vez** e reusada no cabeçalho e nos rodapés
+  — duas chamadas a `new Date()` podem cair em minutos diferentes na virada, e a
+  folha 1 diria 13:59 e a folha 2, 14:00.
+- ⚠️ **Acima de 10 folhas o portal pede um segundo clique**, com o número na
+  frente da pessoa (`LIMITE_FOLHAS_EXP`). Uma folha por item quer dizer que o
+  número de folhas é o número de itens, e "Imprimir tudo" numa unidade cheia é
+  resma. **Não é `confirm()`**: com "impedir que esta página crie novos diálogos"
+  marcado, `confirm()` devolve `false` na hora e um `if (!confirm(...)) return`
+  deixa de imprimir sem dizer nada — indistinguível de botão quebrado (seção 7).
+  Mexer na busca ou na seleção cancela a confirmação: o número que ela leu na
+  tela deixou de valer.
+- ⚠️ **Comentário de CSS dentro do template literal não pode ter acento grave.**
+  O HTML da folha é montado por template string em `montarHtmlExpControle()`, e
+  uma crase num comentário **fecha a string** — foi como eu quebrei o
+  `js/programacao.js` ao escrever esta mudança. O erro aparece como
+  `SyntaxError: Unexpected token '.'`, longe da causa.
 - O endereço gigante no fim da folha (quando a busca deixou **uma** localização
   só) continua igual.
 
@@ -1865,6 +1895,35 @@ nome dela no menu não ensinava nada.
 - Conferido no navegador nos três cenários: com item zerado (14 passos, todos
   com alvo), sem item zerado (o 💡 sai), e com a tabela vazia (os três de
   linha saem, 11 passos andados).
+
+⚠️ **O tour saía sem esses três passos no primeiro login, e por corrida de
+tempo.** O Victor: *"o tutorial do consultor ainda ta incompleto"*.
+`montarMenu()` abre a Consulta de Itens, que dispara `loadData()` — uma ida ao
+Supabase que **ninguém espera**. O tour abria dois quadros de animação depois,
+com a tabela ainda vazia, e os passos do 👁, do ⇄ e do 💡 eram pulados: faltava
+justamente o que o pedido original queria explicar ("como funciona a
+visualização da foto", "quanto tem em cada unidade"). Meus testes não pegaram
+porque eu populava a tabela à mão **antes** de abrir o tour.
+
+Duas correções, e as duas são necessárias:
+
+1. **`iniciarTourSePrimeiraVez()` espera a tabela**, e não a primeira pintura:
+   procura `#dataTable tbody tr` a cada 250 ms, no máximo ~3 s. Não é
+   `await loadData()` — a carga pode falhar e a unidade pode não ter item
+   nenhum, e nos dois casos o tour tem de abrir. 3 s e não 6: a carga normal
+   chega em menos de 1 s, e a espera só estoura sem dados — aí a tela parada
+   pareceria portal travado.
+2. **`alvoAlternativo`**: os três passos apontam a tabela inteira (`#dataTable`)
+   quando não há linha. As unidades **101 e 105 não têm dado nenhum** hoje, e sem
+   isso a pessoa dali nunca receberia essas explicações — nem depois dos 3 s.
+
+E se a linha chegar **depois** de o tour abrir, os três passos passam a
+funcionar de todo jeito: `tourAlvoUtil()` é consultado na hora de avançar, não
+uma vez na montagem.
+
+⚠️ Ao testar isto no navegador, lembre que **aba de fundo estrangula
+`setTimeout`** (Chrome joga para ~1 s): a espera de 3 s virou 24 s no teste e
+pareceu que o tour não abria. Teste com a aba na frente.
 
 ### 3. Admin não ganha o tour sozinho
 
