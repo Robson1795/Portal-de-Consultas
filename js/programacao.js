@@ -1852,6 +1852,18 @@ const EXP_EXPORT_CABECALHO = ['Localização', 'Item', 'Descrição', 'UM', 'Nº
 // A selecao e um recorte a mais DENTRO da busca, nao em vez dela -- item
 // marcado que a busca escondeu nao sai na folha, senao a folha traria
 // item que a pessoa nao esta vendo na tela.
+// A chave que agrupa a folha impressa. Item sem numero de pedido nao e um
+// pedido: todos eles caem num grupo unico, que sai por ultimo, em vez de
+// virar uma folha para cada.
+//
+// Mora numa funcao porque a mesma regra e usada em dois lugares: aqui, para
+// montar os grupos da folha, e no botao Imprimir, para contar quantas folhas
+// vao sair antes de mandar para a impressora.
+function chavePedidoFolha(numeroPedido) {
+  const n = String(numeroPedido == null ? '' : numeroPedido).trim();
+  return n || '(sem pedido)';
+}
+
 function linhasParaImprimirExpControle() {
   const linhas = linhasFiltradasExpControle();
   if (!expCtrlSelecionadas.size) return linhas;
@@ -1923,17 +1935,43 @@ function montarHtmlExpControle(scriptAutoImprimir) {
   const impressoEm = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
   const detalhe = (rotulo, valor) => (valor !== null && valor !== undefined && String(valor).trim())
     ? `<span><b>${rotulo}</b> ${escapeHtml(valor)}</span>` : '';
-  const fichasHtml = linhasExportacaoExpControle().map(
-    ([localizacao, item, descricao, um, pedido, qtd, op, lote, referencia, status, entrada, saida]) =>
-    `<article class="ficha">
-      <div class="ficha-topo">
-        <span class="ficha-item">${escapeHtml(item)}</span>
-        <span class="ficha-qtd">${escapeHtml(qtd != null ? qtd : '')}${um ? ` <small>${escapeHtml(um)}</small>` : ''}</span>
+  // AGRUPADO POR PEDIDO (pedido do Victor, 10/09/2026: "não separar por item,
+  // separar por pedido. Se for do mesmo pedido, pode por na mesma pagina.
+  // Pedidos diferentes, separar por paginas"). A folha vai colada no pallet, e
+  // o pallet é o pedido -- não o item.
+  //
+  // ⚠️ Agrupar é obrigatório, não é enfeite: a consulta traz as linhas ordenadas
+  // por LOCALIZAÇÃO (ver o .order() da carga), então dois itens do mesmo pedido
+  // guardados em corredores diferentes chegam longe um do outro. Sem agrupar, o
+  // mesmo pedido sairia em duas folhas e uma folha misturaria pedidos.
+  const grupos = new Map();
+  linhasExportacaoExpControle().forEach(linha => {
+    const chave = chavePedidoFolha(linha[4]);   // [4] = Nº Pedido
+    if (!grupos.has(chave)) grupos.set(chave, []);
+    grupos.get(chave).push(linha);
+  });
+  // Ordem de aparição (o Map preserva), com o grupo sem pedido no fim: ele não
+  // é um pedido, e deixá-lo no meio empurraria pedido de verdade para trás.
+  const ordemGrupos = [...grupos.keys()]
+    .sort((a, b) => (a === '(sem pedido)' ? 1 : 0) - (b === '(sem pedido)' ? 1 : 0));
+
+  const gruposHtml = ordemGrupos.map(chave => `<section class="grupo">
+      <div class="grupo-topo">
+        <span class="grupo-pedido">${chave === '(sem pedido)' ? 'Sem nº de pedido' : 'Pedido ' + escapeHtml(chave)}</span>
+        <span class="grupo-itens">${grupos.get(chave).length} item(ns)</span>
       </div>
-      <div class="ficha-desc">${escapeHtml(descricao || '')}</div>
-      <div class="ficha-detalhes">${detalhe('Local', localizacao)}${detalhe('Pedido', pedido)}${detalhe('OP', op)}${detalhe('Lote', lote)}${detalhe('Ref.', referencia)}${detalhe('Status', status)}${detalhe('Entrada', entrada)}${detalhe('Saída', saida)}</div>
-      <div class="ficha-rodape">${escapeHtml(rotuloUnidade(unidadeAtual))} &middot; Impresso por ${escapeHtml(nomeUsuarioAtual || emailUsuarioAtual || '—')} &mdash; ${impressoEm}</div>
-    </article>`).join('');
+      <div class="grupo-quem">${escapeHtml(rotuloUnidade(unidadeAtual))} &middot; Impresso por ${escapeHtml(nomeUsuarioAtual || emailUsuarioAtual || '—')} &mdash; ${impressoEm}</div>
+      ${grupos.get(chave).map(
+        ([localizacao, item, descricao, um, pedido, qtd, op, lote, referencia, status, entrada, saida]) =>
+        `<article class="ficha">
+          <div class="ficha-topo">
+            <span class="ficha-item">${escapeHtml(item)}</span>
+            <span class="ficha-qtd">${escapeHtml(qtd != null ? qtd : '')}${um ? ` <small>${escapeHtml(um)}</small>` : ''}</span>
+          </div>
+          <div class="ficha-desc">${escapeHtml(descricao || '')}</div>
+          <div class="ficha-detalhes">${detalhe('Local', localizacao)}${detalhe('Pedido', pedido)}${detalhe('OP', op)}${detalhe('Lote', lote)}${detalhe('Ref.', referencia)}${detalhe('Status', status)}${detalhe('Entrada', entrada)}${detalhe('Saída', saida)}</div>
+        </article>`).join('')}
+    </section>`).join('');
   const busca = document.getElementById('expCtrlBusca').value.trim();
   // Diz no papel DE ONDE veio este recorte -- a folha vai colada no pallet
   // (o Robson: "essa folha coloco no pallet"), e uma folha parcial sem dizer
@@ -1970,17 +2008,36 @@ function montarHtmlExpControle(scriptAutoImprimir) {
     border: 0.6mm solid #000; border-radius: 2mm; padding: 3mm 4mm; margin-bottom: 3mm;
     page-break-inside: avoid; break-inside: avoid;
   }
-  /* UMA FOLHA POR ITEM (pedido do Victor, 10/09/2026: "não colocar tudo na
-     mesma página, mas fazer páginas separadas"). Cada ficha vai colada num
-     pallet diferente, então duas na mesma folha obrigam a cortar o papel --
-     e o corte cai no meio da ficha de baixo ou tira a identificação dela.
+  /* UMA FOLHA POR PEDIDO, e nao por item (o Victor, 10/09/2026: "nao separar
+     por item, separar por pedido. Se for do mesmo pedido, pode por na mesma
+     pagina. Pedidos diferentes, separar por paginas"). A folha vai colada no
+     pallet, e o pallet e o PEDIDO -- os itens dele saem juntos, e quem separa
+     ve numa folha so tudo o que aquele pedido leva.
 
-     A regra e "ficha + ficha", e nao page-break-after em toda ficha: quebrando
-     ANTES da segunda em diante, a primeira divide a folha 1 com o cabeçalho
-     e nenhuma folha em branco sobra no fim. Com page-break-after: always
-     em todas, a última quebra depois de si mesma e o navegador emite uma
-     página vazia. */
-  .ficha + .ficha { page-break-before: always; break-before: page; }
+     A quebra e entre GRUPOS, com a regra escrita como grupo-mais-grupo em vez
+     de page-break-after em todo grupo: quebrando ANTES do segundo em diante, o
+     primeiro divide a folha 1 com o cabecalho e nenhuma folha em branco sobra
+     no fim. Com page-break-after em todos, o ultimo quebra depois de si mesmo
+     e o navegador emite uma pagina vazia.
+
+     O grupo pode passar de uma folha (pedido com muitos itens) -- e por isso
+     que nao leva break-inside: avoid. Cada ficha segue inteira numa folha so,
+     e o numero do pedido continua na linha de detalhes de cada uma, entao a
+     folha 2 de um pedido grande ainda se identifica. */
+  .grupo + .grupo { page-break-before: always; break-before: page; }
+  .grupo-topo {
+    display: flex; align-items: baseline; gap: 0 6mm; flex-wrap: wrap;
+    border-bottom: 0.5mm solid #000; padding-bottom: 1.5mm; margin-bottom: 2mm;
+  }
+  /* O numero do pedido e o que se procura na pilha de folhas, entao e o maior
+     texto do cabecalho do grupo -- mas menor que o codigo do item, que e o que
+     se le do chao a 3 metros. */
+  .grupo-pedido { font-size: 9mm; font-weight: 900; line-height: 1; }
+  .grupo-itens { font-size: 4mm; font-weight: 700; color: #444; margin-left: auto; }
+  /* A identificacao e do GRUPO, e nao de cada ficha: cada folha e um pedido, e
+     repetir a mesma linha embaixo de cada item da folha gastaria altura sem
+     dizer nada de novo. Era por ficha enquanto a folha era por item. */
+  .grupo-quem { font-size: 3.5mm; color: #555; margin: 0 0 3mm; }
   /* flex-wrap em vez de encolher a letra: com item de 8 dígitos e quantidade de
      6 (ex.: 120918iT + 1284.5 Kg) a linha dá 183mm e no A4 só cabem 178mm --
      sem o wrap o navegador quebraria o CÓDIGO DO ITEM no meio, que é
@@ -1999,15 +2056,6 @@ function montarHtmlExpControle(scriptAutoImprimir) {
     display: flex; flex-wrap: wrap; gap: 1mm 6mm;
   }
   .ficha-detalhes b { color: #555; font-weight: 700; }
-  /* Cada folha agora é UM item e vai para um pallet diferente, então a
-     identificação tem de estar em todas -- o cabeçalho só sai na folha 1. Era
-     pedido do Robson que o papel colado no pallet dissesse quem imprimiu
-     ("quando imprimir quero que deixe registrado o usuario que imprimiu"), e
-     sem esta linha isso valeria só para a primeira folha da pilha. */
-  .ficha-rodape {
-    font-size: 3.5mm; margin-top: 2mm; padding-top: 1.5mm;
-    border-top: 0.2mm solid #bbb; color: #555;
-  }
   .endereco-grande {
     text-align: center; page-break-before: avoid; page-break-inside: avoid;
     font-size: 15vw; line-height: 1; font-weight: 900; letter-spacing: 0.05em;
@@ -2016,7 +2064,7 @@ function montarHtmlExpControle(scriptAutoImprimir) {
 </style></head><body>
 <h2>Controle EXP Acessórios — ${escapeHtml(rotuloUnidade(unidadeAtual))} — ${new Date().toLocaleDateString('pt-BR')}${subtitulo}</h2>
 <div class="impresso-por">Impresso por ${escapeHtml(nomeUsuarioAtual || emailUsuarioAtual || '—')} &mdash; ${impressoEm}</div>
-${fichasHtml}
+${gruposHtml}
 ${enderecoGrande}
 ${scriptAutoImprimir ? '<script>window.onload = () => window.print();<' + '/script>' : ''}
 </body></html>`;
@@ -2079,14 +2127,17 @@ document.getElementById('expCtrlImprimirBtn').addEventListener('click', async ()
     return;
   }
 
-  // Sai uma folha por item: acima de LIMITE_FOLHAS_IMPRESSAO, pede um segundo
-  // clique com o número na frente da pessoa.
-  if (linhas.length > LIMITE_FOLHAS_IMPRESSAO && !expImprimirConfirmar) {
+  // Sai uma folha por PEDIDO, então o que conta são os pedidos distintos, não
+  // as linhas: marcar 30 itens de um pedido só é UMA folha, e avisar "30 folhas"
+  // ali seria mentira que treina a pessoa a ignorar o aviso.
+  const folhas = new Set(linhas.map(l => chavePedidoFolha(l.numero_pedido))).size;
+  if (folhas > LIMITE_FOLHAS_IMPRESSAO && !expImprimirConfirmar) {
     expImprimirConfirmar = true;
     document.getElementById('expCtrlImprimirBtn').textContent =
-      '\u26A0\uFE0F Confirmar ' + linhas.length + ' folhas';
-    msg.textContent = 'Vai sair uma folha por item: ' + linhas.length
-      + ' folhas. Clique de novo para imprimir, ou marque só o que precisa.';
+      '\u26A0\uFE0F Confirmar ' + folhas + ' folhas';
+    msg.textContent = 'Vai sair uma folha por pedido: ' + folhas + ' folhas, com '
+      + linhas.length + ' item(ns). Clique de novo para imprimir, ou marque só o'
+      + ' que precisa.';
     msg.className = 'status-msg status-err';
     return;
   }

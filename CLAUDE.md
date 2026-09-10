@@ -567,33 +567,59 @@ ficha por item** (Imprimir e Exportar HTML usam a mesma função):
   navegador quebraria **o código do item** no meio, que é exatamente o que não
   pode ficar ilegível; com ele, a quantidade desce inteira para a linha de
   baixo e o item mantém os 21 mm.
-- **Uma folha por item** desde 10/09/2026 (o Victor: *"Quando selecionar mais de
-  um item para imprimir no 'Controle EXP Acessórios', não colocar tudo na mesma
-  página, mas fazer páginas separadas"*). Antes cabiam 3 a 5 fichas por folha A4,
-  e isso obrigava a **cortar o papel**: cada ficha vai colada num pallet
-  diferente, e o corte cai no meio da ficha de baixo ou tira a identificação
-  dela. `page-break-inside: avoid` continua, para item nenhum ser partido.
-- ⚠️ A regra é `.ficha + .ficha { page-break-before: always }`, e **não**
-  `page-break-after` em toda ficha: quebrando ANTES da segunda em diante, a
-  primeira divide a folha 1 com o cabeçalho e **nenhuma folha em branco sobra no
-  fim** — com `page-break-after: always` em todas, a última quebra depois de si
-  mesma e o navegador emite uma página vazia. Conferido pelo estilo computado:
-  a primeira ficha dá `auto`, as outras `page`.
-- ⚠️ **`Impresso por` passou a sair também no rodapé de CADA ficha.** O cabeçalho
-  só existe na folha 1, e agora cada folha é um item que vai para um pallet
-  diferente: sem isso, o pedido do Robson (*"quando imprimir quero que deixe
-  registrado o usuario que imprimiu"*) valeria só para a primeira folha da pilha.
-  A data/hora é lida do relógio **uma vez** e reusada no cabeçalho e nos rodapés
-  — duas chamadas a `new Date()` podem cair em minutos diferentes na virada, e a
-  folha 1 diria 13:59 e a folha 2, 14:00.
-- ⚠️ **Acima de 10 folhas o portal pede um segundo clique**, com o número na
-  frente da pessoa (`LIMITE_FOLHAS_EXP`). Uma folha por item quer dizer que o
-  número de folhas é o número de itens, e "Imprimir tudo" numa unidade cheia é
-  resma. **Não é `confirm()`**: com "impedir que esta página crie novos diálogos"
-  marcado, `confirm()` devolve `false` na hora e um `if (!confirm(...)) return`
-  deixa de imprimir sem dizer nada — indistinguível de botão quebrado (seção 7).
-  Mexer na busca ou na seleção cancela a confirmação: o número que ela leu na
-  tela deixou de valer.
+- **Uma folha por PEDIDO** (o Victor, 10/09/2026: *"não separar por item, separar
+  por pedido. Se for do mesmo pedido, pode por na mesma pagina. Pedidos
+  diferentes, separar por paginas"*). A folha vai colada no pallet, e **o pallet é
+  o pedido** — quem separa vê numa folha só tudo o que aquele pedido leva.
+  Cabiam 3 a 5 fichas por folha sem critério nenhum, o que obrigava a cortar o
+  papel no lugar errado; e a primeira tentativa, de 10/09 pela manhã, separou por
+  **item**, o que dava uma folha para cada item do mesmo pallet.
+- ⚠️ **Agrupar é obrigatório, não é enfeite.** A carga traz as linhas ordenadas
+  por **localização** (o `.order()` de `exp_controle_itens`), então dois itens do
+  mesmo pedido guardados em corredores diferentes chegam longe um do outro. Sem
+  agrupar, o mesmo pedido sairia em duas folhas **e** uma folha misturaria
+  pedidos. O agrupamento é um `Map` por `chavePedidoFolha()`, preservando a ordem
+  de aparição.
+- **Item sem nº de pedido não é um pedido**: todos caem num grupo único
+  (`(sem pedido)`), que sai **por último** — uma folha para cada seria papel
+  jogado fora, e deixá-lo no meio empurraria pedido de verdade para trás.
+- ⚠️ A regra é `.grupo + .grupo { page-break-before: always }`, e **não**
+  `page-break-after` em todo grupo: quebrando ANTES do segundo em diante, o
+  primeiro divide a folha 1 com o cabeçalho e **nenhuma folha em branco sobra no
+  fim** — com `page-break-after: always` em todos, o último quebra depois de si
+  mesmo e o navegador emite uma página vazia. Conferido pelo estilo computado: o
+  primeiro grupo dá `auto`, os outros `page`, e as fichas entre si dão `auto`
+  (é isso que as deixa dividir a folha).
+- **O grupo pode passar de uma folha** (pedido com muitos itens), e por isso ele
+  **não** leva `break-inside: avoid` — forçar caberia mal e cortaria letra. Cada
+  ficha continua inteira numa folha só (`page-break-inside: avoid`), e o número do
+  pedido segue na linha de detalhes de **cada** ficha, então a folha 2 de um
+  pedido grande ainda se identifica. O que não repete na folha 2 é o cabeçalho do
+  grupo — limite conhecido.
+- ⚠️ **`Impresso por` é do GRUPO, não de cada ficha.** Enquanto a folha era por
+  item, essa linha estava em cada ficha (o pedido do Robson: *"quando imprimir
+  quero que deixe registrado o usuario que imprimiu"*, e cada folha era um item).
+  Agora cada folha é um pedido: repetir a mesma linha embaixo de cada item da
+  folha gastaria altura sem dizer nada de novo. A data/hora é lida do relógio
+  **uma vez** e reusada no cabeçalho e nos grupos — duas chamadas a `new Date()`
+  podem cair em minutos diferentes na virada.
+- ⚠️ **Acima de 10 folhas o portal pede um segundo clique**
+  (`LIMITE_FOLHAS_IMPRESSAO`), e o que conta são **pedidos distintos, não linhas**:
+  marcar 30 itens de um pedido só é UMA folha, e avisar "30 folhas" ali seria
+  mentira que treina a pessoa a ignorar o aviso. **Não é `confirm()`**: com
+  "impedir que esta página crie novos diálogos" marcado, `confirm()` devolve
+  `false` na hora e um `if (!confirm(...)) return` deixa de imprimir sem dizer
+  nada — indistinguível de botão quebrado (seção 7). Mexer na busca ou na seleção
+  cancela a confirmação: o número que ela leu na tela deixou de valer.
+- **Alcance da mudança:** só o **Imprimir** e o **Exportar → HTML** da aba
+  Entrada, que passam os dois por `montarHtmlExpControle()`. Excel e CSV não
+  agrupam (seguem a ordem da tela), e a etiqueta da Trading e a impressão da
+  Consulta de Itens são outro código.
+- ⚠️ **Comentário de CSS dentro do template literal não pode ter acento grave.**
+  O HTML da folha é montado por template string em `montarHtmlExpControle()`, e
+  uma crase num comentário **fecha a string** — foi como eu quebrei o
+  `js/programacao.js` ao escrever a versão por item. O erro aparece como
+  `SyntaxError: Unexpected token '.'`, longe da causa.
 - ⚠️ **Comentário de CSS dentro do template literal não pode ter acento grave.**
   O HTML da folha é montado por template string em `montarHtmlExpControle()`, e
   uma crase num comentário **fecha a string** — foi como eu quebrei o
