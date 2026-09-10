@@ -85,6 +85,14 @@ function montarMenu() {
             </button>`;
   }).join('');
 
+  // O 💡 de sugestão é do CONSULTOR (Robson, 10/09/2026: "um botão para que
+  // os consultores coloquem sugestões de melhorias"). É quem tem menos tela
+  // e nenhum outro canal dentro do portal -- o ALM e o aço falam com ele
+  // direto, e o Robson e o Victor são justamente quem RECEBE. Ver
+  // js/sugestao.js.
+  const btnSugestao = document.getElementById('sugestaoBtn');
+  if (btnSugestao) btnSugestao.style.display = (perfilAtual === 'consultor') ? '' : 'none';
+
   // Abre na primeira pagina que a pessoa pode ver.
   if (!paginaAtual || !podeVer(paginaAtual)) mostrarPagina(visiveis[0]);
   else marcarItemAtivo();
@@ -150,7 +158,7 @@ function mostrarPagina(id) {
     carregarCatalogoExp().then(carregarProgramacao);
   }
   if (id === 'analise') { carregarAnalise(); }
-  if (id === 'config')  { carregarUsuarios(); carregarConfigUnidades(); carregarLote(); }
+  if (id === 'config')  { carregarUsuarios(); carregarConfigUnidades(); carregarLote(); carregarSugestoes(); }
 }
 
 document.getElementById('sidebarNav').addEventListener('click', (e) => {

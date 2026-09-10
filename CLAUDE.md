@@ -2078,6 +2078,49 @@ Conferido no navegador com um mock por tabela (incluindo uma sem linha
 nenhuma, pra testar "Nunca atualizado"): as cinco datas saem certas, cada
 uma da fonte certa.
 
+## Sugestões de melhoria: o canal do consultor (10/09/2026)
+
+O Robson: *"quero que crie um botão para que os consultores coloquem
+sugestões de melhorias, aí essa sugestão é enviada para o meu usuário e o do
+Victor"*.
+
+⚠️ **"Para o meu USUÁRIO", e não "para o meu e-mail"** — foi isso que decidiu
+o desenho. As outras telas que "mandam" alguma coisa (Requisição ALM,
+Solicitação de compra) usam `mailto`, que depende de a pessoa clicar em
+enviar no Outlook e some sem avisar se ela fechar a janela. Ali o custo é
+baixo: tem alguém esperando o material e que vai cobrar. Aqui é o contrário —
+**ninguém está esperando uma sugestão**, então uma que se perde nunca é
+cobrada por ninguém. Gravada em `sugestoes_melhoria`
+(`sql/fase32-sugestoes-melhoria.sql`), ela chega inteira aos dois, dentro do
+portal, e continua lá depois de lida.
+
+- **Quem manda**: o 💡 no cabeçalho aparece só para `perfilAtual ===
+  'consultor'` — é quem tem menos tela (desde a seção 18, só a Consulta de
+  Itens) e nenhum outro canal aqui dentro. ALM e aço falam com o Robson
+  direto; ele e o Victor são justamente quem RECEBE. Widening é uma linha em
+  `montarMenu()`, se um dia fizer sentido.
+- **Quem lê**: `eh_super_admin()` no RLS já era exatamente o Robson (nos dois
+  logins dele) e o Victor — não precisou de lista nova pra manter em
+  sincronia. A seção "Sugestões de melhoria" em Configurações some inteira
+  para os outros admins; e some por cortesia, porque o `select` deles volta
+  vazio de qualquer jeito.
+- **Vai com nome, unidade e perfil junto.** Sugestão anônima vira caixa de
+  reclamação sem resposta possível: sem saber quem é, não dá nem para
+  perguntar "como assim?" nem para avisar que foi feito.
+- **Marcar como lida é `update`, e não `delete`** — não existe política de
+  delete nesta tabela de propósito. Apagar seria a forma silenciosa de a
+  pessoa nunca saber que foi ignorada; lida fica cinza e continua na lista.
+  O `update` pede recibo (`.select('id')`): sem ele, um update barrado pelo
+  RLS volta com `error null` e zero linha, e a tela diria "lida" com o F5
+  desmentindo (item A1 da `AUDITORIA.md`).
+
+Conferido no navegador nos dois lados: como consultor, o 💡 aparece, o envio
+vazio é recusado, e o que vai pro banco leva mensagem, nome, e-mail, unidade
+e perfil; como super admin, a lista mostra as duas (1 não lida, com botão; 1
+lida, cinza, com "✓ lida por Victor"), o "marcar como lida" manda o patch
+certo, e a seção some tanto para admin comum quanto o 💡 some para quem não
+é consultor.
+
 ## 19. Aba Configurações: filtros e contagem de consultores (10/09/2026)
 
 O Victor: *"Na aba configuração, mostre também quantos consultores tem. Uma

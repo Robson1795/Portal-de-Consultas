@@ -94,6 +94,11 @@
           <button class="topbar-menu" id="menuToggle" title="Abrir/fechar menu" aria-label="Abrir ou fechar o menu">&#9776;</button>
           <div class="topbar-local" id="topbarLocal"></div>
           <div class="topbar-user">
+            <!-- Canal do consultor para o Robson e o Victor (ver js/sugestao.js).
+                 Fica escondido por padrão: montarMenu() decide quem vê. -->
+            <button class="topbar-tema" id="sugestaoBtn" style="display:none;"
+                    title="Enviar uma sugestão de melhoria"
+                    aria-label="Enviar uma sugestão de melhoria">💡</button>
             <button class="topbar-tema" id="tourBtn" title="Ver o tour do portal"
                     aria-label="Ver o tour do portal">🎓</button>
             <button class="topbar-tema" id="temaToggle" title="Alternar entre modo claro e escuro"
@@ -1122,6 +1127,22 @@
       indistinguível de "apagar o estoque da unidade", e apagar tem de ser um pedido explícito.
     </div>
 
+    <!-- ---- Sugestões de melhoria: só o Robson e o Victor leem (RLS por
+         eh_super_admin, ver sql/fase32-sugestoes-melhoria.sql). A seção some
+         inteira para os outros admins -- ver carregarSugestoes() em
+         js/sugestao.js. -->
+    <div class="req-secao" id="sugestoesSecaoTitulo" style="display:none;">Sugestões de melhoria</div>
+    <div class="panel" id="sugestoesSecao" style="display:none;">
+      <div class="cfg-barra">
+        <span id="sugestoesResumo" style="font-weight:700; color:var(--ink);"></span>
+        <button class="btn" id="sugestoesRecarregarBtn" style="margin-left:auto;">Atualizar</button>
+      </div>
+      <div style="padding:0 16px 16px;" id="sugestoesLista"></div>
+      <div class="empty-msg" id="sugestoesVazio" style="display:none;">
+        Nenhuma sugestão recebida ainda.
+      </div>
+    </div>
+
     <div class="cfg-nota">
       <b>E-mails do ALM.</b> Destinatários da Requisição ALM daquela unidade. Vários endereços,
       separados por ponto e vírgula. Unidade sem e-mail cadastrado tem o envio desabilitado —
@@ -1328,6 +1349,28 @@
       <div style="margin-top:8px; font-size:11.5px; color:var(--muted);" id="padraoReferencia"></div>
     </div>
   </div>
+
+  <!-- Sugestão de melhoria: escrita por qualquer conta aprovada, lida só pelo
+       Robson e pelo Victor (eh_super_admin no RLS -- ver
+       sql/fase32-sugestoes-melhoria.sql e js/sugestao.js). -->
+  <div class="modal-overlay" id="sugestaoModal">
+    <div class="modal-box" style="max-width:520px;">
+      <button class="modal-close" id="sugestaoCloseBtn">✕</button>
+      <h3 style="margin-top:0;">💡 Sugestão de melhoria</h3>
+      <div class="modal-text" style="margin-bottom:10px;">
+        Escreva o que faria o portal ajudar mais no seu dia. Vai direto para o
+        Robson e o Victor, com o seu nome junto — eles conseguem responder e
+        avisar quando estiver feito.
+      </div>
+      <textarea id="sugestaoTexto" rows="6" placeholder="Ex.: na consulta, seria útil poder filtrar por..."
+                style="width:100%; box-sizing:border-box; padding:10px; border:1px solid var(--border);
+                       border-radius:8px; font-size:14px; font-family:inherit; resize:vertical;"></textarea>
+      <div class="cfg-barra" style="padding:10px 0 0;">
+        <span class="status-msg" id="sugestaoMsg"></span>
+        <button class="btn btn-primary" id="sugestaoEnviarBtn" style="margin-left:auto;">Enviar</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Ordem importa: config define `sb`, auth usa `sb`, e as telas usam os dois. -->
@@ -1362,5 +1405,7 @@
 <script src="js/programacao.js"></script>
 <script src="js/analise.js"></script>
 <script src="js/tour.js"></script>
+<!-- Depois dos outros: usa escapeHtml, rotuloUnidade e os globais de sessão. -->
+<script src="js/sugestao.js"></script>
 </body>
 </html>
