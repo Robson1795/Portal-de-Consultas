@@ -28,6 +28,29 @@ let etiquetasTrading = new Set();
 // entao e um numero so. js/estoque.js carrega antes, por isso mora aqui.
 const LIMITE_FOLHAS_IMPRESSAO = 10;
 // Segundo clique do botao Etiquetas quando a impressao passa desse limite.
+
+// Busca uma tabela INTEIRA, de mil em mil.
+//
+// ⚠️ O PostgREST devolve no máximo 1.000 linhas por requisição e **não avisa**
+// que cortou: a resposta chega com `error: null` e parece completa. Foi o que
+// mostrava 1.000 das 3.436 bobinas até 08/09/2026 (seção 9).
+//
+// `fazerConsulta(de, ate)` recebe a faixa e devolve a consulta já com
+// `.range(de, ate)` -- quem chama monta os filtros e a ordenação, que mudam de
+// tabela para tabela. Precisa de `.order()` estável, senão a página 2 pode
+// repetir ou pular linha da 1.
+async function buscarTudoPaginado(fazerConsulta, tamanho = 1000) {
+  let todas = [];
+  for (let de = 0; ; de += tamanho) {
+    const { data, error } = await fazerConsulta(de, de + tamanho - 1);
+    if (error) return { data: todas, error };
+    todas = todas.concat(data || []);
+    // Página menor que o pedido = acabou. Igual ao pedido pode ser o fim exato,
+    // e nesse caso a volta seguinte vem vazia e o laço para ali.
+    if (!data || data.length < tamanho) break;
+  }
+  return { data: todas, error: null };
+}
 let etiquetaTradingConfirmar = false;
 // O que o filtro deixou na tela (todas as páginas), preenchido por
 // applyFilterAndSort(): é sobre isso que o "marcar todas" age.
