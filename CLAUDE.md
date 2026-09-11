@@ -2819,6 +2819,27 @@ pro lado "a mais no físico"). Também: rowspan da localização com dois
 pedidos aparece só uma vez; badge de "Só no físico" continua igual (só
 "Diferença" virou detalhado). Zero erro de console.
 
+## Telinha "Onde está" mais larga: Quantidade sem precisar rolar (11/09/2026)
+
+O Robson: *"deixe a quantidade aparecer aqui, sem eu precisar ficar
+arrastando para o lado ate chegar na quantidade"*. A telinha tinha
+`max-width:480px`, e as três colunas (Localização, Nº Pedido, Quantidade)
+precisavam de ~620px — a Quantidade sempre ficava cortada, obrigando a
+rolar a tabela pro lado pra ver o próprio número que motivou o aviso.
+
+`#ondeEstaModalBox` foi de 480px pra 640px (mesmo padrão de
+`#compareModalBox`, que já é mais largo que o modal genérico por motivo
+parecido). Não mexe em mobile: a caixa é `width:100%` até o `max-width`,
+então em tela estreita ela encolhe sozinha — e ali a tabela ainda rola
+(inevitável, é a mesma rolagem que qualquer tabela larga do portal tem no
+celular), mas o caso comum, o desktop do Robson, deixa de precisar.
+
+Conferido no navegador: com os dados do pedido dele (localização + nº do
+pedido + 6.200/6.300 Pç), a tabela (620px) agora cabe inteira nos 638px
+disponíveis da caixa — sem barra de rolagem. Testado também no preset
+mobile (375px): a caixa se ajusta à tela, a tabela ainda rola (esperado).
+Zero erro de console.
+
 ## 21. Notificação de cadastro pendente, no canto da tela (11/09/2026)
 
 O Victor: *"o Robson implementou uma notificação que avisa quando alguém se
