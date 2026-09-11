@@ -2529,11 +2529,13 @@ async function exportarExpControleXlsx(nomeBase) {
   XLSX.writeFile(livro, nomeBase + '.xlsx');
 }
 
-// Reaproveitada pelo Exportar HTML e pelo Imprimir -- mesmo layout nos
-// dois, só muda o que acontece com o HTML depois (baixar vs abrir e
-// mandar pra impressora). `scriptAutoImprimir` só entra na versão que
-// abre pra imprimir; no arquivo baixado ninguém quer isso disparando
-// sozinho toda vez que a pessoa só quer abrir o arquivo pra olhar.
+// Só do Imprimir (botão "Imprimir", folha pro pallet) -- o Exportar HTML
+// tinha o MESMO layout gigante até 11/09/2026, quando o Robson pediu um
+// tamanho menor "como planilha" só pro exportado, e depois confirmou "só
+// ao exportar": quem imprime cola no pallet e precisa ler de 3 metros;
+// quem exporta abre o arquivo na tela pra olhar, e a ficha gigante ali só
+// atrapalhava. Ver montarHtmlExpControleTabela() logo abaixo, que é o que
+// o Exportar HTML usa agora.
 function montarHtmlExpControle(scriptAutoImprimir) {
   const linhasFiltradas = linhasParaImprimirExpControle();
   // Uma FICHA por item, e não uma linha de tabela. A folha vai colada no
@@ -2685,8 +2687,45 @@ ${scriptAutoImprimir ? '<script>window.onload = () => window.print();<' + '/scri
 </body></html>`;
 }
 
+// Uma linha por item, mesmas colunas do CSV/Excel (EXP_EXPORT_CABECALHO) --
+// pra abrir e olhar como planilha, sem rolar página por página de ficha
+// gigante (que é o que montarHtmlExpControle() faz, e continua fazendo,
+// só que agora exclusivo do Imprimir).
+function montarHtmlExpControleTabela() {
+  const impressoEm = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+  const busca = document.getElementById('expCtrlBusca').value.trim();
+  const marcados = linhasFiltradasExpControle()
+    .filter(l => expCtrlSelecionadas.has(String(l.id))).length;
+  const subtitulo = (busca ? ` — busca: "${escapeHtml(busca)}"` : '')
+    + (marcados ? ` — ${marcados} item(ns) escolhido(s) na tela` : '');
+
+  const linhasHtml = linhasExportacaoExpControle().map(linha => `<tr>${
+    linha.map(v => `<td>${escapeHtml(v != null && v !== '' ? v : '—')}</td>`).join('')
+  }</tr>`).join('');
+
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+<title>Controle EXP — ${escapeHtml(rotuloUnidade(unidadeAtual))} — ${new Date().toLocaleDateString('pt-BR')}</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 0; padding: 14px; color: #111; font-size: 12px; }
+  h2 { font-size: 15px; margin: 0 0 2px; }
+  .impresso-por { font-size: 11px; color: #444; margin: 0 0 10px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #ccc; padding: 3px 7px; text-align: left; white-space: nowrap; }
+  th { background: #eef2f6; font-weight: 700; }
+  tr:nth-child(even) td { background: #f7f9fb; }
+  @media print { @page { size: A4 landscape; margin: 10mm; } thead { display: table-header-group; } }
+</style></head><body>
+<h2>Controle EXP Acessórios — ${escapeHtml(rotuloUnidade(unidadeAtual))} — ${new Date().toLocaleDateString('pt-BR')}${subtitulo}</h2>
+<div class="impresso-por">Impresso por ${escapeHtml(nomeUsuarioAtual || emailUsuarioAtual || '—')} &mdash; ${impressoEm}</div>
+<table>
+  <thead><tr>${EXP_EXPORT_CABECALHO.map(c => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead>
+  <tbody>${linhasHtml}</tbody>
+</table>
+</body></html>`;
+}
+
 function exportarExpControleHtml(nomeBase) {
-  const html = montarHtmlExpControle(false);
+  const html = montarHtmlExpControleTabela();
   baixarArquivo(new Blob([html], { type: 'text/html;charset=utf-8;' }), nomeBase + '.html');
 }
 

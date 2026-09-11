@@ -2597,6 +2597,34 @@ Conferido no navegador: 5 itens de teste (`REC`, vazio, `rec` minúsculo,
 o botão fica destacado; desligar volta aos 5; "Limpar filtros" desliga e
 tira o destaque. Zero erro de console.
 
+## Exportar HTML do Controle EXP vira planilha, Imprimir continua ficha grande (11/09/2026)
+
+O Robson, vendo o HTML baixado abrir com uma ficha gigante por item: *"ao
+exportar HTML pode deixar em um tamanho menor como planilha"* — e, quando
+perguntei se valia também pro Imprimir, confirmou: *"só ao exportar"*.
+
+Os dois botões (Exportar → HTML, e Imprimir) usavam a MESMA
+`montarHtmlExpControle()`: uma ficha enorme por item (letra de 21mm,
+pensada pra colar no pallet e ler a 3 metros — ver a seção de 09/09/2026
+sobre isso). Fazia sentido pro Imprimir, mas o arquivo exportado é pra
+abrir e OLHAR NA TELA, não colar em lugar nenhum — a ficha gigante ali só
+obrigava a rolar página por página pra ver uma lista de itens.
+
+- `montarHtmlExpControleTabela()` (nova): uma `<table>` comum, mesmas
+  colunas e mesma ordem do CSV/Excel (`EXP_EXPORT_CABECALHO` +
+  `linhasExportacaoExpControle()` — reaproveitados, não duplicados), fonte
+  normal (12px), sem quebra de página por pedido. `exportarExpControleHtml()`
+  passou a chamar esta função em vez de `montarHtmlExpControle(false)`.
+- `montarHtmlExpControle()` (a ficha grande) agora é **só** do botão
+  Imprimir — o parâmetro `scriptAutoImprimir` que já tinha só faz sentido
+  ali mesmo (o script de auto-impressão nunca era usado no HTML exportado).
+
+Conferido no navegador: `montarHtmlExpControleTabela()` gera 1 KB pra 2
+itens (contra 6 KB da ficha, mesmos dados) e não tem nenhuma `.ficha`;
+clicar em Exportar → HTML baixa exatamente essa tabela; clicar em
+Imprimir continua abrindo a ficha gigante de sempre, com o script de
+auto-impressão. Zero erro de console.
+
 ## 21. Notificação de cadastro pendente, no canto da tela (11/09/2026)
 
 O Victor: *"o Robson implementou uma notificação que avisa quando alguém se
