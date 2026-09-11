@@ -3,7 +3,7 @@
 Contexto do projeto para qualquer agente de IA ou pessoa que for mexer neste repositório.
 Sempre em **português do Brasil**.
 
-**Atualizado:** 11/09/2026 (notificação de cadastro pendente no canto da tela)
+**Atualizado:** 11/09/2026 (senhas de tela removidas; sugestão vai pro Teams)
 **Mantenedores:** Robson (dono do projeto e admin geral) · Victor Dobner (colaborador)
 
 > Este arquivo é lido automaticamente pelo Claude Code ao abrir a pasta do projeto.
@@ -128,7 +128,7 @@ O que é útil saber sem expor valor nenhum:
 | Quem | O que pode fazer |
 |---|---|
 | **Admin geral** (Robson) | Tudo: editar estoque de qualquer unidade, aprovar contas, editar fichas, editar bobinas. Entra sem precisar de aprovação |
-| **Usuário comum aprovado** | Consulta; participa da contagem física se souber a senha da unidade |
+| **Usuário comum aprovado** | Consulta. A contagem física é do `estoque_alm` da própria unidade e do admin (seção 22) |
 | **Gerente de unidade** (`gerentes_unidade`) | Edita o estoque só da própria unidade. Hoje: Joel (106), David (101), João Ricardo (105) |
 | **Editor de fichas técnicas** | Admin + Joel — editam embalagem (caixa master/fracionada) |
 | **Editor de bobinas** (`editores_bobinas`) | Admin + Jhonatan Palace, Victor Dobner, Izabella — colam a planilha de bobinas |
@@ -248,10 +248,10 @@ Onze tabelas. Os scripts que as criam estão em `sql/` — mas confira a seção
   ao saldo do sistema.
 - **Impressão:** respeita o filtro atual; com `corredor A-B` ou `CANT A-G`, agrupa, quebra
   página a cada troca de corredor e repete o cabeçalho em cada folha.
-- **Modo Contagem (📋, senha por unidade):** estoque físico por item+endereço com diferença na
+- **Modo Contagem (📋, por cargo — sem senha desde 11/09/2026, seção 22):** estoque físico por item+endereço com diferença na
   hora (✅ / +X / −X), cálculo de caixas, tempo real entre todos na mesma unidade, "quem já
   contou" por pessoa e corredor, responsável por corredor, limpar item ou tudo.
-  A senha é liberada uma vez por sessão do navegador.
+  O botão só aparece para o `estoque_alm` da própria unidade e para o admin.
 - **Atualizar dados (admin/gerente):** cola planilha TSV (Item, Descrição, UM, Localização,
   Quantidade); substitui só os itens da unidade selecionada e grava `atualizado_por`.
 - **Atualizar estoques em lote (aba Configurações, só admin):** cola **uma** planilha com o
@@ -466,9 +466,10 @@ Hoje ele cria só estrutura, e o RLS é assunto dos scripts da Fase 1.
 3. **Criar o balde `fotos-bobinas`** (Storage → New bucket). Enquanto não existir, toda foto de
    etiqueta do módulo de OCR é descartada — hoje com aviso na tela, mas descartada.
 
-4. **Cadastrar os e-mails do ALM e as senhas de contagem das oito unidades** na aba
-   Configurações. Unidade sem e-mail tem o envio da Requisição ALM desabilitado; unidade sem
-   senha não abre o modo contagem. Foi o que travou a apresentação na 104.
+4. **Cadastrar os e-mails do ALM das oito unidades** na aba
+   Configurações. Unidade sem e-mail tem o envio da Requisição ALM desabilitado.
+   *(A senha de contagem, que também vivia aqui e travou a apresentação na 104, deixou
+   de existir em 11/09/2026 — ver seção 22.)*
 
 **De código:**
 
@@ -2756,3 +2757,98 @@ se cadastrou. Quem não é admin **nem chega a consultar o banco**.
 E não é duplicação: ele é o **estado** da fila — "ainda tem alguém esperando?" —
 e a notificação é o **evento**. Os dois respondem perguntas diferentes, e o card
 é o que sobra depois de a notificação ser dispensada.
+
+## 22. As senhas de tela saíram (11/09/2026)
+
+O Victor: *"Retirar todo sistema de senhas das telas. Manter as restrições por
+cargos e manter a senha de login, mas senhas de acesso a telas e contagens,
+retirar."*
+
+Eram **três**, e nenhuma delas era a proteção real — o projeto já tinha escrito
+isso duas vezes (ao tirar a senha das bobinas na Fase 2b, e ao tirar o gate do
+Depósito Benchmark em 10/09: *"a senha nunca foi a proteção real, só um atrito
+a mais"*).
+
+| Senha | O que ela guardava | O que guarda agora |
+|---|---|---|
+| **Contagem** (`senha_contagem`) | o botão 📋 da Consulta de Itens | `estoque_alm` da própria unidade, ou admin — o mesmo que o RLS de `contagem_fisica` já exigia |
+| **PIN de edição** (`pin_edicao`) | o painel "Atualizar dados" | admin ou gerente desta unidade (`atualizarBotaoEditar()`), **e** `pode_atualizar_estoque(uni)` dentro do banco |
+| **Controle EXP** (`senha_exp`) | a entrada na tela | `PERFIS` (só `estoque_alm` e `admin` veem a página) e o RLS de `exp_controle_itens` |
+
+### ⚠️ A contagem precisou de uma trava NOVA, e sem ela isto seria um defeito
+
+As outras duas já tinham trava de cargo por baixo — tirar a senha não abriu
+nada. **A contagem não tinha nenhuma:** o botão 📋 aparecia para qualquer conta
+aprovada, e a senha era a única coisa entre ela e o modo contagem.
+
+Tirar a senha e não pôr nada teria sido pior que deixar como estava: a pessoa
+entraria no modo contagem, digitaria a contagem inteira e **cada campo voltaria
+vermelho com "⚠ não salvou"** — o banco recusando uma linha de cada vez, porque
+o RLS de `contagem_fisica` sempre exigiu `estoque_alm` daquela unidade ou admin.
+
+`podeContarNestaUnidade()` (`js/estoque.js`) põe na tela exatamente a regra que
+o banco já aplicava, e `atualizarBotaoContagem()` é chamada depois do login e a
+cada troca de unidade — **`estoque_alm` só conta a própria unidade**, então
+trocar a unidade no cabeçalho pode tirar o direito, e o botão acompanha (e
+desliga o modo contagem, senão a coluna ficaria aberta sem o botão que a fecha).
+Cadastro sem unidade não conta nada: falha fechado, mesma regra da seção 5.
+
+### O que mais mudou junto
+
+- **O painel de edição passou a preencher a caixa de texto ao ABRIR.** Era o
+  acerto do PIN que fazia isso. Sem o ajuste, o painel abriria com a caixa
+  **vazia** e "Salvar no banco de dados" substituiria o estoque da unidade por
+  nada — o PIN estava, sem querer, no meio de um caminho destrutivo.
+- **O Controle EXP abre direto pelo menu.** O gate também escolhia a unidade
+  antes de entrar; isso não se perdeu — o seletor do cabeçalho faz exatamente
+  isso, como em todas as outras telas. E trocar a unidade estando lá deixou de
+  ser um caso especial (existia só para não "pular" a senha).
+- **A aba Configurações perdeu as três colunas de senha.** Não há mais o que
+  cadastrar ali, e um campo que não faz nada é pior que campo nenhum.
+
+### O que NÃO mudou
+
+- **A senha de login.** É a única que sobrou, e é a que importa.
+- **As colunas e as funções continuam no banco**, sem ninguém ler nem escrever
+  nelas: `config_unidade.senha_contagem`/`senha_exp`/`pin_edicao` e as funções
+  `senha_contagem_confere()`/`pin_edicao_confere()`/`senha_exp_confere()`.
+  Nenhum script SQL foi escrito de propósito — derrubar coluna é irreversível, e
+  esta mudança é de tela. Se um dia for para limpar de vez, que seja decisão
+  tomada à parte, com as senhas já anotadas em outro lugar.
+
+Conferido no navegador: o botão 📋 não aparece para `consultor` nem para
+`estoque_aco`, aparece para `estoque_alm` na própria unidade, **some** quando
+ele troca para outra, some se o cadastro não tem unidade, e aparece para admin
+em qualquer unidade; clicar entra no modo contagem sem pedir nada; o clique no
+menu abre o Controle EXP direto e trocar de unidade lá não reabre modal nenhum;
+o painel de edição abre sem PIN, com a caixa já preenchida. Zero erro de
+console, e nenhum dos três modais existe mais no DOM.
+
+## A caixa de sugestões abre um chat no Teams (11/09/2026)
+
+O Victor: *"Na 'caixa de sugestões', ao clicar, abrir um chat no Teams com os
+usuarios Victor.dobner@kingspanisoeste.com.br e
+robson.alves@kingspanisoeste.com.br"*.
+
+O 💡 abre `https://teams.microsoft.com/l/chat/0/0?users=...&message=...` numa aba
+nova — o app do Teams assume se estiver instalado, senão cai no Teams web, e nos
+dois casos o portal continua aberto atrás. **A mensagem já nasce identificada**
+(quem está falando e de qual unidade): sem isso quem recebe vê um texto solto e
+não sabe de onde veio — o mesmo motivo de a sugestão gravada levar nome, unidade
+e perfil junto.
+
+⚠️ **Isto substitui o caminho que o Robson desenhou**, e vale entender por que
+não é um retrocesso. Ele escolheu gravar em `sugestoes_melhoria` em vez de
+`mailto` porque *"ninguém está esperando uma sugestão, então uma que se perde
+nunca é cobrada por ninguém"* — e um `mailto` some se a pessoa fechar o Outlook
+sem enviar. **Uma conversa do Teams não some**: fica no histórico dos dois
+lados. A sugestão continua tendo onde ficar; só deixou de depender de alguém
+lembrar de abrir uma lista dentro do portal.
+
+- **O modal e `enviarSugestao()` continuam no código**, sem serem chamados pelo
+  botão. O que já foi mandado por ali continua legível na aba Configurações, e
+  voltar atrás é trocar uma linha. A tabela `sugestoes_melhoria` não recebe
+  linha nova.
+- ⚠️ **O e-mail do Robson aqui é `robson.alves@`, que foi o dado do pedido.** Nos
+  commits dele neste repositório o endereço é `r.alves1@kingspanisoeste.com.br`.
+  Se o chat não abrir com ele, é o primeiro lugar para olhar.

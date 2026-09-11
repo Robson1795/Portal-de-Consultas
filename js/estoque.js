@@ -1721,9 +1721,6 @@ compareModal.addEventListener('click', (e) => {
 });
 
 // ---- Modo Contagem (planilha de inventário com senha própria) ----
-const contagemModal = document.getElementById('contagemModal');
-const contagemPinInput = document.getElementById('contagemPinInput');
-const contagemPinMsg = document.getElementById('contagemPinMsg');
 
 let contagemMap = {};
 let localizacaoFisicaMap = {};
@@ -2161,20 +2158,15 @@ quemContouModal.addEventListener('click', (e) => {
   if (e.target === quemContouModal) quemContouModal.classList.remove('open');
 });
 
-function unidadeDesbloqueada(cod) {
-  return sessionStorage.getItem('contagem_ok_' + cod) === '1';
-}
-function marcarUnidadeDesbloqueada(cod) {
-  sessionStorage.setItem('contagem_ok_' + cod, '1');
-}
+// (`unidadeDesbloqueada`/`marcarUnidadeDesbloqueada` saíram em 11/09/2026 com a
+// senha de contagem: guardavam no sessionStorage qual unidade já tinha tido a
+// senha digitada, e não há mais senha para lembrar.)
 
 async function ativarModoContagem() {
   modoContagemAtivo = true;
-  marcarUnidadeDesbloqueada(unidadeAtual);
   await carregarContagens();
   document.querySelectorAll('.col-contagem').forEach(el => el.style.display = 'table-cell');
   document.querySelectorAll('.col-acoes').forEach(el => el.style.display = 'none');
-  contagemModal.classList.remove('open');
   contagemBtn.classList.add('active-toggle');
   document.getElementById('quemContouBtn').style.display = 'inline-block';
   // Quem não pode limpar não vê o botão. Esconder é cortesia; a trava é a
@@ -2198,61 +2190,37 @@ function desativarModoContagem() {
   pararTempoReal();
 }
 
+// ⚠️ A SENHA DE CONTAGEM SAIU (11/09/2026), e no lugar dela ficou a trava que
+// SEMPRE foi a de verdade: quem conta é o `estoque_alm` da própria unidade, ou
+// o admin -- exatamente o que o RLS de `contagem_fisica` exige
+// (`sql/fase1c-rls.sql`).
+//
+// Tirar a senha e não pôr nada teria sido pior que deixar como estava: o botão
+// apareceria para qualquer conta aprovada, a pessoa entraria no modo contagem,
+// digitaria a contagem inteira e CADA campo voltaria vermelho com
+// "⚠ não salvou" -- o banco recusando uma linha de cada vez. A trava de cargo
+// na tela existe para não oferecer o que o banco vai negar.
+function podeContarNestaUnidade() {
+  if (perfilAtual === 'admin') return true;
+  if (perfilAtual !== 'estoque_alm') return false;
+  // Cadastro sem unidade não conta nada -- falha fechado, mesma regra da seção 5.
+  return !!unidadeDoUsuario && unidadeDoUsuario === unidadeAtual;
+}
+
+function atualizarBotaoContagem() {
+  const botao = document.getElementById('contagemBtn');
+  if (!botao) return;
+  const pode = podeContarNestaUnidade();
+  botao.style.display = pode ? '' : 'none';
+  // Trocou para uma unidade que não é a dela estando no modo contagem: desliga,
+  // senão a coluna continuaria aberta sem o botão que a fecha.
+  if (!pode && modoContagemAtivo) desativarModoContagem();
+}
+
 const contagemBtn = document.getElementById('contagemBtn');
 contagemBtn.addEventListener('click', () => {
-  if (modoContagemAtivo) {
-    desativarModoContagem();
-  } else if (unidadeDesbloqueada(unidadeAtual)) {
-    // Já digitou a senha certa dessa unidade nesta mesma sessão do navegador - não pede de novo
-    ativarModoContagem();
-  } else {
-    contagemPinInput.value = '';
-    contagemPinMsg.textContent = '';
-    // rotuloUnidade() é tolerante a unidade fora do mapa (ex.: SESMT, que
-    // fica de fora de UNIDADES de propósito) -- ler UNIDADES[unidadeAtual]
-    // direto quebrava aqui pro SESMT (undefined.cidade), travando o botão
-    // sem erro visível pra quem clicava.
-    document.getElementById('contagemHint').textContent =
-      `Digite a senha da ${rotuloUnidade(unidadeAtual)} para liberar a coluna de contagem física.`;
-    contagemModal.classList.add('open');
-  }
-});
-
-// A senha nao esta no navegador: o banco responde apenas sim ou nao.
-document.getElementById('contagemPinSubmit').addEventListener('click', async () => {
-  const botao = document.getElementById('contagemPinSubmit');
-  contagemPinMsg.textContent = 'Conferindo...';
-  botao.disabled = true;
-
-  const { data, error } = await sb.rpc('senha_contagem_confere',
-    { uni: unidadeAtual, tentativa: contagemPinInput.value });
-
-  botao.disabled = false;
-  if (error) {
-    // Erro de rede ou funcao ausente nao pode passar por "senha certa",
-    // nem ficar calado.
-    contagemPinMsg.textContent = 'Não foi possível conferir a senha: ' + error.message;
-    console.error('Falha ao conferir a senha de contagem:', error.message);
-    return;
-  }
-  if (data === true) {
-    contagemPinMsg.textContent = '';
-    ativarModoContagem();
-  } else {
-    contagemPinMsg.textContent = 'Senha incorreta.';
-  }
-});
-
-contagemPinInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') document.getElementById('contagemPinSubmit').click();
-});
-
-document.getElementById('contagemCloseBtn').addEventListener('click', () => {
-  contagemModal.classList.remove('open');
-});
-
-contagemModal.addEventListener('click', (e) => {
-  if (e.target === contagemModal) contagemModal.classList.remove('open');
+  if (modoContagemAtivo) desativarModoContagem();
+  else ativarModoContagem();
 });
 
 document.getElementById('searchBox').addEventListener('input', () => { pagina = 1; applyFilterAndSort(); });
@@ -2511,44 +2479,28 @@ document.querySelectorAll('#dataTable thead th').forEach(th => {
 });
 
 const editPanel = document.getElementById('editPanel');
-const pinGateArea = document.getElementById('pinGateArea');
 const editFormArea = document.getElementById('editFormArea');
-const pinInput = document.getElementById('pinInput');
-const pinMsg = document.getElementById('pinMsg');
 const pasteArea = document.getElementById('pasteArea');
 const saveMsg = document.getElementById('saveMsg');
 
 document.getElementById('toggleEditBtn').addEventListener('click', () => {
+  const abrindo = !editPanel.classList.contains('open');
   editPanel.classList.toggle('open');
-});
-
-pinInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') document.getElementById('pinSubmitBtn').click();
-});
-
-document.getElementById('pinSubmitBtn').addEventListener('click', async () => {
-  const botao = document.getElementById('pinSubmitBtn');
-  pinMsg.textContent = 'Conferindo...';
-  botao.disabled = true;
-
-  const { data, error } = await sb.rpc('pin_edicao_confere',
-    { uni: unidadeAtual, tentativa: pinInput.value });
-
-  botao.disabled = false;
-  if (error) {
-    pinMsg.textContent = 'Não foi possível conferir o PIN: ' + error.message;
-    console.error('Falha ao conferir o PIN de edição:', error.message);
-    return;
-  }
-  if (data === true) {
-    pinMsg.textContent = '';
-    pinGateArea.style.display = 'none';
-    editFormArea.style.display = 'block';
-    pasteArea.value = currentData.map(r => [r.item, r.descricao, r.um, r.localizacao, r.quantidade].join('\t')).join('\n');
-  } else {
-    pinMsg.textContent = 'PIN incorreto.';
+  // Era o acerto do PIN que enchia a caixa de texto. Sem ele, é a abertura do
+  // painel -- e isso não é cosmético: abrir com a caixa VAZIA e clicar em
+  // "Salvar no banco de dados" substituiria o estoque da unidade por nada.
+  if (abrindo) {
+    pasteArea.value = currentData
+      .map(r => [r.item, r.descricao, r.um, r.localizacao, r.quantidade].join('\t')).join('\n');
   }
 });
+
+// ⚠️ O PIN DE EDIÇÃO SAIU (11/09/2026, pedido do Victor: "retirar todo sistema
+// de senhas das telas"). Este painel nunca teve só o PIN protegendo: quem chega
+// a VER o botão já passou por `atualizarBotaoEditar()` (js/auth.js), que exige
+// admin ou gerente DESTA unidade, e a gravação passa por `substituir_estoque()`,
+// que confere `pode_atualizar_estoque(uni)` dentro do banco. O PIN era a
+// terceira camada, e a única que não protegia nada sozinha.
 
 document.getElementById('cancelEditBtn').addEventListener('click', () => {
   editPanel.classList.remove('open');
@@ -2620,6 +2572,9 @@ async function trocarUnidade(cod) {
   if (modoContagemAtivo) desativarModoContagem();
   await loadData();
   await atualizarBotaoEditar();
+  // `estoque_alm` só conta a PRÓPRIA unidade: trocar a unidade no cabeçalho
+  // pode tirar (ou devolver) o direito de contar, e o botão tem de acompanhar.
+  atualizarBotaoContagem();
   // Trocar a unidade tem de recarregar a tela ABERTA, nao so o estoque geral.
   // Sem isto, quem estava no Estoque de Aco trocava de unidade e continuava
   // vendo as bobinas da anterior (bug de 08/09/2026).
@@ -2628,7 +2583,7 @@ async function trocarUnidade(cod) {
   if (paginaAtual === 'requisicao') await carregarRequisicao();
   // Se a contagem estava ativa e a unidade ja foi desbloqueada nesta sessao,
   // mantem ativa sem pedir a senha de novo.
-  if (estavaContando && unidadeDesbloqueada(unidadeAtual)) {
+  if (estavaContando && podeContarNestaUnidade()) {
     await ativarModoContagem();
   }
 }

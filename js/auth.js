@@ -263,6 +263,10 @@ async function mostrarTelaCorreta(session) {
     await atualizarPermissaoAnalise(); // precisa rodar antes do menu, pra saber se mostra "Análise de Compras"
     montarMenu();           // ja abre a primeira pagina permitida
     await atualizarBotaoEditar();
+    // O botão de contagem virou trava por cargo quando a senha saiu (11/09/2026):
+    // sem esta chamada ele apareceria para todo mundo, inclusive para quem o
+    // banco recusaria em cada linha digitada.
+    atualizarBotaoContagem();
     // Depois do menu: os passos do tour apontam pros itens do menu, que
     // antes de montarMenu() nem existem no DOM (ver js/tour.js).
     iniciarTourSePrimeiraVez();
