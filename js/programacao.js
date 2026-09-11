@@ -1040,27 +1040,40 @@ async function buscarDescricoesItens(codigos) {
   const mapa = new Map();
   if (!unicos.length) return mapa;
 
+  // ⚠️ O MAPA É CHAVEADO PELO CÓDIGO NORMALIZADO (trim + maiúscula), não pelo
+  // código cru -- e quem lê usa a mesma normalização. Até 11/09/2026 era cru
+  // dos dois lados, e um item gravado como "131556i" não achava a descrição do
+  // "131556I" do catálogo: aparecia sem descrição na lista e na aba Conferir.
+  // Era o mesmo defeito da trava de código (ver itemExisteNoCatalogoExp), e a
+  // aba Conferir já normalizava desde sempre -- aqui só alinha com ela.
   unicos.forEach(c => {
-    if (mapa.has(c)) return;
-    const doCatalogoExp = catalogoExpItens.find(l => l.codigo_item === c && l.descricao);
-    if (doCatalogoExp) mapa.set(c, { descricao: doCatalogoExp.descricao, um: doCatalogoExp.um });
+    const chave = normalizaCodigoItem(c);
+    if (mapa.has(chave)) return;
+    const doCatalogoExp = catalogoExpItens.find(l => normalizaCodigoItem(l.codigo_item) === chave && l.descricao);
+    if (doCatalogoExp) mapa.set(chave, { descricao: doCatalogoExp.descricao, um: doCatalogoExp.um });
   });
 
-  const faltandoAlm = unicos.filter(c => !mapa.has(c));
+  // As duas buscas abaixo vão ao banco com o código como ele foi digitado: o
+  // `in` do PostgREST é sensível a maiúscula/minúscula e não dá pra
+  // normalizar do outro lado sem trocar por ilike item a item. O que dá pra
+  // garantir aqui é a CHAVE do mapa -- resultado que voltar entra normalizado,
+  // então a leitura acha do mesmo jeito.
+  const faltandoAlm = unicos.filter(c => !mapa.has(normalizaCodigoItem(c)));
   if (faltandoAlm.length) {
     const { data: doCatalogo } = await sb.from('itens_requisicao')
       .select('codigo, descricao, um').in('codigo', faltandoAlm);
-    (doCatalogo || []).forEach(r => mapa.set(r.codigo, { descricao: r.descricao, um: r.um }));
+    (doCatalogo || []).forEach(r => mapa.set(normalizaCodigoItem(r.codigo), { descricao: r.descricao, um: r.um }));
   }
 
-  const faltando = unicos.filter(c => !mapa.has(c));
+  const faltando = unicos.filter(c => !mapa.has(normalizaCodigoItem(c)));
   if (faltando.length) {
     const { data: doEstoque } = await sb.from('estoque')
       // Almoxarifado: e so pra preencher descricao/UM na tela. Sem o recorte,
       // um EPI com o mesmo codigo poderia emprestar a descricao dele aqui.
       .select('item, descricao, um').in('item', faltando).eq('deposito', 'alm');
     (doEstoque || []).forEach(r => {
-      if (!mapa.has(r.item)) mapa.set(r.item, { descricao: r.descricao, um: r.um });
+      const chave = normalizaCodigoItem(r.item);
+      if (!mapa.has(chave)) mapa.set(chave, { descricao: r.descricao, um: r.um });
     });
   }
   return mapa;
@@ -1240,7 +1253,7 @@ let sortDirExp = 1;
 // isso o valor de cada coluna passa por uma função, não por um nome de
 // campo direto como no #dataTable.
 function valorColunaExp(l, key) {
-  const desc = expCtrlDescMap.get(l.codigo_item);
+  const desc = expCtrlDescMap.get(normalizaCodigoItem(l.codigo_item));
   switch (key) {
     case 'loc':     return l.localizacao || '';
     case 'item':    return l.codigo_item || '';
@@ -1392,7 +1405,7 @@ function renderExpControle(erroCarregamento) {
   }
 
   corpo.innerHTML = linhas.map(l => {
-    const desc = expCtrlDescMap.get(l.codigo_item);
+    const desc = expCtrlDescMap.get(normalizaCodigoItem(l.codigo_item));
     const retirado = l.status === 'retirado';
     return `
     <tr${retirado ? ' style="opacity:0.6;"' : ''}>
@@ -1513,7 +1526,7 @@ function montarConferirExp() {
     // A descrição do catálogo é a preferida (é a do sistema); esta cobre o item
     // que só existe no físico, e que por definição não está no catálogo.
     if (!infoItem.has(chave)) {
-      const d = expCtrlDescMap.get(l.codigo_item) || {};
+      const d = expCtrlDescMap.get(normalizaCodigoItem(l.codigo_item)) || {};
       infoItem.set(chave, { codigo: l.codigo_item, descricao: d.descricao || '', um: d.um || '' });
     }
   });
@@ -2487,7 +2500,7 @@ function linhasParaImprimirExpControle() {
 
 function linhasExportacaoExpControle() {
   return linhasParaImprimirExpControle().map(l => {
-    const desc = expCtrlDescMap.get(l.codigo_item);
+    const desc = expCtrlDescMap.get(normalizaCodigoItem(l.codigo_item));
     return [
       l.localizacao || '', l.codigo_item, desc && desc.descricao ? desc.descricao : '', desc && desc.um ? desc.um : '',
       l.numero_pedido || '', l.quantidade != null ? l.quantidade : null, l.numero_os_op || '', l.lote || '', l.referencia || '',
@@ -2929,7 +2942,7 @@ function renderConferencia() {
             <thead><tr><th>Item</th><th>Descrição</th><th>Qtd</th><th>Nº Pedido</th><th>Ação</th></tr></thead>
             <tbody>
               ${itens.map(l => {
-                const desc = expCtrlDescMap.get(l.codigo_item);
+                const desc = expCtrlDescMap.get(normalizaCodigoItem(l.codigo_item));
                 return `
                 <tr>
                   <td class="item">${escapeHtml(l.codigo_item)}</td>
@@ -3003,7 +3016,7 @@ function renderHistoricoRetiradas() {
   }
 
   corpo.innerHTML = retirados.map(l => {
-    const desc = expCtrlDescMap.get(l.codigo_item);
+    const desc = expCtrlDescMap.get(normalizaCodigoItem(l.codigo_item));
     const quando = l.retirado_em ? new Date(l.retirado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—';
     return `
     <tr>
@@ -3064,7 +3077,7 @@ function montarRelatorioPcp(dataEscolhida, emailPcp) {
   const linhas = saidasDoDia
     .sort((a, b) => new Date(a.retirado_em) - new Date(b.retirado_em))
     .map(l => {
-      const desc = expCtrlDescMap.get(l.codigo_item);
+      const desc = expCtrlDescMap.get(normalizaCodigoItem(l.codigo_item));
       const quando = new Date(l.retirado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
       return `${quando}  Pedido ${l.numero_pedido || '—'}  |  Item ${l.codigo_item} - ${desc && desc.descricao ? desc.descricao : 'sem descrição'}`
         + `  |  Qtd ${l.quantidade != null ? l.quantidade : '—'}  |  Retirado por ${l.retirado_por || '—'}`;
@@ -3280,8 +3293,18 @@ document.getElementById('catalogoExpBusca').addEventListener('input', () => rend
 // Sem a trava, um código digitado errado virava uma linha fantasma em
 // exp_controle_itens -- ninguém vai apagar isso na mão, e é exatamente o
 // tipo de "Só no físico" que a aba Conferir foi feita pra achar.
+//
+// ⚠️ Compara NORMALIZADO (normalizaCodigoItem: trim + maiúscula), e não com
+// `===` cru como era até 11/09/2026. O Robson digitou "131556i" com o
+// catálogo tendo "131556I" e a trava disse "não está no Catálogo EXP" --
+// item que existe, barrado por causa da caixa da letra. Pior: a aba
+// Conferir SEMPRE comparou normalizado, então os dois lados do portal
+// discordavam sobre o que é "o mesmo item". A regra é uma só: se o
+// confronto trata dois códigos como o mesmo item, a trava tem de tratar
+// também.
 function itemExisteNoCatalogoExp(codigo) {
-  return catalogoExpItens.some(l => l.codigo_item === codigo);
+  const chave = normalizaCodigoItem(codigo);
+  return catalogoExpItens.some(l => normalizaCodigoItem(l.codigo_item) === chave);
 }
 
 // Trava/destrava os campos que vêm DEPOIS do Item no formulário completo,

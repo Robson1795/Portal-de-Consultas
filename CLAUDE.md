@@ -2683,6 +2683,49 @@ funciona; sem `podeVerEstoqueMinimo()` o campo volta a ser só leitura
 (chip) mas o botão 🕒 continua visível (histórico é consulta, não edição).
 Zero erro de console.
 
+## ⚠️ Código do item: comparação sensível a maiúscula/minúscula (11/09/2026)
+
+O Robson, digitando `131556i` no formulário da Entrada: *"esse item ja
+esta no catalago, mas diz que nao esta"* — a trava recusava um item que
+existe, porque o catálogo tem `131556I` (maiúsculo, como sai da planilha
+do sistema) e ele digitou minúsculo.
+
+**A regra que faltava:** se a aba Conferir trata dois códigos como o
+MESMO item, todo o resto do portal tem de tratar também. A aba Conferir
+sempre normalizou (`normalizaCodigoItem` = `trim` + maiúscula, é a chave
+do confronto sistema × físico). Dois outros lugares comparavam com `===`
+cru e discordavam dela:
+
+- **`itemExisteNoCatalogoExp()`** — a trava do formulário manual. Era
+  `l.codigo_item === codigo`. Resultado: item real barrado por causa da
+  caixa da letra. **Era o bug relatado.**
+- **`buscarDescricoesItens()`** — o mapa `expCtrlDescMap` era chaveado
+  pelo código cru, e lido pelo código cru. Um item gravado `131556i` não
+  achava a descrição do `131556I` do catálogo: aparecia **sem descrição**
+  na lista e na aba Conferir. Esse é o mesmo sintoma que originou o
+  pedido da trava em 10/09 (o item `135556i` "Só no físico", sem
+  descrição) — ou seja, os dois pedidos tinham a mesma causa raiz.
+
+Correção: os dois passam a normalizar, e as 7 leituras de
+`expCtrlDescMap.get(...)` normalizam junto (o mapa agora é chaveado pelo
+código normalizado). As duas consultas ao banco dentro de
+`buscarDescricoesItens()` continuam indo com o código como foi digitado
+— o `in` do PostgREST é sensível a caixa e trocar por `ilike` item a item
+sairia caro; o que ficou garantido é a CHAVE do mapa, então o que voltar
+é encontrado na leitura.
+
+**A trava continua travando:** o que mudou é só o que conta como "mesmo
+código", não o rigor. Código que realmente não existe no catálogo
+continua barrado.
+
+Conferido no navegador, com o catálogo tendo `131556I`: digitar
+`131556i`, `131556I` ou `  131556i  ` passa na trava; `999999` continua
+barrado; a descrição é encontrada nos três casos. E o confronto ponta a
+ponta: o mesmo item gravado como `131556i` (60 un) e `131556I` (40 un)
+em locais diferentes vira UMA linha, soma 100, bate com os 100 do
+sistema e sai como "Confere", com as duas localizações. Zero erro de
+console.
+
 ## 21. Notificação de cadastro pendente, no canto da tela (11/09/2026)
 
 O Victor: *"o Robson implementou uma notificação que avisa quando alguém se
