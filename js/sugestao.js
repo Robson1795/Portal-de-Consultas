@@ -33,7 +33,51 @@ function fecharSugestaoModal() {
   sugestaoModal.classList.remove('open');
 }
 
-document.getElementById('sugestaoBtn').addEventListener('click', abrirSugestaoModal);
+// ---- O 💡 abre um chat no Teams (11/09/2026) ----------------------------
+//
+// O Victor: *"Na 'caixa de sugestões', ao clicar, abrir um chat no Teams com os
+// usuarios Victor.dobner@... e robson.alves@..."*.
+//
+// O modal continua no código e `enviarSugestao()` ainda grava em
+// `sugestoes_melhoria` -- não foi removido de propósito: o que já foi mandado
+// por ali continua legível na aba Configurações, e voltar atrás é trocar esta
+// linha. O que mudou é para onde o BOTÃO leva.
+//
+// ⚠️ A preocupação que fez o Robson escolher gravar no banco em vez de `mailto`
+// (*"ninguém está esperando uma sugestão, então uma que se perde nunca é
+// cobrada por ninguém"*) NÃO vale para o Teams: um `mailto` some se a pessoa
+// fechar a janela do Outlook sem enviar, mas uma conversa do Teams fica no
+// histórico dos dois lados. A sugestão continua tendo onde ficar -- só deixou
+// de ficar numa lista que alguém precisa lembrar de abrir.
+const TEAMS_SUGESTOES = [
+  'Victor.dobner@kingspanisoeste.com.br',
+  'robson.alves@kingspanisoeste.com.br'
+];
+
+function abrirChatSugestaoNoTeams() {
+  // Link profundo do Teams: `users` são os participantes do chat. Abre em aba
+  // nova -- o app do Teams assume se estiver instalado, senão cai no Teams web,
+  // e nos dois casos o portal continua aberto atrás.
+  const url = 'https://teams.microsoft.com/l/chat/0/0?users='
+    + encodeURIComponent(TEAMS_SUGESTOES.join(','))
+    + '&message=' + encodeURIComponent(mensagemInicialSugestao());
+  window.open(url, '_blank', 'noopener');
+}
+
+// A mensagem já nasce dizendo QUEM está falando e de ONDE. Sem isso, quem
+// recebe vê um texto solto e não sabe de qual unidade veio nem que perfil a
+// pessoa tem -- foi o mesmo motivo de a sugestão gravada levar nome, unidade e
+// perfil junto.
+function mensagemInicialSugestao() {
+  const quem = nomeUsuarioAtual || emailUsuarioAtual || '';
+  const onde = unidadeAtual ? rotuloUnidade(unidadeAtual) : '';
+  return 'Sugestão de melhoria do Portal de Estoque'
+    + (quem ? ' — ' + quem : '')
+    + (onde ? ' (' + onde + ')' : '')
+    + ': ';
+}
+
+document.getElementById('sugestaoBtn').addEventListener('click', abrirChatSugestaoNoTeams);
 document.getElementById('sugestaoCloseBtn').addEventListener('click', fecharSugestaoModal);
 sugestaoModal.addEventListener('click', (e) => {
   if (e.target === sugestaoModal) fecharSugestaoModal();

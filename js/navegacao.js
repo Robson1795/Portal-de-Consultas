@@ -170,127 +170,30 @@ function mostrarPagina(id) {
 document.getElementById('sidebarNav').addEventListener('click', (e) => {
   const item = e.target.closest('.nav-item');
   if (!item) return;
-  // Controle EXP Acessórios não abre direto: primeiro escolhe a unidade e
-  // confere a senha dela (abrirGateExp, mais abaixo). Cada unidade só
-  // enxerga o próprio estoque -- nunca mistura com as outras.
-  //
-  // Depósito Benchmark NÃO entra mais aqui (10/09/2026): virou a mesma tela
-  // de Consulta de Itens (Almoxarifado/SESMT), que nunca pediu senha própria
-  // -- a senha existia para proteger o registro de pedido/etiqueta do
-  // modelo antigo, que não existe mais nesta tela. A permissão de verdade
-  // continua sendo o RLS por unidade/perfil, igual ao Almoxarifado/SESMT.
-  if (item.dataset.pagina === 'expacessorios') {
-    abrirGateExp(item.dataset.pagina);
-    return;
-  }
+  // Controle EXP Acessórios abre direto desde 11/09/2026. Antes passava por um
+  // modal que escolhia a unidade e pedia a senha dela; a senha saiu inteira
+  // (ver o bloco mais abaixo), e a escolha de unidade continua no seletor do
+  // cabeçalho, igual a todas as outras telas.
   mostrarPagina(item.dataset.pagina);
 });
 
-// ---- Entrada no Controle EXP Acessórios / Depósito Benchmark: unidade + senha
-// Mesmo padrão da senha de Contagem Física (js/estoque.js,
-// senha_contagem_confere): a senha nunca chega no navegador, o banco só
-// responde sim/não (sql/fase9-senha-exp.sql). Fica desbloqueada só nesta
-// sessão do navegador (sessionStorage), por unidade -- vale pras duas telas
-// (mesma senha, mesma área física de expedição, só o setor muda).
-function unidadeExpDesbloqueada(cod) {
-  try { return sessionStorage.getItem('exp_ok_' + cod) === '1'; } catch (err) { return false; }
-}
-function marcarUnidadeExpDesbloqueada(cod) {
-  try { sessionStorage.setItem('exp_ok_' + cod, '1'); } catch (err) { /* sem sessionStorage, so pede de novo */ }
-}
-
-// Qual página abrir depois da senha confirmada -- guardado aqui porque o
-// clique no botão "Entrar" do modal não sabe de onde veio. Só
-// 'expacessorios' usa o gate desde 10/09/2026 (Depósito Benchmark deixou de
-// pedir senha, ver PAGINAS.expbenchmark), mas o parâmetro continua genérico
-// caso outra página precise um dia.
-let gateAlvoPagina = 'expacessorios';
-
-function abrirGateExp(alvoPagina) {
-  gateAlvoPagina = alvoPagina || 'expacessorios';
-  document.getElementById('expGateTitulo').textContent = PAGINAS[gateAlvoPagina].rotulo;
-  const permitidas = (perfilAtual === 'admin')
-    ? Object.keys(UNIDADES)
-    : (unidadeDoUsuario ? [unidadeDoUsuario] : []);
-
-  if (!permitidas.length) {
-    alert('Sua conta ainda não tem unidade definida. Peça ao administrador.');
-    return;
-  }
-
-  const select = document.getElementById('expGateUnidade');
-  select.innerHTML = permitidas.map(c =>
-    `<option value="${c}" ${c === unidadeAtual ? 'selected' : ''}>${escapeHtml(rotuloUnidade(c))}</option>`
-  ).join('');
-  document.getElementById('expGateSenhaInput').value = '';
-  document.getElementById('expGateMsg').textContent = '';
-  atualizarCampoSenhaGateExp();
-  document.getElementById('expGateModal').classList.add('open');
-}
-
-function atualizarCampoSenhaGateExp() {
-  const uni = document.getElementById('expGateUnidade').value;
-  const jaDesbloqueada = unidadeExpDesbloqueada(uni);
-  document.getElementById('expGateSenhaInput').style.display = jaDesbloqueada ? 'none' : 'block';
-  document.getElementById('expGateEntrarBtn').textContent = jaDesbloqueada ? 'Entrar' : 'Liberar e entrar';
-  document.getElementById('expGateMsg').textContent = '';
-}
-
-document.getElementById('expGateUnidade').addEventListener('change', atualizarCampoSenhaGateExp);
-
-async function entrarNoControleExp(uni) {
-  unidadeAtual = uni;
-  document.getElementById('expGateModal').classList.remove('open');
-  const sel = document.getElementById('unitSelect'); // topbar, só existe pra admin (varias unidades)
-  if (sel) sel.value = uni;
-  mostrarPagina(gateAlvoPagina);
-}
-
-document.getElementById('expGateEntrarBtn').addEventListener('click', async () => {
-  const uni = document.getElementById('expGateUnidade').value;
-  const msg = document.getElementById('expGateMsg');
-  const btn = document.getElementById('expGateEntrarBtn');
-
-  if (unidadeExpDesbloqueada(uni)) {
-    await entrarNoControleExp(uni);
-    return;
-  }
-
-  const tentativa = document.getElementById('expGateSenhaInput').value;
-  if (!tentativa) {
-    msg.textContent = 'Digite a senha.';
-    return;
-  }
-
-  btn.disabled = true;
-  msg.textContent = 'Conferindo...';
-  const { data, error } = await sb.rpc('senha_exp_confere', { uni, tentativa });
-  btn.disabled = false;
-
-  if (error) {
-    msg.textContent = 'Não foi possível conferir a senha: ' + error.message;
-    console.error('Falha ao conferir a senha do Controle EXP:', error.message);
-    return;
-  }
-  if (data !== true) {
-    msg.textContent = 'Senha incorreta.';
-    return;
-  }
-
-  marcarUnidadeExpDesbloqueada(uni);
-  await entrarNoControleExp(uni);
-});
-
-document.getElementById('expGateSenhaInput').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') document.getElementById('expGateEntrarBtn').click();
-});
-
-document.getElementById('expGateCloseBtn').addEventListener('click', () => {
-  document.getElementById('expGateModal').classList.remove('open');
-});
-document.getElementById('expGateModal').addEventListener('click', (e) => {
-  if (e.target === document.getElementById('expGateModal')) document.getElementById('expGateModal').classList.remove('open');
-});
+// ---- A senha do Controle EXP saiu (11/09/2026) --------------------------
+//
+// O Victor: *"retirar todo sistema de senhas das telas. Manter as restrições
+// por cargos e manter a senha de login, mas senhas de acesso a telas e
+// contagens, retirar."*
+//
+// Entrar em "Controle EXP Acessórios" pedia unidade + senha por unidade
+// (`abrirGateExp`, `sql/fase9-senha-exp.sql`). O Depósito Benchmark já tinha
+// saído desse gate em 10/09, e o registro na conversa daquele dia já dizia o
+// que vale aqui: **a senha nunca foi a proteção real** -- quem lê e escreve em
+// `exp_controle_itens` é decidido pelo RLS (conta aprovada da unidade, ou
+// admin), e quem VÊ a página é decidido por `PERFIS` (só `estoque_alm` e
+// `admin`). A senha era um atrito a mais, no meio dos dois.
+//
+// O gate também escolhia a UNIDADE antes de entrar. Isso não se perdeu: o
+// seletor de unidade do cabeçalho continua fazendo exatamente isso, e é o
+// mesmo caminho das outras telas.
 
 // ---- Abrir e fechar o menu --------------------------------------------------
 function alternarMenu() {
@@ -353,19 +256,10 @@ function montarCabecalho() {
         `<option value="${c}" ${c === unidadeAtual ? 'selected' : ''}>${escapeHtml(rotuloUnidade(c))}</option>`
       ).join('')}</select>` + cracha;
     document.getElementById('unitSelect').addEventListener('change', (e) => {
-      // Trocar a unidade pelo seletor do topo enquanto está no Controle EXP
-      // Acessórios não pode pular a senha daquela unidade -- senão bastava
-      // trocar aqui em vez de usar o botão do menu pra escapar da senha.
-      // Depósito Benchmark NÃO entra mais aqui (10/09/2026): não tem senha
-      // pra pular, igual ao Almoxarifado/SESMT logo abaixo.
-      if (paginaAtual === 'expacessorios') {
-        const escolhida = e.target.value;
-        e.target.value = unidadeAtual; // volta o seletor pra unidade atual até confirmar a senha
-        abrirGateExp(paginaAtual); // popula as opções e reseta o modal, mantendo a mesma tela de destino
-        document.getElementById('expGateUnidade').value = escolhida;
-        atualizarCampoSenhaGateExp();
-        return;
-      }
+        // Trocar a unidade aqui era um caso especial enquanto o Controle EXP
+        // tinha senha: sem o desvio, trocar no seletor pularia a senha daquela
+        // unidade. Sem senha, não há o que pular -- segue o caminho de todas as
+        // outras telas.
       trocarUnidade(e.target.value);
     });
   }

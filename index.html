@@ -97,8 +97,8 @@
             <!-- Canal do consultor para o Robson e o Victor (ver js/sugestao.js).
                  Fica escondido por padrão: montarMenu() decide quem vê. -->
             <button class="topbar-tema" id="sugestaoBtn" style="display:none;"
-                    title="Enviar uma sugestão de melhoria"
-                    aria-label="Enviar uma sugestão de melhoria">💡</button>
+                    title="Sugestão de melhoria — abre um chat no Teams com o Robson e o Victor"
+                    aria-label="Sugestão de melhoria: abre um chat no Teams">💡</button>
             <button class="topbar-tema" id="tourBtn" title="Ver o tour do portal"
                     aria-label="Ver o tour do portal">🎓</button>
             <button class="topbar-tema" id="temaToggle" title="Alternar entre modo claro e escuro"
@@ -169,13 +169,7 @@
   </div>
 
   <div class="edit-panel" id="editPanel">
-    <div id="pinGateArea" class="pin-gate">
-      <span>Digite o PIN para liberar a edição:</span>
-      <input type="password" id="pinInput" placeholder="PIN" maxlength="12">
-      <button class="btn btn-primary" id="pinSubmitBtn">Entrar</button>
-      <span class="status-msg status-err" id="pinMsg"></span>
-    </div>
-    <div id="editFormArea" style="display:none;">
+    <div id="editFormArea">
       <h3>Colar nova lista de itens</h3>
       <p>Cole os dados no formato: <b>Item [TAB] Descrição [TAB] UM [TAB] Localização [TAB] Quantidade</b> — uma linha por item. Isso substitui a lista inteira no banco de dados para todos que abrirem este link.</p>
       <textarea id="pasteArea" placeholder="Cole aqui os dados (separados por TAB)..."></textarea>
@@ -1051,7 +1045,7 @@
               <th>E-mails do ALM</th>
               <th>E-mail do PCP</th>
               <th title="Destinatário da solicitação de compra, na Análise de Compras">E-mail do Compras</th>
-              <th>Senha de contagem</th>
+              
               <th>Senha Controle EXP</th>
               <th>PIN de edição</th>
               <th></th>
@@ -1316,31 +1310,10 @@
     </div>
   </div>
 
-  <div class="modal-overlay" id="contagemModal">
-    <div class="modal-box" style="max-width:360px; text-align:center;">
-      <button class="modal-close" id="contagemCloseBtn">✕</button>
-      <h3 style="margin-top:0;">Planilha para contagem</h3>
-      <p style="font-size:13px; color:var(--muted); margin-bottom:14px;" id="contagemHint">Digite a senha para liberar a coluna de contagem física.</p>
-      <input type="password" id="contagemPinInput" placeholder="Senha" maxlength="12" style="width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:10px; font-size:14px; text-align:center;">
-      <button class="btn btn-primary" id="contagemPinSubmit" style="width:100%;">Liberar</button>
-      <div class="status-msg status-err" id="contagemPinMsg" style="margin-top:8px;"></div>
-    </div>
-  </div>
 
   <!-- Entrada no Controle EXP Acessórios: escolhe a unidade e confere a -->
   <!-- senha daquela unidade -- cada unidade é responsável só pelo próprio -->
   <!-- estoque, o Controle EXP não pode misturar unidades diferentes. -->
-  <div class="modal-overlay" id="expGateModal">
-    <div class="modal-box" style="max-width:360px; text-align:center;">
-      <button class="modal-close" id="expGateCloseBtn">✕</button>
-      <h3 style="margin-top:0;" id="expGateTitulo">Controle EXP Acessórios</h3>
-      <p style="font-size:13px; color:var(--muted); margin-bottom:14px;">Escolha a unidade para entrar.</p>
-      <select id="expGateUnidade" style="width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:10px; font-size:14px; background:var(--panel); color:var(--ink);"></select>
-      <input type="password" id="expGateSenhaInput" placeholder="Senha desta unidade" maxlength="20" style="width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:10px; font-size:14px; text-align:center;">
-      <button class="btn btn-primary" id="expGateEntrarBtn" style="width:100%;">Liberar e entrar</button>
-      <div class="status-msg status-err" id="expGateMsg" style="margin-top:8px;"></div>
-    </div>
-  </div>
 
   <!-- O modal de filtros virou o painel embutido #filtrosAvancados na Fase 3. -->
 
