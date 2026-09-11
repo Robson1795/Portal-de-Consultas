@@ -2481,3 +2481,43 @@ PED101, PED102` corretamente agrupados; fechar pelo ✕ e reabrir funciona;
 clicar fora do modal (no fundo escurecido) também fecha. Excluir/restaurar
 item continuou funcionando normalmente depois da mudança em
 `montarConferirExp()`. Zero erro de console.
+
+## Excluir linha na Consulta de Itens (11/09/2026)
+
+O Robson, na tela principal de Consulta de Itens: *"COLOQUE BOTAO DE
+APAGAR ITEM, TEM ALGUNS QUE DOU BAIXA OU TRANSFIRO PARA OUTRO DEPOSITO,
+DAI O BOTAO DE EXCLUIR ME AJUDA QUE DAI NAO PRECISO FICAR TIRANDO
+RELATORIO VARIAS VEZES"*.
+
+Diferente do "excluir" da aba Conferir (Controle EXP) — lá o item some da
+tela mas continua existindo de verdade em outro lugar (pátio, outra
+equipe), por isso é reversível e vive numa tabela de notas à parte. Aqui é
+o oposto: depois de uma baixa ou transferência pra outro depósito, a linha
+de `estoque` já não representa nada real nesta unidade — apagar a linha
+**é** a ação certa, não uma "marca". Sem o botão, a única forma de a linha
+sumir era subir a planilha inteira de novo (a tal "tirar relatório várias
+vezes").
+
+- Botão 🗑️ na coluna Ações de `#dataTable`, só aparece pra quem já pode
+  editar o estoque desta unidade (`podeVerEstoqueMinimo()` — o mesmo
+  cache do RPC `pode_atualizar_estoque`, reaproveitado de
+  `salvarEstoqueMinimo()`/`limparTodasAsContagens()`, não um novo).
+- `confirm()` do navegador antes de apagar (mesmo padrão de
+  `limparTodasAsContagens()`), avisando que não tem volta.
+- Apaga só a LINHA (`id`), não o item inteiro: um código com saldo em
+  duas localizações continua com a outra linha intacta.
+- `.delete(...).select('id')` de propósito — sem isso, um delete que o
+  RLS barra volta sem erro e a linha reaparece no próximo F5, com a
+  pessoa achando que já tinha excluído (mesmo cuidado de
+  `gravarEtiquetaEmLote()`/`salvarEstoqueMinimo()`).
+- Nenhuma policy nova no Supabase: a policy "Escrita admin ou gerente da
+  unidade" (`for all`, `sql/fase1c-rls.sql`) já cobre DELETE, não só
+  INSERT/UPDATE.
+
+Conferido no navegador (mock de `sb.from('estoque').delete()`): botão some
+quando `podeVerEstoqueMinimo()` é falso; "Cancelar" no `confirm()` não
+chama o banco e a linha continua; confirmar remove a linha certa da
+tabela, atualiza o card de itens encontrados e não mexe na outra linha;
+simulei o RLS recusando (delete sem erro, mas sem linha apagada) e o
+alerta correto apareceu, com a linha permanecendo na tela. Zero erro de
+console.

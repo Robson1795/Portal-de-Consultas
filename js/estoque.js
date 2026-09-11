@@ -215,6 +215,10 @@ function render(rows, intervalo) {
         ${parseQtd(r.quantidade) === 0
           ? `<button class="acao-btn substituto-btn" data-item="${escapeHtml(r.item)}" title="Sugestão de item equivalente já em estoque, mesma medida e material">💡</button>`
           : ''}
+        ${podeVerEstoqueMinimo()
+          ? `<button class="acao-btn excluir-item-btn" data-id="${escapeHtml(r.id)}" data-item="${escapeHtml(r.item)}" data-loc="${escapeHtml(r.localizacao)}"
+                     title="Excluir esta linha -- já deu baixa ou transferiu pra outro depósito">🗑️</button>`
+          : ''}
       </td>
       <td class="col-contagem" style="display:${modoContagemAtivo ? 'table-cell' : 'none'};">
         <input type="text" inputmode="decimal" class="contagem-input" data-item="${escapeHtml(r.item)}" data-loc="${escapeHtml(r.localizacao)}"
@@ -1108,7 +1112,40 @@ document.getElementById('tableBody').addEventListener('click', (e) => {
     if (linha) imprimirEtiquetasTrading([linha]);
     return;
   }
+  const excluirBtn = e.target.closest('.excluir-item-btn');
+  if (excluirBtn) { excluirItemEstoque(excluirBtn); return; }
 });
+
+// Robson: "tem alguns que dou baixa ou transfiro para outro deposito, dai
+// o botao de excluir me ajuda que dai nao preciso ficar tirando relatorio
+// varias vezes" -- diferente do "excluir" da aba Conferir (que só marca
+// não-conferir e é reversível): aqui o item de fato saiu deste estoque, e
+// apagar a linha É a ação certa, sem precisar recarregar a planilha
+// inteira pra fazer o número sumir.
+//
+// O botão só aparece pra quem já pode editar o estoque desta unidade
+// (podeVerEstoqueMinimo() -- mesmo RPC pode_atualizar_estoque usado em
+// salvarEstoqueMinimo()/limparTodasAsContagens()), e o `.select('id')`
+// depois do delete confere se o RLS realmente apagou algo: sem isso, um
+// delete barrado pelo banco volta sem erro e a linha reaparece no próximo
+// F5, com a pessoa achando que já tinha excluído.
+async function excluirItemEstoque(btn) {
+  const { id, item, loc } = btn.dataset;
+  const confirmado = confirm(`Excluir a linha do item ${item} na localização ${loc}?\n\nUse só depois de já ter dado baixa ou transferido pra outro depósito -- esta ação não pode ser desfeita.`);
+  if (!confirmado) return;
+
+  btn.disabled = true;
+  const { data, error } = await sb.from('estoque').delete().eq('id', id).select('id');
+  btn.disabled = false;
+
+  if (error) { alert('Erro ao excluir: ' + error.message + ' — nada foi apagado.'); return; }
+  if (!data || data.length === 0) {
+    alert('Não foi possível excluir: nenhuma linha foi apagada (sem permissão para esta unidade?). Fale com o administrador.');
+    return;
+  }
+  currentData = currentData.filter(r => String(r.id) !== String(id));
+  applyFilterAndSort();
+}
 
 const padraoModal = document.getElementById('padraoModal');
 function mostrarPadraoCaixas(btn) {
