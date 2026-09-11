@@ -3179,6 +3179,73 @@ detalhes não repete mais OP (só Local/Pedido/Status/Entrada/Saída).
 Visualizado o HTML renderizado batendo com o pedido. Zero erro de
 console.
 
+## Aba DOCA: terceiro estado entre o endereço e o carregamento (11/09/2026)
+
+O Robson: *"quero uma aba só de DOCA, aí quando eu marcar na aba de saída
+da localização automaticamente o material é transferido pra lá"*.
+Perguntado se DOCA é fim de linha ou uma etapa a mais antes do
+carregamento de verdade — resposta: **etapa intermediária** (recomendada
+por mim, aceita por ele). Até aqui só existiam dois estados
+(`na_expedicao` / `retirado`), e o botão "DOCA" (seção de 11/09/2026
+acima, "Botão DOCA na Saída/Conferência") pulava direto pro `retirado`. O
+fluxo virou de três (`sql/fase36-doca.sql`):
+
+```
+na_expedicao (endereço) -> na_doca (esperando o caminhão) -> retirado (carregou, fim de linha)
+```
+
+**`aindaNoEndereco(status)`** (nova, perto de `linhasDoSetorAtual()`):
+`status !== 'retirado' && status !== 'na_doca'`. Substituiu todo `l.status
+!== 'retirado'`/`if (l.status === 'retirado') return` que significava
+"ainda no endereço físico, entra em Entrada/Auditoria/lista de pendentes
+da Saída" — item na doca já não está mais na prateleira, mesmo sem ter
+carregado ainda:
+- `linhasImprimiveisExpControle()`/`contarPedidosNaExpedicao()` (Entrada)
+- lista de pendentes da Saída/Conferência e do bulk "Tudo pra DOCA"
+- `linhasAuditoriaFiltradas()` e o bulk "Tudo confere" da Auditoria
+
+**Ficou de propósito `=== 'retirado'` sem trocar** (não usa
+`aindaNoEndereco`) em três lugares, porque ali a pergunta é outra:
+- **Conferir** (`montarConferirExp()`, cálculo do físico): item na doca
+  ainda não carregou de verdade, continua fisicamente dentro do prédio --
+  pra conferência sistema × físico ele CONTINUA contando como presente.
+- **Histórico de retiradas** e **relatório do PCP**: só mostram o
+  carregamento de verdade (fim de linha), não a etapa intermediária.
+
+**`marcarSaidaExpControle(id, conferente, novoStatus)`** ganhou um
+terceiro ramo. `na_doca_por`/`na_doca_em` são colunas PRÓPRIAS (não
+reaproveitam `retirado_por`/`retirado_em`) porque um item passa pelos
+dois carimbos em sequência (entrou na doca, depois carregou) — usar as
+mesmas colunas apagaria "há quanto tempo ficou na doca" assim que
+carregasse. O "desfazer" (↺, volta pra `na_expedicao`) limpa os dois
+pares de carimbo de uma vez, não interessa de qual dos dois estados de
+saída estava desfazendo.
+
+**Quem manda pra doca agora** (todos passam `'na_doca'` explicitamente
+em vez do default `'retirado'`): o 🚚 da aba Entrada (renomeado "🚚 DOCA"
+também) e os dois botões DOCA da Saída/Conferência (individual e "Tudo
+pra DOCA").
+
+**Nova aba "📦 DOCA"**, entre Saída/Conferência e Conferir: agrupada por
+**Nº Pedido** (não por endereço — igual à folha impressa, é assim que o
+carregamento acontece de verdade, pedido vira caminhão). Cada item mostra
+"Veio de" (a localização de origem, preservada sem mexer — só o `status`
+muda) e "Na doca desde". Duas ações: **✓ Carregou** (por item, chama
+`marcarSaidaExpControle(id, nomeUsuarioAtual, 'retirado')` — vira
+histórico) e **↺ Desfazer** (volta pro endereço de origem, com
+`confirm()`), mais o bulk **✓ Todo pedido carregou**. Busca por nº do
+pedido, item ou localização de origem, mesmo padrão de
+`normalizaBuscaLocal()` já usado nas outras abas.
+
+Conferido no navegador com o fluxo inteiro: item sai do endereço (👍
+some de Entrada/Auditoria/pendentes da Saída, aparece na DOCA agrupado
+por pedido); "✓ Carregou" grava `retirado` sem apagar os carimbos da
+doca; "↺ Desfazer" limpa os dois pares de carimbo e devolve pro
+endereço; "Todo pedido carregou" atualiza só os itens daquele pedido;
+busca funciona nos três campos; Conferir continua contando item na doca
+como físico presente (testado com `montarConferirExp()`); botão da
+Entrada vai pra doca com o título novo. Zero erro de console.
+
 ## 21. Notificação de cadastro pendente, no canto da tela (11/09/2026)
 
 O Victor: *"o Robson implementou uma notificação que avisa quando alguém se

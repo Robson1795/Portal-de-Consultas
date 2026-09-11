@@ -621,6 +621,12 @@
         <div id="expAbas" style="display:flex; gap:8px; flex-wrap:wrap;">
           <button class="btn btn-primary" data-exp-aba="entrada">Entrada</button>
           <button class="btn" data-exp-aba="saida">Saída / Conferência</button>
+          <!-- Robson, 11/09/2026: "quero uma aba só de DOCA, aí quando eu
+               marcar na aba de saída da localização automaticamente o
+               material é transferido pra lá" -- estado intermediário entre
+               sair do endereço e carregar de verdade (ver sql/fase36-doca.sql
+               e aindaNoEndereco() em js/programacao.js). -->
+          <button class="btn" data-exp-aba="doca" title="Itens que já saíram do endereço e estão esperando o caminhão na doca">📦 DOCA</button>
           <!-- "Conferir" e "Saída / Conferência" são coisas diferentes, e os nomes se
                parecem: a Saída registra a retirada item por item; esta confronta o
                SISTEMA (Catálogo EXP) com o FÍSICO (o que está registrado na
@@ -834,6 +840,28 @@
           <div class="empty-msg" id="confHistVazio" style="display:none;">
             Nenhuma retirada registrada ainda.
           </div>
+        </div>
+      </div>
+
+      <!-- ---- DOCA: item que já saiu do endereço, esperando o caminhão ----
+           Robson, 11/09/2026: "quero uma aba só de DOCA, aí quando eu marcar
+           na aba de saída da localização automaticamente o material é
+           transferido pra lá" -- confirmado como etapa intermediária (não é
+           o fim de linha): endereço -> DOCA (aqui) -> Carregado (aí sim vira
+           histórico). Agrupado por Nº Pedido, igual à folha impressa -- é
+           assim que o carregamento de verdade acontece, pedido por pedido. -->
+      <div id="expDocaAba" class="prog-aba" style="display:none;">
+        <div class="cfg-barra">
+          <input type="text" id="docaBusca" placeholder="Buscar por nº do pedido, item ou localização de origem..."
+                 style="flex:1; min-width:220px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+        </div>
+        <div class="modal-text" style="padding:0 16px 12px;">
+          Itens que já saíram do endereço e estão esperando o caminhão. Marque ✓ Carregou quando
+          sair de vez, ou ↺ Desfazer se foi engano -- volta pro endereço de origem.
+        </div>
+        <div id="docaBody" style="padding:0 16px 16px;"></div>
+        <div class="empty-msg" id="docaVazio" style="display:none;">
+          Nada na doca no momento.
         </div>
       </div>
 

@@ -204,12 +204,13 @@ function trocarAbaExpAcessorios(aba) {
   // a outra é o confronto entre as duas pontas. Registrar movimentação a partir
   // de uma tela de conferência seria mexer no que se está medindo.
   document.getElementById('expRegistroContainer').style.display =
-    (aba === 'catalogo' || aba === 'conferir' || aba === 'auditoria') ? 'none' : 'block';
+    (aba === 'catalogo' || aba === 'conferir' || aba === 'auditoria' || aba === 'doca') ? 'none' : 'block';
   document.getElementById('expEntradaAba').style.display = aba === 'entrada' ? 'block' : 'none';
   document.getElementById('progConferencia').style.display = aba === 'saida' ? 'block' : 'none';
   document.getElementById('expCatalogoAba').style.display = aba === 'catalogo' ? 'block' : 'none';
   document.getElementById('expConferirAba').style.display = aba === 'conferir' ? 'block' : 'none';
   document.getElementById('expAuditoriaAba').style.display = aba === 'auditoria' ? 'block' : 'none';
+  document.getElementById('expDocaAba').style.display = aba === 'doca' ? 'block' : 'none';
   if (aba === 'saida') renderConferencia();
   if (aba === 'conferir') {
     renderConferirExp(); // mostra rápido com o que já tem em memória (a 1ª vez, sem observação/exclusão ainda)
@@ -219,6 +220,7 @@ function trocarAbaExpAcessorios(aba) {
     renderAuditoriaFisica();
     carregarConfFisica().then(renderAuditoriaFisica);
   }
+  if (aba === 'doca') renderDoca();
 }
 
 // Catálogo antes da Programação, mesmo motivo do carregamento inicial em
@@ -1215,6 +1217,31 @@ function linhasDoSetorAtual() {
   return progExpControle.filter(l => (l.setor || 'exp') === setorExpAtual);
 }
 
+// Três estados agora, não dois (11/09/2026, ver sql/fase36-doca.sql):
+// na_expedicao (no endereço) -> na_doca (saiu do endereço, esperando o
+// caminhão) -> retirado (carregou de verdade, fim de linha). Qualquer
+// lugar que hoje pergunta "ainda está no endereço físico, pronto pra
+// imprimir/conferir/auditar?" tem de excluir os DOIS estados de saída, não
+// só o `retirado` -- item na doca já não está mais na prateleira, mesmo
+// não tendo carregado ainda. `status === 'retirado'` sozinho (sem este
+// helper) continua correto nos lugares que perguntam especificamente
+// "carregou de vez" (Histórico de retiradas, relatório do PCP): esses NÃO
+// mudam com a doca.
+function aindaNoEndereco(status) {
+  return status !== 'retirado' && status !== 'na_doca';
+}
+
+// Rótulo/classe do badge de status do Controle EXP -- usado onde quer que
+// se mostre a situação do item (tabela da Entrada, exportação/ordenação).
+// Um lugar só pros três nomes: escrever "Na doca"/"st-atencao" em mais de
+// um lugar seria o tipo de duplicação que já causou divergência de
+// terminologia noutras partes do portal.
+function rotuloStatusExp(status) {
+  if (status === 'retirado') return { rotulo: 'Saiu p/ carregamento', classe: 'st-ativo' };
+  if (status === 'na_doca') return { rotulo: 'Na doca', classe: 'st-atencao' };
+  return { rotulo: 'Na expedição', classe: 'st-pendente' };
+}
+
 // Atualiza o título visível dentro da tela (mesmo elemento pras duas
 // páginas -- sem isso, nada na tela diria qual das duas está aberta).
 function atualizarTituloSetorExp() {
@@ -1269,7 +1296,7 @@ function valorColunaExp(l, key) {
     case 'op':      return l.numero_os_op || '';
     case 'lote':    return l.lote || '';
     case 'ref':     return l.referencia || '';
-    case 'status':  return l.status === 'retirado' ? 'Saiu p/ carregamento' : 'Na expedição';
+    case 'status':  return rotuloStatusExp(l.status).rotulo;
     case 'entrada': return l.criado_em || '';
     case 'saida':   return l.retirado_em || '';
     default:        return '';
@@ -1312,23 +1339,23 @@ document.querySelectorAll('#expCtrlTable thead th[data-key]').forEach(th => {
   });
 });
 
-// Item que já saiu p/ carregamento não entra em "marcar todos" nem sai de
-// novo na impressora -- Robson, 10/09/2026: "itens que ja carregou bloqueie
-// para impressao". Já foi retirado fisicamente; reimprimir a etiqueta dele
-// não faz sentido (o material não está mais na expedição pra colar nada) e
-// só confundiria quem conferisse a pilha de folhas depois.
+// Item que já saiu do endereço (foi pra doca ou já carregou) não entra em
+// "marcar todos" nem sai de novo na impressora -- Robson, 10/09/2026:
+// "itens que ja carregou bloqueie para impressao". Não está mais na
+// prateleira pra colar etiqueta nenhuma; reimprimir só confundiria quem
+// conferisse a pilha de folhas depois.
 function linhasImprimiveisExpControle() {
-  return linhasFiltradasExpControle().filter(l => l.status !== 'retirado');
+  return linhasFiltradasExpControle().filter(l => aindaNoEndereco(l.status));
 }
 
-// Conta pedidos DISTINTOS ainda na expedição (não retirados) -- um pedido
-// vira várias linhas (uma por item), então contar linhas contaria o mesmo
-// pedido várias vezes. Respeita a busca (#expCtrlBusca) igual à tabela,
-// pra bater com o que a pessoa está vendo na tela.
+// Conta pedidos DISTINTOS ainda no endereço (nem na doca, nem retirados) --
+// um pedido vira várias linhas (uma por item), então contar linhas contaria
+// o mesmo pedido várias vezes. Respeita a busca (#expCtrlBusca) igual à
+// tabela, pra bater com o que a pessoa está vendo na tela.
 function contarPedidosNaExpedicao(linhas) {
   const pedidos = new Set();
   linhas.forEach(l => {
-    if (l.status === 'retirado') return;
+    if (!aindaNoEndereco(l.status)) return;
     const numero = (l.numero_pedido || '').trim();
     if (numero) pedidos.add(numero);
   });
@@ -1386,7 +1413,7 @@ function renderExpControle(erroCarregamento) {
   // confirmar a saida de um item marcado o deixaria "preso" selecionado
   // sem nunca poder imprimir. A BUSCA nao poda nada -- filtrar e desfiltrar
   // tem de devolver o que estava marcado.
-  const idsDaTela = new Set(linhasDoSetorAtual().filter(l => l.status !== 'retirado').map(l => String(l.id)));
+  const idsDaTela = new Set(linhasDoSetorAtual().filter(l => aindaNoEndereco(l.status)).map(l => String(l.id)));
   expCtrlSelecionadas.forEach(id => { if (!idsDaTela.has(id)) expCtrlSelecionadas.delete(id); });
 
   // Só o que ainda está fisicamente na expedição -- Robson, 10/09/2026: "os
@@ -1446,7 +1473,7 @@ function renderExpControle(erroCarregamento) {
              style="width:140px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px;">`
         : '—'}</td>
       <td class="col-acoes">
-        ${retirado ? '' : `<button class="acao-btn expctrl-saida" data-id="${escapeHtml(l.id)}" title="Marcar como retirado para o carregamento">🚚</button>`}
+        ${retirado ? '' : `<button class="acao-btn expctrl-saida" data-id="${escapeHtml(l.id)}" title="Saiu do endereço pra área de carregamento (DOCA)">🚚 DOCA</button>`}
         <button class="acao-btn expctrl-excluir" data-id="${escapeHtml(l.id)}" title="Excluir este registro">🗑</button>
       </td>
     </tr>`;
@@ -1518,6 +1545,10 @@ function montarConferirExp() {
   // também "coloque as quantidades por pedido também", 11/09/2026.
   const ondeEsta = new Map();
   linhasDoSetorAtual().forEach(l => {
+    // ⚠️ De propósito só `=== 'retirado'` (não `aindaNoEndereco`): item na
+    // doca ainda não carregou de verdade, continua fisicamente dentro do
+    // prédio -- pra fins de conferência sistema x físico, ele CONTINUA
+    // contando como físico presente. Só some daqui quando carrega mesmo.
     if (l.status === 'retirado') return;
     const chave = normalizaCodigoItem(l.codigo_item);
     if (!chave) return;
@@ -1831,15 +1862,33 @@ async function gravarEtiquetaEmLote(linhas) {
   return { marcados, naoGravados, error: null };
 }
 
-// Marca que o item saiu da localizacao pro carregamento -- nao apaga o
-// registro, so muda o status. E o mesmo registro que fica no historico
-// (retirado_por/retirado_em), pra "quando perguntarem, pesquiso pelo
-// numero do pedido" (pedido do Robson).
+// Marca a mudança de estado do item no fluxo de saída -- nao apaga o
+// registro, so muda o status. Três destinos possíveis desde 11/09/2026
+// (sql/fase36-doca.sql, ver aindaNoEndereco()):
+//
+//   'na_doca'      -- saiu do endereço, esperando o caminhão (botão DOCA)
+//   'retirado'     -- carregou de verdade, fim de linha (botão ✓ Carregou,
+//                     na aba DOCA -- é o default quando novoStatus não é
+//                     informado, mesmo comportamento de sempre)
+//   'na_expedicao' -- "desfazer": volta pro endereço, limpa os dois carimbos
+//
+// `na_doca_por`/`na_doca_em` e `retirado_por`/`retirado_em` NÃO se
+// sobrescrevem um ao outro: um item passa pelos dois carimbos em
+// sequência (entrou na doca, depois carregou), e usar as mesmas colunas
+// pras duas coisas apagaria "há quanto tempo ficou na doca antes de
+// carregar" assim que a segunda etapa acontecesse.
 async function marcarSaidaExpControle(id, conferente, novoStatus) {
   const status = novoStatus || 'retirado';
-  const patch = status === 'retirado'
-    ? { status, retirado_por: conferente, retirado_em: new Date().toISOString() }
-    : { status, retirado_por: null, retirado_em: null }; // "desfazer": volta pra na_expedicao
+  let patch;
+  if (status === 'na_doca') {
+    patch = { status, na_doca_por: conferente, na_doca_em: new Date().toISOString() };
+  } else if (status === 'retirado') {
+    patch = { status, retirado_por: conferente, retirado_em: new Date().toISOString() };
+  } else {
+    // "desfazer": volta pra na_expedicao, limpa os dois carimbos -- não
+    // interessa de qual dos dois estados de saída ele estava desfazendo.
+    patch = { status, na_doca_por: null, na_doca_em: null, retirado_por: null, retirado_em: null };
+  }
   const { error } = await sb.from('exp_controle_itens').update(patch).eq('id', id);
   if (error) { alert('Não foi possível salvar: ' + error.message); return false; }
 
@@ -1850,7 +1899,9 @@ async function marcarSaidaExpControle(id, conferente, novoStatus) {
   const item = progExpControle.find(l => l.id === id);
   const pedido = item ? pedidoDoNumero(item.numero_pedido) : null;
   if (item && pedido) {
-    await registrarLogProgramacao(pedido.id, status === 'retirado' ? 'item_saiu_expedicao' : 'item_saida_desfeita',
+    const evento = status === 'retirado' ? 'item_saiu_expedicao'
+      : status === 'na_doca' ? 'item_foi_pra_doca' : 'item_saida_desfeita';
+    await registrarLogProgramacao(pedido.id, evento,
       { exp_controle_id: id, codigo_item: item.codigo_item, numero_pedido: item.numero_pedido, conferente });
   }
   return true;
@@ -2593,7 +2644,9 @@ document.getElementById('expCtrlBody').addEventListener('click', async (e) => {
   }
   const btnSaida = e.target.closest('.expctrl-saida');
   if (btnSaida) {
-    const ok = await marcarSaidaExpControle(btnSaida.dataset.id, nomeUsuarioAtual);
+    // Vai pra doca, não direto pro carregamento -- mesmo fluxo de 3 estados
+    // do botão DOCA da aba Saída/Conferência (sql/fase36-doca.sql).
+    const ok = await marcarSaidaExpControle(btnSaida.dataset.id, nomeUsuarioAtual, 'na_doca');
     if (ok) await carregarProgramacao();
   }
 });
@@ -2748,7 +2801,7 @@ function linhasExportacaoExpControle() {
     return [
       l.localizacao || '', l.codigo_item, desc && desc.descricao ? desc.descricao : '', desc && desc.um ? desc.um : '',
       l.numero_pedido || '', l.quantidade != null ? l.quantidade : null, l.numero_os_op || '', l.lote || '', l.referencia || '',
-      l.status === 'retirado' ? 'Saiu p/ carregamento' : 'Na expedição',
+      rotuloStatusExp(l.status).rotulo,
       l.criado_em ? new Date(l.criado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '',
       l.retirado_em ? new Date(l.retirado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : ''
     ];
@@ -3232,7 +3285,9 @@ function renderConferencia() {
   // "Histórico de retiradas", mais abaixo.
   const busca = normalizaBuscaLocal(buscaSaida);
   const pendentes = linhasDoSetorAtual().filter(l => {
-    if (l.status === 'retirado') return false;
+    // Item já na doca não está mais no endereço -- não é mais "ainda por
+    // retirar" (ver aindaNoEndereco(), sql/fase36-doca.sql).
+    if (!aindaNoEndereco(l.status)) return false;
     if (!busca) return true;
     return normalizaBuscaLocal(l.localizacao).includes(busca)
         || normalizaBuscaLocal(l.numero_pedido).includes(busca);
@@ -3298,10 +3353,14 @@ document.getElementById('confBody').addEventListener('click', async (e) => {
   const nome = nomeConferenteAtual();
   if (!nome) { alert('Informe o nome de quem está retirando antes de confirmar.'); return; }
 
+  // Robson, 11/09/2026: "quero uma aba só de DOCA, aí quando eu marcar na
+  // aba de saída da localização automaticamente o material é transferido
+  // pra lá" -- vai pra 'na_doca', não direto pro 'retirado' (fim de linha
+  // fica pro botão ✓ Carregou, na aba DOCA). Ver sql/fase36-doca.sql.
   const btnItem = e.target.closest('.conf-retirar-item');
   if (btnItem) {
     btnItem.disabled = true;
-    const ok = await marcarSaidaExpControle(btnItem.dataset.id, nome);
+    const ok = await marcarSaidaExpControle(btnItem.dataset.id, nome, 'na_doca');
     if (ok) await carregarProgramacao();
     else btnItem.disabled = false;
     return;
@@ -3310,10 +3369,10 @@ document.getElementById('confBody').addEventListener('click', async (e) => {
   const btnLocal = e.target.closest('.conf-retirar-tudo');
   if (btnLocal) {
     const local = btnLocal.dataset.local;
-    const itens = linhasDoSetorAtual().filter(l => (l.localizacao || '(sem localização)') === local && l.status !== 'retirado');
-    if (!confirm(`Confirmar a retirada de ${itens.length} item(ns) de "${local}"?`)) return;
+    const itens = linhasDoSetorAtual().filter(l => (l.localizacao || '(sem localização)') === local && aindaNoEndereco(l.status));
+    if (!confirm(`Confirmar que ${itens.length} item(ns) de "${local}" saíram pra DOCA?`)) return;
     btnLocal.disabled = true;
-    for (const item of itens) await marcarSaidaExpControle(item.id, nome);
+    for (const item of itens) await marcarSaidaExpControle(item.id, nome, 'na_doca');
     await carregarProgramacao();
   }
 });
@@ -3476,6 +3535,139 @@ document.getElementById('relPcpGerarBtn').addEventListener('click', async () => 
   window.location.href = resultado.href;
 });
 
+// ---- Aba DOCA: item que já saiu do endereço, esperando o caminhão ------
+// Robson, 11/09/2026: "quero uma aba só de DOCA, aí quando eu marcar na
+// aba de saída da localização automaticamente o material é transferido
+// pra lá". Confirmado como etapa INTERMEDIÁRIA (não é fim de linha):
+// endereço -> DOCA (aqui) -> Carregado (aí sim vira histórico, em
+// "Histórico de retiradas", mais acima). Ver sql/fase36-doca.sql e
+// aindaNoEndereco().
+//
+// Agrupado por Nº Pedido, igual à folha impressa (montarHtmlExpControle())
+// -- é assim que o carregamento de verdade acontece: por pedido, não por
+// endereço (o endereço de origem já não importa mais nesta etapa, só fica
+// de referência na coluna "Veio de").
+let buscaDoca = '';
+
+function linhasNaDoca() {
+  const busca = normalizaBuscaLocal(buscaDoca);
+  return linhasDoSetorAtual().filter(l => {
+    if (l.status !== 'na_doca') return false;
+    if (!busca) return true;
+    return normalizaBuscaLocal(l.numero_pedido).includes(busca)
+        || normalizaBuscaLocal(l.codigo_item).includes(busca)
+        || normalizaBuscaLocal(l.localizacao).includes(busca);
+  });
+}
+
+function renderDoca() {
+  const itens = linhasNaDoca();
+  const corpo = document.getElementById('docaBody');
+  const vazio = document.getElementById('docaVazio');
+
+  vazio.style.display = itens.length ? 'none' : 'block';
+  if (!itens.length) {
+    corpo.innerHTML = '';
+    vazio.textContent = buscaDoca.trim()
+      ? 'Nenhum item na doca bate com a busca.'
+      : 'Nada na doca no momento.';
+    return;
+  }
+
+  const porPedido = new Map();
+  itens.forEach(l => {
+    const chave = chavePedidoFolha(l.numero_pedido);
+    if (!porPedido.has(chave)) porPedido.set(chave, []);
+    porPedido.get(chave).push(l);
+  });
+  // Sem pedido no fim -- mesmo critério da folha impressa: não é um pedido
+  // de verdade, deixá-lo no meio empurraria pedido de verdade pra trás.
+  const grupos = [...porPedido.keys()]
+    .sort((a, b) => (a === '(sem pedido)' ? 1 : 0) - (b === '(sem pedido)' ? 1 : 0));
+
+  corpo.innerHTML = grupos.map(chave => {
+    const linhas = porPedido.get(chave);
+    return `
+    <div style="border:1px solid var(--border); border-radius:10px; margin-top:12px; overflow:hidden;">
+      <div class="cfg-barra">
+        <span class="loc-chip">${chave === '(sem pedido)' ? 'Sem nº de pedido' : 'Pedido ' + escapeHtml(chave)}</span>
+        <span style="font-size:12px; color:var(--muted);">${linhas.length} item(ns)</span>
+        <button class="btn btn-primary doca-tudo-carregou" data-pedido="${escapeHtml(chave)}" style="margin-left:auto;">
+          ✓ Todo pedido carregou
+        </button>
+      </div>
+      <div class="scroll-area">
+        <table>
+          <thead><tr><th>Item</th><th>Descrição</th><th>Qtd</th><th>Veio de</th><th>Na doca desde</th><th>Ação</th></tr></thead>
+          <tbody>
+            ${linhas.map(l => {
+              const desc = expCtrlDescMap.get(normalizaCodigoItem(l.codigo_item));
+              const desde = l.na_doca_em ? formatarDataHoraBR(l.na_doca_em) : '—';
+              const quem = l.na_doca_por ? `${escapeHtml(l.na_doca_por)} — ` : '';
+              return `
+              <tr>
+                <td class="item">${escapeHtml(l.codigo_item)}</td>
+                <td>${desc && desc.descricao ? escapeHtml(desc.descricao) : '—'}</td>
+                <td class="num">${l.quantidade != null ? escapeHtml(l.quantidade) : '—'}</td>
+                <td class="loc">${escapeHtml(l.localizacao || '—')}</td>
+                <td class="loc" title="${quem}${escapeHtml(desde)}">${escapeHtml(desde)}</td>
+                <td class="col-acoes">
+                  <button class="btn doca-carregou" data-id="${escapeHtml(l.id)}">✓ Carregou</button>
+                  <button class="acao-btn doca-desfazer" data-id="${escapeHtml(l.id)}" title="Desfazer -- volta pro endereço de origem">↺</button>
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('docaBusca').addEventListener('input', (e) => {
+  buscaDoca = e.target.value;
+  renderDoca();
+});
+
+document.getElementById('docaBody').addEventListener('click', async (e) => {
+  const btnCarregou = e.target.closest('.doca-carregou');
+  const btnDesfazer = e.target.closest('.doca-desfazer');
+  const btnTudo = e.target.closest('.doca-tudo-carregou');
+
+  if (btnCarregou) {
+    btnCarregou.disabled = true;
+    // 'retirado' aqui é o default de marcarSaidaExpControle() (mesmo botão
+    // que sempre existiu no Histórico) -- é o passo FINAL, fim de linha.
+    const ok = await marcarSaidaExpControle(btnCarregou.dataset.id, nomeUsuarioAtual, 'retirado');
+    if (ok) await carregarProgramacao();
+    else btnCarregou.disabled = false;
+    renderDoca();
+    return;
+  }
+
+  if (btnDesfazer) {
+    if (!confirm('Desfazer? O item volta pro endereço de origem, como se não tivesse ido pra doca.')) return;
+    btnDesfazer.disabled = true;
+    const ok = await marcarSaidaExpControle(btnDesfazer.dataset.id, null, 'na_expedicao');
+    if (ok) await carregarProgramacao();
+    else btnDesfazer.disabled = false;
+    renderDoca();
+    return;
+  }
+
+  if (btnTudo) {
+    const pedido = btnTudo.dataset.pedido;
+    const itens = linhasNaDoca().filter(l => chavePedidoFolha(l.numero_pedido) === pedido);
+    if (!itens.length) return;
+    if (!confirm(`Confirmar que ${itens.length} item(ns) do pedido "${pedido}" carregaram de verdade?`)) return;
+
+    btnTudo.disabled = true;
+    for (const item of itens) await marcarSaidaExpControle(item.id, nomeUsuarioAtual, 'retirado');
+    await carregarProgramacao();
+    renderDoca();
+  }
+});
+
 // ---- Aba Auditoria: caminhada física pela expedição --------------------
 // Robson, 11/09/2026: "vou lá na expedição, vou ver cada endereço pra ver
 // se os itens estão lá, monte uma aba aonde eu possa conferir se está
@@ -3515,7 +3707,9 @@ function statusAuditoriaDoItem(id) {
 function linhasAuditoriaFiltradas() {
   const busca = normalizaBuscaLocal(buscaAuditoria);
   return linhasDoSetorAtual().filter(l => {
-    if (l.status === 'retirado') return false;
+    // Item na doca não está mais no endereço -- não tem o que auditar
+    // "está lá?" pra ele aqui (ver aindaNoEndereco(), sql/fase36-doca.sql).
+    if (!aindaNoEndereco(l.status)) return false;
     if (!busca) return true;
     return normalizaBuscaLocal(l.localizacao).includes(busca)
         || normalizaBuscaLocal(l.numero_pedido).includes(busca)
@@ -3633,7 +3827,7 @@ document.getElementById('auditBody').addEventListener('click', async (e) => {
   if (btnTudo) {
     const local = btnTudo.dataset.local;
     const itens = linhasDoSetorAtual().filter(l =>
-      l.status !== 'retirado' && (l.localizacao || '(sem localização)') === local);
+      aindaNoEndereco(l.status) && (l.localizacao || '(sem localização)') === local);
     if (!itens.length) return;
 
     btnTudo.disabled = true;
