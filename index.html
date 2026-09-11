@@ -990,13 +990,6 @@
       </div>
     </div>
 
-    <!-- Notificação de novo cadastro, só pra Robson e Victor (Robson,
-         10/09/2026: "sempre que tiver um novo cadastro eu e o Victor recebe
-         uma notificação chamativa nessa tela"). Ver iniciarAlertaCadastro()
-         em js/configuracoes.js e dispararAlertaCadastro() em js/auth.js --
-         mesmo padrão (broadcast, sem servidor) do alertaBobinaBanner. -->
-    <div id="alertaCadastroBanner" class="alerta-cadastro" style="display:none;"></div>
-
     <div class="panel">
       <div class="cfg-barra">
         <!-- FILTROS. Antes não existia nenhum: só os títulos das colunas, que
@@ -1416,6 +1409,14 @@
   </div>
 </div>
 
+<!-- ============== NOTIFICAÇÕES DE CANTO ==============
+     Popup no canto inferior direito, por cima de qualquer tela (o Victor,
+     11/09/2026). Vive FORA do #portalScreen de propósito: não pertence a
+     tela nenhuma, e ficar dentro de uma delas o prenderia ali -- que era
+     justamente o problema do banner que ele substituiu.
+     Quem escreve aqui é js/notificacoes.js. -->
+<div id="notificacoes" aria-live="polite"></div>
+
 <script src="js/config.js"></script>
 <script src="js/navegacao.js"></script>
 <script src="js/auth.js"></script>
@@ -1429,5 +1430,6 @@
 <script src="js/tour.js"></script>
 <!-- Depois dos outros: usa escapeHtml, rotuloUnidade e os globais de sessão. -->
 <script src="js/sugestao.js"></script>
+<script src="js/notificacoes.js"></script>
 </body>
 </html>

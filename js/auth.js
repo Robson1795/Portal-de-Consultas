@@ -129,8 +129,9 @@ async function registrarAcesso(user) {
   }
 }
 
-// Avisa quem aprova (Robson e Victor, ver iniciarAlertaCadastro() em
-// js/configuracoes.js) que alguém acabou de se cadastrar. Broadcast, sem
+// Avisa quem aprova que alguém acabou de se cadastrar. Quem RECEBE fica em
+// js/notificacoes.js (iniciarAvisoCadastro) -- desde 11/09/2026 é um popup no
+// canto, em qualquer tela, e não mais um banner dentro de Configurações.
 // esperar resposta -- só chega em quem estiver com o portal aberto na hora
 // (mesmo padrão de dispararAlertaBobina() em js/ocr.js). Não bloqueia o
 // cadastro se falhar: quem está se cadastrando não pode ficar preso porque
@@ -265,6 +266,9 @@ async function mostrarTelaCorreta(session) {
     // Depois do menu: os passos do tour apontam pros itens do menu, que
     // antes de montarMenu() nem existem no DOM (ver js/tour.js).
     iniciarTourSePrimeiraVez();
+    // Depois do menu, pelo mesmo motivo do tour: `perfilAtual` só vale a
+    // partir daqui, e a notificação é recortada por perfil.
+    iniciarAvisoCadastro();
   } else {
     authScreen.style.display = 'none';
     pendingScreen.style.display = 'block';
