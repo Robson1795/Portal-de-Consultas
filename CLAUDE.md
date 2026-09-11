@@ -2963,6 +2963,27 @@ salvamento/avanço; confirmar prossegue normalmente; Tipo "Saída" pula o
 aviso inteiro mesmo com conflito real. Zero erro de console (fora um
 erro do próprio mock de teste, não do código).
 
+## Busca na aba Saída/Conferência (11/09/2026)
+
+O Robson: *"aqui na aba de saida para facilitar a buscar, acima do
+conferente colocar aba de pesquisa que busque por localização ou número
+do pedido"*.
+
+`#confSaidaBusca`, acima do campo Conferente. Filtra
+`linhasDoSetorAtual()` (ainda não retirado) por `localizacao` OU
+`numero_pedido`, contendo o texto digitado (case-insensitive) — mesmo
+padrão de busca-por-trecho já usado em `#confBusca`/`#expCtrlBusca`.
+Estado próprio (`buscaSaida`), não reaproveita `filtrosConf` (que é da
+aba Conferir, outro assunto). Mensagem de vazio muda conforme tem busca
+ativa ou não ("Nenhum item pendente bate com a busca" vs "Nenhum item
+pendente de retirada").
+
+Conferido no navegador: buscar por trecho da localização mostra só
+aquele grupo; buscar por número do pedido mostra o grupo certo mesmo
+sem digitar a localização; busca sem resultado mostra o aviso certo;
+limpar a busca devolve todos os grupos; item já retirado nunca aparece,
+com ou sem busca. Zero erro de console.
+
 ## 21. Notificação de cadastro pendente, no canto da tela (11/09/2026)
 
 O Victor: *"o Robson implementou uma notificação que avisa quando alguém se

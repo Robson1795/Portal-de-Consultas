@@ -3132,14 +3132,32 @@ document.getElementById('confNomeInput').addEventListener('input', (e) => {
   } catch (err) { /* idem */ }
 })();
 
+// Robson, 11/09/2026: "acima do conferente colocar aba de pesquisa que
+// busque por localizaçao ou numero do pedido" -- estado próprio (não
+// reaproveita filtrosConf, que é da aba Conferir, outro assunto).
+let buscaSaida = '';
+document.getElementById('confSaidaBusca').addEventListener('input', (e) => {
+  buscaSaida = e.target.value;
+  renderConferencia();
+});
+
 function renderConferencia() {
-  const pendentes = linhasDoSetorAtual().filter(l => l.status !== 'retirado');
+  const busca = buscaSaida.trim().toLowerCase();
+  const pendentes = linhasDoSetorAtual().filter(l => {
+    if (l.status === 'retirado') return false;
+    if (!busca) return true;
+    return String(l.localizacao || '').toLowerCase().includes(busca)
+        || String(l.numero_pedido || '').toLowerCase().includes(busca);
+  });
   const corpo = document.getElementById('confBody');
   const vazio = document.getElementById('confVazio');
 
   vazio.style.display = pendentes.length ? 'none' : 'block';
   if (!pendentes.length) {
     corpo.innerHTML = '';
+    vazio.textContent = busca
+      ? 'Nenhum item pendente bate com a busca.'
+      : 'Nenhum item pendente de retirada.';
   } else {
     // Agrupado por localizacao: e assim que o conferente trabalha -- vai
     // fisicamente numa localizacao e retira tudo que tem la de uma vez.

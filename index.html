@@ -778,6 +778,13 @@
 
       <!-- ---- Saida: quem retira fisicamente pro carregamento ---- -->
       <div id="progConferencia" class="prog-aba" style="display:none;">
+        <!-- Robson, 11/09/2026: "aqui na aba de saida para facilitar a
+             buscar, acima do conferente colocar aba de pesquisa que
+             busque por localizaçao ou numero do pedido" -->
+        <div class="cfg-barra">
+          <input type="text" id="confSaidaBusca" placeholder="Buscar por localização ou nº do pedido..."
+                 style="flex:1; min-width:220px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+        </div>
         <div class="cfg-barra">
           <span class="modal-label" style="margin:0;">Conferente</span>
           <input type="text" id="confNomeInput" placeholder="Nome de quem está retirando"
