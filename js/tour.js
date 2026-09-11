@@ -158,15 +158,15 @@ function montarPassosTour() {
   // A caixa de sugestões entra na cauda comum -- vale para TODOS os cargos, e
   // não dentro de PASSOS_CONSULTA, que é só da tela de Consulta de Itens.
   //
-  // O texto diz que a sugestão FICA GRAVADA, e isso não é detalhe: as outras
-  // telas que "mandam" algo (Requisição ALM, solicitação de compra) usam
-  // `mailto` e dependem de a pessoa clicar em enviar no Outlook. Ali alguém
-  // está esperando o material e vai cobrar; uma sugestão perdida não é cobrada
-  // por ninguém. Saber que ela chega inteira é o que faz a pessoa escrever.
+  // Desde 11/09/2026 o botão abre um CHAT NO TEAMS com os dois, em vez de
+  // gravar numa lista dentro do portal -- e o texto do passo diz isso, porque
+  // saber para onde vai é o que faz a pessoa escrever. A conversa fica no
+  // histórico dos dois lados, então a sugestão continua tendo onde ficar; só
+  // deixou de depender de alguém lembrar de abrir a lista.
   passos.push({
     alvo: '#sugestaoBtn',
     titulo: '💡 Caixa de sugestões',
-    texto: 'Achou que alguma tela podia ser melhor, ou falta algo que ajudaria no seu dia? Escreva aqui. A sugestão vai para o <b>Robson</b> e para o <b>Victor</b> e <b>fica registrada no portal</b> — não é e-mail, então não se perde no caminho nem depende de você lembrar de enviar.<br><br>Vale ideia pequena: a maioria das telas deste portal nasceu de um pedido de quem usa.'
+    texto: 'Achou que alguma tela podia ser melhor, ou falta algo que ajudaria no seu dia? Clique aqui: abre um <b>chat no Teams</b> com o <b>Robson</b> e o <b>Victor</b>, com a mensagem já começada.<br><br>Vale ideia pequena: a maioria das telas deste portal nasceu de um pedido de quem usa.'
   });
 
   passos.push({

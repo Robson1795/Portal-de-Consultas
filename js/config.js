@@ -13,7 +13,7 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 // abrir o portal e apertar Ctrl+U. Agora vivem em `config_unidade`, legivel
 // so para admin, e a comparacao acontece DENTRO do banco:
 //
-//     sb.rpc('senha_contagem_confere', { uni, tentativa })  -->  true | false
+//     (as senhas de tela saíram em 11/09/2026 -- ver a seção 22 do CLAUDE.md)
 //
 // O navegador nunca recebe a senha. Quem as edita e o admin, na aba
 // Configuracoes. Ver sql/fase7-senhas-na-aba-admin.sql.
