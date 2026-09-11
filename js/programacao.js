@@ -2846,15 +2846,33 @@ function montarHtmlExpControle(scriptAutoImprimir) {
       </div>
       <div class="grupo-quem">${escapeHtml(rotuloUnidade(unidadeAtual))} &middot; Impresso por ${escapeHtml(nomeUsuarioAtual || emailUsuarioAtual || '—')} &mdash; ${impressoEm}</div>
       ${grupos.get(chave).map(
-        ([localizacao, item, descricao, um, pedido, qtd, op, lote, referencia, status, entrada, saida]) =>
-        `<article class="ficha">
+        ([localizacao, item, descricao, um, pedido, qtd, op, lote, referencia, status, entrada, saida]) => {
+          // Robson, 11/09/2026: "na etiqueta desses itens que tem numero de
+          // OP, lote e referencia preciso que saia na folha tambem em um
+          // tamanho visivel" -- até aqui os três só apareciam na linha
+          // miúda (3.5mm, "só lida de perto na conferência"). Item de
+          // produção usa OP/Lote/Referência pra rastrear o lote de verdade,
+          // e isso não pode depender de chegar bem perto da folha colada no
+          // pallet pra enxergar. Só aparece quando pelo menos um dos três
+          // existe -- item comum de almoxarifado não tem nenhum, e a linha
+          // vazia seria um espaço em branco sem sentido na ficha.
+          const producaoPartes = [
+            op ? `OP ${escapeHtml(op)}` : '',
+            lote ? `Lote ${escapeHtml(lote)}` : '',
+            referencia ? `Ref. ${escapeHtml(referencia)}` : ''
+          ].filter(Boolean);
+          const producaoHtml = producaoPartes.length
+            ? `<div class="ficha-producao">${producaoPartes.join(' &middot; ')}</div>` : '';
+          return `<article class="ficha">
           <div class="ficha-topo">
             <span class="ficha-item">${escapeHtml(item)}</span>
             <span class="ficha-qtd">${escapeHtml(qtd != null ? qtd : '')}${um ? ` <small>${escapeHtml(um)}</small>` : ''}</span>
           </div>
           <div class="ficha-desc">${escapeHtml(descricao || '')}</div>
-          <div class="ficha-detalhes">${detalhe('Local', localizacao)}${detalhe('Pedido', pedido)}${detalhe('OP', op)}${detalhe('Lote', lote)}${detalhe('Ref.', referencia)}${detalhe('Status', status)}${detalhe('Entrada', entrada)}${detalhe('Saída', saida)}</div>
-        </article>`).join('')}
+          ${producaoHtml}
+          <div class="ficha-detalhes">${detalhe('Local', localizacao)}${detalhe('Pedido', pedido)}${detalhe('Status', status)}${detalhe('Entrada', entrada)}${detalhe('Saída', saida)}</div>
+        </article>`;
+        }).join('')}
     </section>`).join('');
   const busca = document.getElementById('expCtrlBusca').value.trim();
   // Diz no papel DE ONDE veio este recorte -- a folha vai colada no pallet
@@ -2931,10 +2949,20 @@ function montarHtmlExpControle(scriptAutoImprimir) {
   /* 21mm = os 3 metros pedidos. */
   .ficha-item { font-size: 21mm; font-weight: 900; line-height: 1; letter-spacing: 0.02em; overflow-wrap: anywhere; }
   /* Quantidade um pouco menor: quem está no chão confere QUAL material é;
-     quanto tem se lê chegando perto, junto com OP e lote. */
+     quanto tem se lê chegando perto. */
   .ficha-qtd { font-size: 15mm; font-weight: 800; line-height: 1; white-space: nowrap; margin-left: auto; }
   .ficha-qtd small { font-size: 0.45em; font-weight: 700; }
   .ficha-desc { font-size: 9mm; font-weight: 700; line-height: 1.15; margin-top: 2mm; }
+  /* OP/Lote/Referência -- Robson, 11/09/2026: "preciso que saia na folha
+     tambem em um tamanho visivel". Maior que a linha miúda de detalhes
+     (7mm ≈ dá pra ler a 1,4m, não precisa colar o olho na folha), menor
+     que a descrição: item de produção usa isso pra rastrear o lote de
+     verdade, mas não é o que identifica QUAL material é (isso continua
+     sendo o código, em 21mm). */
+  .ficha-producao {
+    font-size: 7mm; font-weight: 800; line-height: 1.2; margin-top: 2mm;
+    display: flex; flex-wrap: wrap; gap: 0.5mm 5mm;
+  }
   .ficha-detalhes {
     font-size: 3.5mm; margin-top: 2.5mm; color: #222;
     display: flex; flex-wrap: wrap; gap: 1mm 6mm;

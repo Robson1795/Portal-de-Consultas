@@ -3151,6 +3151,34 @@ vez de baixar arquivo vazio; **a exportação da aba Entrada, já existente,
 continua idêntica depois da refatoração** (testado título, cabeçalho
 "Nº Pedido" e conteúdo do item). Zero erro de console.
 
+## Ficha impressa: OP/Lote/Referência em tamanho visível (11/09/2026)
+
+O Robson, vendo a ficha impressa de um item de produção (148384, OP
+1952205, Lote 106.1952205, Ref. 10316117): *"NA ETIQUETA DESSES ITENS
+QUE TEM NUMERO DE OP, LOTE E REFERENCIA PRECISO QUE SAIA NA FOLHA
+TAMBEM EM UM TAMANHO VISIVEL"*. Os três só apareciam na linha miúda de
+detalhes (3.5mm — "só lida de perto na conferência", ver a seção de
+09/09/2026 sobre a régua de tamanho da ficha). Item de produção usa
+OP/Lote/Referência pra rastrear o lote de verdade, e isso não podia
+depender de colar o olho na folha pra enxergar.
+
+`.ficha-producao`, nova linha entre a descrição (9mm) e os detalhes
+miúdos (3.5mm): **7mm**, dá pra ler a uns 1,4m (regra já usada no
+resto da ficha: altura da maiúscula ≈ distância ÷ 200), sem competir
+com o código do item (21mm, o que identifica QUAL material é) nem com
+a quantidade (15mm). Só aparece quando **pelo menos um** dos três
+existe — item comum de almoxarifado não tem nenhum, e mostrar a linha
+vazia seria espaço em branco sem sentido. OP/Lote/Referência **saíram**
+da linha miúda de detalhes (ficariam duplicados, sem ganho nenhum) —
+o que sobrou ali é Local, Pedido, Status, Entrada e Saída.
+
+Conferido no navegador: item com os três campos mostra "OP 1952205 ·
+Lote 106.1952205 · Ref. 10316117" na nova linha, em 7mm; item sem
+nenhum dos três não mostra linha nenhuma no lugar; a linha miúda de
+detalhes não repete mais OP (só Local/Pedido/Status/Entrada/Saída).
+Visualizado o HTML renderizado batendo com o pedido. Zero erro de
+console.
+
 ## 21. Notificação de cadastro pendente, no canto da tela (11/09/2026)
 
 O Victor: *"o Robson implementou uma notificação que avisa quando alguém se
