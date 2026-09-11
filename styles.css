@@ -958,6 +958,15 @@ td.col-acoes { white-space: nowrap; text-align: center; }
     border-color: var(--aviso-borda);
     animation: alerta-cadastro-pulso 1.6s ease-in-out infinite;
   }
+
+  /* Aba Conferir: célula "Onde está" clicável -- Robson: "ao clicar aparecer
+     todas as localizações e os pedidos referentes" (ver programacao.js). */
+  .onde-esta-cell {
+    cursor: pointer;
+    text-decoration: underline dotted;
+    text-underline-offset: 3px;
+  }
+  .onde-esta-cell:hover { color: var(--blue); }
   .modal-box .modal-text { font-size: 13.5px; color: var(--ink); line-height: 1.5; }
   .modal-box .modal-link {
     display: inline-block; margin-top: 14px; padding: 8px 14px; background: var(--blue);

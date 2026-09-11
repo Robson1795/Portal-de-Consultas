@@ -1212,8 +1212,80 @@ function linhasFiltradasExpControle() {
       String(l.numero_pedido).toLowerCase().includes(busca) ||
       String(l.numero_os_op).toLowerCase().includes(busca));
   }
-  return linhas;
+  return ordenarPorColunaExp(linhas);
 }
+
+// Ordenação por coluna da tabela da aba Entrada (Robson, 10/09/2026: "quero
+// colocar filtros nas colunas também", "ex localização de A-Z por codigo de
+// itens") -- mesmo padrão do #dataTable em js/estoque.js (sortKey/sortDir +
+// setinha no cabeçalho), com nome próprio (sortKeyExp/sortDirExp) pra não
+// disputar estado com a tabela da Consulta de Itens.
+//
+// Fica AQUI, dentro de linhasFiltradasExpControle() (a fonte única de tudo:
+// tela, impressão e exportação -- ver comentário de
+// linhasImprimiveisExpControle()), e não só no render: assim imprimir/
+// exportar também sai na ordem escolhida na tela.
+let sortKeyExp = null;
+let sortDirExp = 1;
+
+// Descrição/UM não são campos da própria linha -- vêm de expCtrlDescMap,
+// resolvida em cascata (Catálogo EXP -> itens_requisicao -> estoque). Por
+// isso o valor de cada coluna passa por uma função, não por um nome de
+// campo direto como no #dataTable.
+function valorColunaExp(l, key) {
+  const desc = expCtrlDescMap.get(l.codigo_item);
+  switch (key) {
+    case 'loc':     return l.localizacao || '';
+    case 'item':    return l.codigo_item || '';
+    case 'desc':    return (desc && desc.descricao) || '';
+    case 'um':      return (desc && desc.um) || '';
+    case 'qtd':     return parseQtd(l.quantidade);
+    case 'pedido':  return l.numero_pedido || '';
+    case 'op':      return l.numero_os_op || '';
+    case 'lote':    return l.lote || '';
+    case 'ref':     return l.referencia || '';
+    case 'status':  return l.status === 'retirado' ? 'Saiu p/ carregamento' : 'Na expedição';
+    case 'entrada': return l.criado_em || '';
+    case 'saida':   return l.retirado_em || '';
+    default:        return '';
+  }
+}
+
+function ordenarPorColunaExp(linhas) {
+  if (!sortKeyExp) return linhas;
+  const numericos = new Set(['qtd']);
+  const datas = new Set(['entrada', 'saida']);
+  return [...linhas].sort((a, b) => {
+    let va = valorColunaExp(a, sortKeyExp), vb = valorColunaExp(b, sortKeyExp);
+    if (numericos.has(sortKeyExp)) {
+      // já são números (parseQtd) -- comparação direta
+    } else if (datas.has(sortKeyExp)) {
+      va = va ? new Date(va).getTime() : 0;
+      vb = vb ? new Date(vb).getTime() : 0;
+    } else {
+      va = String(va).toLowerCase();
+      vb = String(vb).toLowerCase();
+    }
+    if (va < vb) return -1 * sortDirExp;
+    if (va > vb) return 1 * sortDirExp;
+    return 0;
+  });
+}
+
+// Recorte específico (#expCtrlTable thead th), e não `thead th` sem mais
+// nada -- o mesmo defeito já corrigido no #dataTable (js/estoque.js,
+// 10/09/2026): sem o recorte, clicar em QUALQUER outro cabeçalho do portal
+// cairia aqui, `th.dataset.key` viria undefined e apagaria a ordenação à
+// toa, além de arriscar `.arrow` nulo em tabela sem essa marcação.
+document.querySelectorAll('#expCtrlTable thead th[data-key]').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.key;
+    if (sortKeyExp === key) { sortDirExp *= -1; } else { sortKeyExp = key; sortDirExp = 1; }
+    document.querySelectorAll('#expCtrlTable thead th .arrow').forEach(a => a.textContent = '');
+    th.querySelector('.arrow').textContent = sortDirExp === 1 ? '▲' : '▼';
+    renderExpControle();
+  });
+});
 
 // Item que já saiu p/ carregamento não entra em "marcar todos" nem sai de
 // novo na impressora -- Robson, 10/09/2026: "itens que ja carregou bloqueie
@@ -1415,7 +1487,10 @@ function montarConferirExp() {
 
   // --- lado do físico ---
   const fisico = new Map();
-  const ondeEsta = new Map();   // codigo normalizado -> Set de localizações
+  // codigo normalizado -> Map<localização, Set<nº pedido>> -- guarda o pedido
+  // junto pra responder "ao clicar aparecer todas as localizações e os
+  // pedidos referentes" (Robson), não só a lista solta de localizações.
+  const ondeEsta = new Map();
   linhasDoSetorAtual().forEach(l => {
     if (l.status === 'retirado') return;
     const chave = normalizaCodigoItem(l.codigo_item);
@@ -1423,8 +1498,10 @@ function montarConferirExp() {
     somar(fisico, chave, parseNum(l.quantidade));
     const local = (l.localizacao || '').trim();
     if (local) {
-      if (!ondeEsta.has(chave)) ondeEsta.set(chave, new Set());
-      ondeEsta.get(chave).add(local);
+      if (!ondeEsta.has(chave)) ondeEsta.set(chave, new Map());
+      const porLocal = ondeEsta.get(chave);
+      if (!porLocal.has(local)) porLocal.set(local, new Set());
+      porLocal.get(local).add((l.numero_pedido || '').trim() || '—');
     }
     // A descrição do catálogo é a preferida (é a do sistema); esta cobre o item
     // que só existe no físico, e que por definição não está no catálogo.
@@ -1452,10 +1529,15 @@ function montarConferirExp() {
     else situacao = 'ok';
 
     const info = infoItem.get(chave) || { codigo: chave, descricao: '', um: '' };
+    const porLocal = ondeEsta.get(chave) || new Map();
+    const locaisDetalhe = [...porLocal.entries()]
+      .map(([localizacao, pedidos]) => ({ localizacao, pedidos: [...pedidos].sort() }))
+      .sort((a, b) => a.localizacao.localeCompare(b.localizacao));
     return {
       chave, codigo: info.codigo, descricao: info.descricao, um: info.um,
       qtdSistema, qtdFisico, diferenca, situacao,
-      locais: [...(ondeEsta.get(chave) || [])].sort()
+      locais: locaisDetalhe.map(d => d.localizacao),
+      locaisDetalhe
     };
   });
 }
@@ -1571,7 +1653,9 @@ function renderConferirExp() {
       <td class="num" style="font-weight:800; color:${l.situacao === 'ok' ? 'var(--muted)' : 'var(--erro-texto)'};">
         ${l.situacao === 'ok' ? '0' : sinal + numeroBR(l.diferenca)}</td>
       <td><span class="cfg-status ${s.classe}">${s.rotulo}</span></td>
-      <td class="loc">${l.locais.length ? escapeHtml(l.locais.join(', ')) : '—'}</td>
+      <td class="loc${l.locais.length ? ' onde-esta-cell' : ''}" data-chave="${escapeHtml(l.chave)}"
+          title="${l.locais.length ? 'Clique para ver localização e pedido de cada um' : ''}">
+        ${l.locais.length ? escapeHtml(l.locais.join(', ')) : '—'}</td>
       <td>
         ${confVerExcluidos
           ? `<div style="font-size:12px; color:var(--muted); margin-bottom:4px;"
@@ -1582,12 +1666,17 @@ function renderConferirExp() {
                      title="Restaurar -- volta a aparecer na conferência">↺ Restaurar</button>`
           : `<input type="text" class="conf-obs-input" data-chave="${escapeHtml(l.chave)}" data-item="${escapeHtml(l.codigo)}"
                     value="${escapeHtml(nota.observacao || '')}" placeholder="—"
-                    style="width:160px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px;">
+                    style="width:${escapeHtml(String(larguraObservacao(nota.observacao || '')))}px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px;">
              <button class="acao-btn conf-excluir" data-chave="${escapeHtml(l.chave)}" data-item="${escapeHtml(l.codigo)}"
                      title="Não preciso conferir este item nesta unidade (ex.: item de outra equipe/pátio) -- reversível">🗑️</button>`}
       </td>
     </tr>`;
   }).join('');
+
+  // Refina a largura estimada por caractere com a largura real do texto já
+  // renderizado (mesmo ajuste feito em analise.js -- reaproveita as mesmas
+  // funções, não duplica).
+  document.querySelectorAll('.conf-obs-input').forEach(ajustarLarguraObservacao);
 }
 
 
@@ -1723,6 +1812,18 @@ document.getElementById('confCorpo').addEventListener('focusout', async (e) => {
   setTimeout(() => { input.style.borderColor = ''; }, 1200);
 });
 
+// Enter também salva (mesmo atalho da Análise de Compras), sem precisar
+// clicar fora do campo.
+document.getElementById('confCorpo').addEventListener('keydown', (e) => {
+  if (e.target.classList.contains('conf-obs-input') && e.key === 'Enter') e.target.blur();
+});
+
+// Cresce o campo em tempo real -- o Robson: "conforme a escrita alongar
+// essa aba" (mesmo comportamento já usado na Análise de Compras).
+document.getElementById('confCorpo').addEventListener('input', (e) => {
+  if (e.target.classList.contains('conf-obs-input')) ajustarLarguraObservacao(e.target);
+});
+
 // Excluir/restaurar: mesma tabela, só muda excluido_em/excluido_por. Nunca
 // mexe em catalogo_exp_itens nem exp_controle_itens -- ver sql/fase33.
 document.getElementById('confCorpo').addEventListener('click', async (e) => {
@@ -1749,6 +1850,42 @@ document.getElementById('confCorpo').addEventListener('click', async (e) => {
   }
   conferirExpNotas.set(chave, { ...nota, unidade: unidadeAtual, codigo_item: btn.dataset.item, ...patch });
   renderConferirExp();
+});
+
+// "Onde está" -- Robson: "ao clicar aparecer todas as localizações e os
+// pedidos referentes". Recalcula na hora (mesma fonte da tabela) em vez de
+// guardar estado à parte, então mostra sempre o que está na tela agora.
+const ondeEstaModal = document.getElementById('ondeEstaModal');
+const ondeEstaModalBox = document.getElementById('ondeEstaModalBox');
+function fecharOndeEstaModal() { ondeEstaModal.classList.remove('open'); }
+document.getElementById('confCorpo').addEventListener('click', (e) => {
+  const celula = e.target.closest('.onde-esta-cell');
+  if (!celula) return;
+  const linha = montarConferirExp().find(l => l.chave === celula.dataset.chave);
+  if (!linha || !linha.locaisDetalhe.length) return;
+
+  ondeEstaModalBox.innerHTML = `
+    <button class="modal-close" id="ondeEstaCloseBtn">✕</button>
+    <h3 style="margin-top:0;">📍 ${escapeHtml(linha.codigo)}</h3>
+    <div class="modal-text" style="margin-bottom:10px;">${escapeHtml(linha.descricao || '—')}</div>
+    <table style="width:100%; border-collapse:collapse;">
+      <thead><tr>
+        <th style="text-align:left; padding:4px 8px; border-bottom:1px solid var(--border);">Localização</th>
+        <th style="text-align:left; padding:4px 8px; border-bottom:1px solid var(--border);">Nº Pedido</th>
+      </tr></thead>
+      <tbody>
+        ${linha.locaisDetalhe.map(d => `
+          <tr>
+            <td style="padding:4px 8px; border-bottom:1px solid var(--border);">${escapeHtml(d.localizacao)}</td>
+            <td style="padding:4px 8px; border-bottom:1px solid var(--border);">${escapeHtml(d.pedidos.join(', '))}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+  document.getElementById('ondeEstaCloseBtn').addEventListener('click', fecharOndeEstaModal);
+  ondeEstaModal.classList.add('open');
+});
+ondeEstaModal.addEventListener('click', (e) => {
+  if (e.target === ondeEstaModal) fecharOndeEstaModal();
 });
 
 // Marcar/desmarcar um item. Guarda o id, nao a posicao da linha: a ordem e

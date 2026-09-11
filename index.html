@@ -733,16 +733,26 @@
         </div>
 
         <div class="scroll-area">
-          <table>
+          <table id="expCtrlTable">
             <thead>
               <tr>
                 <th style="width:34px;" title="Escolha os itens que vão para a impressão — marcando aqui, marca todos os que estão na busca atual">
                   <input type="checkbox" id="expCtrlMarcarTodos" aria-label="Marcar todos para imprimir">
                 </th>
-                <th>Localização</th><th>Item</th><th>Descrição</th><th>UM</th>
-                <th>Qtd</th><th>Nº Pedido</th><th>Nº OP</th><th>Lote</th><th>Referência</th>
+                <th data-key="loc">Localização <span class="arrow"></span></th>
+                <th data-key="item">Item <span class="arrow"></span></th>
+                <th data-key="desc">Descrição <span class="arrow"></span></th>
+                <th data-key="um">UM <span class="arrow"></span></th>
+                <th data-key="qtd">Qtd <span class="arrow"></span></th>
+                <th data-key="pedido">Nº Pedido <span class="arrow"></span></th>
+                <th data-key="op">Nº OP <span class="arrow"></span></th>
+                <th data-key="lote">Lote <span class="arrow"></span></th>
+                <th data-key="ref">Referência <span class="arrow"></span></th>
                 <th title="Marcada ao imprimir pelo Controle EXP">Etiqueta</th>
-                <th>Status</th><th>Entrada em</th><th>Saída em</th><th>Ação</th>
+                <th data-key="status">Status <span class="arrow"></span></th>
+                <th data-key="entrada">Entrada em <span class="arrow"></span></th>
+                <th data-key="saida">Saída em <span class="arrow"></span></th>
+                <th>Ação</th>
               </tr>
             </thead>
             <tbody id="expCtrlBody"></tbody>
@@ -1378,6 +1388,10 @@
         <button class="btn btn-primary" id="sugestaoEnviarBtn" style="margin-left:auto;">Enviar</button>
       </div>
     </div>
+  </div>
+
+  <div class="modal-overlay" id="ondeEstaModal">
+    <div class="modal-box" id="ondeEstaModalBox" style="max-width:480px;"></div>
   </div>
 </div>
 

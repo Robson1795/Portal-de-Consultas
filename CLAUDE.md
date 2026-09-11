@@ -2401,3 +2401,83 @@ preenche a descrição normalmente; `gravarMovimentacaoManual()` chamada
 direto com o código errado devolve "NÃO SALVOU" sem gravar nada; o wizard
 recusa avançar do passo do Item com o mesmo código errado. Zero erro de
 console.
+
+## Ordenação por coluna na aba Entrada (11/09/2026)
+
+O Robson, olhando o cabeçalho da tabela da aba Entrada: *"Quero colocar
+filtros nas colunas também"*, e no exemplo: *"ex localização de A-Z por
+codigo de itens"*.
+
+Mesmo padrão de `#dataTable` (Consulta de Itens, `js/estoque.js`): cabeçalho
+com `data-key` + `<span class="arrow">`, clique alterna asc/desc e troca de
+coluna zera a seta das outras. A tabela ganhou `id="expCtrlTable"` e estado
+próprio — `sortKeyExp`/`sortDirExp` — **de propósito separado** do
+`sortKey`/`sortDir` do `#dataTable`: o Victor já tinha achado e corrigido um
+bug em que o ordenador de uma tabela pegava clique de "qualquer OUTRA
+tabela do portal" por estar ligado a `thead th` solto, sem escopo — aqui o
+seletor do clique já nasce escopado (`#expCtrlTable thead th[data-key]`),
+então o mesmo defeito não se repete.
+
+- `valorColunaExp(l, key)` extrai o valor comparável de cada coluna
+  (Localização, Item, Descrição, UM, Qtd, Nº Pedido, Nº OP, Lote,
+  Referência, Status, Entrada em, Saída em) — Qtd usa o número já
+  convertido (`parseQtd`), as duas datas usam `Date.getTime()`, o resto
+  compara como texto (`toLowerCase()`).
+- `ordenarPorColunaExp()` roda dentro de `linhasFiltradasExpControle()`,
+  depois do filtro de busca — assim a ordenação vale também pra imprimir e
+  exportar, que reaproveitam a mesma função, sem precisar duplicar a lógica
+  em cada lugar que monta a lista.
+- Coluna "Etiqueta" e "Ação" ficam de fora (não têm um valor único e
+  comparável que faça sentido ordenar).
+
+Conferido no navegador (mock de `progExpControle`/`catalogoExpItens`):
+clicar em "Localização" ordena A-Z (`EXP A-01, EXP A-02, EXP A-02, EXP
+B-01, EXP C-01`) e clicar de novo inverte; "Item" ordena por código
+(`135556I, ITEM1, ITEM1, ITEM1, ITEM2`); "Qtd" ordena numericamente (não
+como texto: `1, 2, 4, 5, 6`); "Entrada em" ordena por data e a inversão
+bate exatamente o oposto da ordem ascendente; clicar num cabeçalho de
+`#dataTable` (Consulta de Itens) não mexe em `sortKeyExp`, e vice-versa.
+Zero erro de console.
+
+## Observação com largura automática + "Onde está" clicável, aba Conferir (11/09/2026)
+
+Duas continuações do mesmo card de Observação/Exclusão. O Robson, sobre o
+campo de Observação, pequeno demais pro que ele escreve: *"AQUI CONFORME A
+ESCRITA ALONGAR ESSA ABA E TAMBEM SALVAR AUTOMATIVO A OBSERVAÇÃO QUE EU
+ESCREVER"*. E sobre a coluna "Onde está", que só lista as localizações sem
+dizer o pedido de cada uma: *"AQUI AO CLICAR APARECER TODAS AS
+LOCALIZAÇOES E OS PEDIDOS REFERENTES"*.
+
+**Largura automática**: reaproveita — não duplica — `larguraObservacao()`,
+`medirLarguraTexto()` e `ajustarLarguraObservacao()`, já usadas pelo mesmo
+campo na Análise de Compras (`js/analise.js`). São genéricas (recebem o
+`input`/texto direto, não amarradas à classe `.analise-obs-input`), e como
+todo `.js` do portal é script clássico carregado em sequência no
+`index.html`, uma função definida num arquivo carregado depois
+(`analise.js`) pode ser chamada por código de um arquivo carregado antes
+(`programacao.js`) — desde que a chamada aconteça em tempo de execução, não
+no carregamento do script. A observação já nasce com a largura certa (pelo
+texto salvo) e cresce/encolhe a cada tecla digitada, e o `Enter` também
+salva (mesmo atalho da Análise de Compras), sem precisar clicar fora do
+campo.
+
+**"Onde está" clicável**: a célula virou um link discreto
+(`.onde-esta-cell`) quando o item tem alguma localização física. Precisou
+mudar `montarConferirExp()`: `ondeEsta` deixou de guardar só um `Set` de
+localizações e passou a guardar, por localização, o(s) número(s) de pedido
+que estão lá (`Map<localização, Set<pedido>>`) — o dado já existia em
+`linhasDoSetorAtual()` (`numero_pedido`), só não estava sendo carregado
+pra esta tela. O clique abre um modal simples (mesmo padrão
+`.modal-overlay`/`.modal-box` já usado em `js/estoque.js` — fecha no ✕ ou
+clicando fora) com uma tabelinha Localização × Nº Pedido. Recalcula
+`montarConferirExp()` na hora do clique em vez de guardar estado à parte —
+sempre mostra o que está na tela agora, sem risco de desatualizar.
+
+Conferido no navegador: campo de Observação nasce em 170px e cresce pra
+382px ao digitar um texto longo; salvar no blur grava a observação
+completa; clicar em "Onde está" de um item com 2 localizações (`EXP A-01`,
+`EXP A-02`) abre o modal mostrando `EXP A-01 → PED100` e `EXP A-02 →
+PED101, PED102` corretamente agrupados; fechar pelo ✕ e reabrir funciona;
+clicar fora do modal (no fundo escurecido) também fecha. Excluir/restaurar
+item continuou funcionando normalmente depois da mudança em
+`montarConferirExp()`. Zero erro de console.
