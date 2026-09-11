@@ -175,6 +175,66 @@
   #tourTitulo { font-size: 15px; }
 }
 
+/* ===================== NOTIFICAÇÕES DE CANTO =====================
+   Popup no canto inferior direito, por cima de qualquer tela.
+
+   `position: fixed` e não `absolute`: tem de ficar parado no canto da JANELA
+   enquanto a pessoa rola uma tabela de mil linhas. E `z-index` acima do menu
+   lateral, abaixo dos modais -- um modal aberto é uma decisão em andamento, e
+   um aviso por cima dele roubaria o clique.
+
+   As cores saem dos tokens, então isto acompanha o tema claro e o escuro sem
+   uma segunda regra (seção 16). */
+#notificacoes {
+  position: fixed;
+  right: 16px; bottom: 16px;
+  z-index: 2500;
+  display: flex; flex-direction: column; gap: 10px;
+  width: 340px; max-width: calc(100vw - 32px);
+  /* A caixa cobre o canto inteiro mesmo vazia; sem isto ela engoliria o clique
+     de quem tenta usar o que está embaixo. Cada cartão devolve o seu. */
+  pointer-events: none;
+}
+.notif {
+  pointer-events: auto;
+  background: var(--panel);
+  border: 1px solid var(--aviso-borda);
+  border-left: 4px solid var(--aviso-texto);
+  border-radius: 10px;
+  padding: 12px 14px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.22);
+  animation: notif-entra 0.22s ease-out;
+}
+@keyframes notif-entra {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.notif-topo { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.notif-icone { font-size: 16px; line-height: 1; }
+.notif-titulo { font-weight: 800; font-size: 13px; color: var(--ink); flex: 1; }
+/* Discreto: fechar é saída, não a ação principal -- mesma regra do "Pular
+   tutorial" do tour. */
+.notif-fechar {
+  background: none; border: none; cursor: pointer; padding: 2px 4px;
+  color: var(--muted); font-size: 13px; line-height: 1;
+}
+.notif-fechar:hover { color: var(--ink); }
+.notif-texto { font-size: 12.5px; line-height: 1.5; color: var(--ink); }
+.notif-detalhe { color: var(--muted); font-size: 11.5px; }
+.notif-acao {
+  margin-top: 10px; width: 100%;
+  background: var(--blue); color: var(--sobre-acento);
+  border: none; border-radius: 8px; padding: 7px 10px;
+  font-size: 12.5px; font-weight: 700; cursor: pointer;
+}
+
+/* No celular ocupa a largura, menos as bordas: 340px fixos espremeriam o
+   cartão contra o lado e cortariam o e-mail. */
+@media (max-width: 520px) {
+  #notificacoes { left: 12px; right: 12px; bottom: 12px; width: auto; }
+}
+
+
 /* ===================== IMPRESSAO SEMPRE CLARA =====================
    Papel é branco nos dois temas. A Consulta de Itens e o Estoque de Aço
    imprimem a PRÓPRIA página (`window.print()`, não uma aba nova), e as regras
@@ -190,6 +250,9 @@
    não dependem disto -- são outro documento, sem o `data-tema` -- mas o
    reset aqui não as prejudica. */
 @media print {
+  /* Notificação não vai pro papel: é aviso de tela, e sairia carimbada por
+     cima da folha. */
+  #notificacoes { display: none !important; }
   /* Nada do tour no papel: o recorte escuro cobriria a folha inteira. */
   #tourFundo { display: none !important; }
   :root, :root[data-tema="escuro"] {
