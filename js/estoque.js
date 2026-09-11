@@ -22,6 +22,12 @@ let sortDir = 1;
 // continuar marcado quando a pessoa volta da página 3. Guarda o id como
 // string: o data-id do HTML sempre volta string, e o r.id do banco é number.
 let etiquetasTrading = new Set();
+// Mesma ideia do etiquetasTrading, pra exclusão em lote (Robson, 11/09/2026:
+// "coloque uma caixa de seleção, para que eu selecione os itens que eu
+// quero tirar da planilha"). Set separado -- marcar pra imprimir etiqueta e
+// marcar pra excluir são intenções diferentes, não dá pra reaproveitar o
+// mesmo Set sem misturar as duas.
+let itensSelecionados = new Set();
 // Acima de quantas folhas o portal pergunta antes de imprimir. Vale pra
 // etiqueta da Trading (uma folha por item) E pro Imprimir do Controle EXP
 // (js/programacao.js, uma folha por item desde 10/09/2026) -- e a MESMA regra,
@@ -136,6 +142,11 @@ function render(rows, intervalo) {
   // unidade mesmo quando o filtro não achou nada.
   atualizarBotaoEtiquetas();
 
+  const cabecalhoSelecionar = document.querySelector('.col-selecionar');
+  cabecalhoSelecionar.style.display = podeVerEstoqueMinimo() ? 'table-cell' : 'none';
+  document.getElementById('dataSelTodos').checked = marcouTodosSelecionados(rows);
+  atualizarBotaoExcluirSelecionados();
+
   document.querySelector('.col-referencia').style.display = mostraColunasBenchmark() ? 'table-cell' : 'none';
   document.querySelector('.col-lote').style.display = mostraColunasBenchmark() ? 'table-cell' : 'none';
 
@@ -167,6 +178,9 @@ function render(rows, intervalo) {
     }
     return `
     <tr${quebra}>
+      <td class="col-selecionar" style="display:${podeVerEstoqueMinimo() ? 'table-cell' : 'none'};">
+        <input type="checkbox" class="sel-item-check" data-id="${escapeHtml(r.id)}" ${itensSelecionados.has(String(r.id)) ? 'checked' : ''}>
+      </td>
       <td class="item">${escapeHtml(r.item)}</td>
       <td>${escapeHtml(r.descricao)}</td>
       <td>${escapeHtml(r.um)}</td>
@@ -284,7 +298,7 @@ document.getElementById('pgPorPagina').addEventListener('change', (e) => {
   applyFilterAndSort();
 });
 
-let filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false, estoqueBaixo: false };
+let filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false, estoqueBaixo: false, semLocal: false };
 
 // Paginacao (Fase 3). `imprimindoTudo` existe porque a impressao precisa sair
 // com TODAS as linhas filtradas, nao so a pagina na tela.
@@ -356,6 +370,16 @@ function applyFilterAndSort() {
   if (filtros.padrao === 'pendente') rows = rows.filter(r => !fichaBoxMap.has(r.item));
   if (filtros.zerado) rows = rows.filter(r => parseQtd(r.quantidade) === 0);
   if (filtros.estoqueBaixo) { const baixos = itensAbaixoDoEstoqueSeguro(currentData); rows = rows.filter(r => baixos.has(r.item)); }
+  // Robson, 11/09/2026: "filtre todos os itens que nao tem localizacao e
+  // REC que e recebimento" -- item parado no REC ainda nao foi guardado no
+  // endereco final, entao conta junto com "sem localizacao nenhuma" pra
+  // quem procura o que falta guardar.
+  if (filtros.semLocal) {
+    rows = rows.filter(r => {
+      const loc = String(r.localizacao || '').trim().toUpperCase();
+      return loc === '' || loc === 'REC';
+    });
+  }
   if (filtros.comFoto) rows = rows.filter(r => fichaImageMap.has(r.item));
   if (filtros.divergente) {
     // Conta como divergencia tanto quantidade diferente quanto localizacao
@@ -774,6 +798,13 @@ document.getElementById('statEstoqueBaixoCard').addEventListener('click', () => 
   applyFilterAndSort();
 });
 
+document.getElementById('filtroSemLocalBtn').addEventListener('click', () => {
+  filtros.semLocal = !filtros.semLocal;
+  document.getElementById('filtroSemLocalBtn').className = filtros.semLocal ? 'btn btn-primary' : 'btn';
+  pagina = 1;
+  applyFilterAndSort();
+});
+
 // Estoque Mínimo editável (só visível pra quem podeVerEstoqueMinimo()) --
 // mesmo padrão de salvar-ao-sair já usado no Controle EXP Acessórios.
 document.getElementById('tableBody').addEventListener('focusout', (e) => {
@@ -799,8 +830,9 @@ async function loadData() {
   currentData = data || [];
   // Etiquetas marcadas são ids de linha desta unidade/depósito -- depois de
   // trocar, os ids de antes não querem dizer nada aqui (e imprimiriam item de
-  // outro galpão).
+  // outro galpão). Mesmo motivo pra seleção de exclusão em lote.
   etiquetasTrading.clear();
+  itensSelecionados.clear();
   await Promise.all([loadFichaImageMap(), atualizarPermissaoEstoqueMinimo()]);
   updateStats();
   applyFilterAndSort();
@@ -1146,6 +1178,75 @@ async function excluirItemEstoque(btn) {
   currentData = currentData.filter(r => String(r.id) !== String(id));
   applyFilterAndSort();
 }
+
+// Mesma ideia do excluirItemEstoque(), em lote -- Robson: "coloque uma
+// caixa de seleção, para que eu selecione os itens que eu quero tirar da
+// planilha do exp, pode fazer para o almoxarifado também". Vai em blocos de
+// 100 ids (mesmo motivo de gravarEtiquetaEmLote() em js/programacao.js: o
+// `in` do PostgREST viaja na URL, e uma seleção grande poderia estourar o
+// limite de tamanho).
+async function excluirSelecionadosEstoque() {
+  if (itensSelecionados.size === 0) return;
+  const ids = [...itensSelecionados];
+  const confirmado = confirm(`Excluir ${ids.length} item(ns) selecionado(s) do estoque desta unidade?\n\nUse só depois de já ter dado baixa ou transferido pra outro depósito -- esta ação não pode ser desfeita.`);
+  if (!confirmado) return;
+
+  const botao = document.getElementById('excluirSelecionadosBtn');
+  botao.disabled = true;
+  const apagados = new Set();
+  let erro = null;
+  const BLOCO = 100;
+  for (let de = 0; de < ids.length && !erro; de += BLOCO) {
+    const pedaco = ids.slice(de, de + BLOCO);
+    const { data, error } = await sb.from('estoque').delete().in('id', pedaco).select('id');
+    if (error) { erro = error; break; }
+    (data || []).forEach(r => apagados.add(String(r.id)));
+  }
+  botao.disabled = false;
+
+  if (erro) {
+    alert(`Erro ao excluir: ${erro.message} — ${apagados.size} de ${ids.length} foram apagados antes da falha.`);
+  } else if (apagados.size < ids.length) {
+    alert(`${apagados.size} de ${ids.length} item(ns) foram excluídos. Os demais não puderam ser apagados (sem permissão para esta unidade, ou já removidos por outra pessoa).`);
+  }
+  if (apagados.size === 0) return;
+
+  currentData = currentData.filter(r => !apagados.has(String(r.id)));
+  apagados.forEach(id => itensSelecionados.delete(id));
+  applyFilterAndSort();
+}
+document.getElementById('excluirSelecionadosBtn').addEventListener('click', excluirSelecionadosEstoque);
+
+function marcouTodosSelecionados(rows) {
+  return rows.length > 0 && rows.every(r => itensSelecionados.has(String(r.id)));
+}
+
+function atualizarBotaoExcluirSelecionados() {
+  const botao = document.getElementById('excluirSelecionadosBtn');
+  if (!botao) return;
+  botao.style.display = podeVerEstoqueMinimo() ? 'inline-block' : 'none';
+  botao.textContent = `🗑️ Excluir selecionados (${itensSelecionados.size})`;
+  botao.disabled = itensSelecionados.size === 0;
+}
+
+document.getElementById('tableBody').addEventListener('change', (e) => {
+  const selCheck = e.target.closest('.sel-item-check');
+  if (!selCheck) return;
+  if (selCheck.checked) itensSelecionados.add(selCheck.dataset.id);
+  else itensSelecionados.delete(selCheck.dataset.id);
+  atualizarBotaoExcluirSelecionados();
+  const todas = document.getElementById('dataSelTodos');
+  if (todas) todas.checked = marcouTodosSelecionados(linhasFiltradasAtual);
+});
+
+document.querySelector('#dataTable thead').addEventListener('change', (e) => {
+  if (e.target.id !== 'dataSelTodos') return;
+  const filtradas = linhasFiltradasAtual;
+  if (e.target.checked) filtradas.forEach(r => itensSelecionados.add(String(r.id)));
+  else filtradas.forEach(r => itensSelecionados.delete(String(r.id)));
+  atualizarBotaoExcluirSelecionados();
+  applyFilterAndSort();
+});
 
 const padraoModal = document.getElementById('padraoModal');
 function mostrarPadraoCaixas(btn) {
@@ -2010,8 +2111,9 @@ contagemBtn.addEventListener('click', () => {
 document.getElementById('searchBox').addEventListener('input', () => { pagina = 1; applyFilterAndSort(); });
 document.getElementById('clearBtn').addEventListener('click', () => {
   document.getElementById('searchBox').value = '';
-  filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false, estoqueBaixo: false };
+  filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false, estoqueBaixo: false, semLocal: false };
   document.getElementById('statEstoqueBaixoCard').classList.remove('stat-card-ativo');
+  document.getElementById('filtroSemLocalBtn').className = 'btn';
   pagina = 1;
   const sel = document.getElementById('filterPadrao'); if (sel) sel.value = '';
   document.getElementById('filterZerado').checked = false;
@@ -2233,8 +2335,9 @@ document.getElementById('filterLocalizacao').addEventListener('input', (e) => {
 });
 
 document.getElementById('filterClearAllBtn').addEventListener('click', () => {
-  filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false, estoqueBaixo: false };
+  filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false, estoqueBaixo: false, semLocal: false };
   document.getElementById('statEstoqueBaixoCard').classList.remove('stat-card-ativo');
+  document.getElementById('filtroSemLocalBtn').className = 'btn';
   pagina = 1;
   document.getElementById('filterLocalizacao').value = '';
   document.getElementById('filterUm').value = '';
@@ -2345,9 +2448,11 @@ async function trocarUnidade(cod) {
   atualizarSubtituloUnidade();
   document.getElementById('searchBox').value = '';
   sortKey = null;
-  filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false, estoqueBaixo: false };
+  filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false, estoqueBaixo: false, semLocal: false };
   const cardBaixo = document.getElementById('statEstoqueBaixoCard');
   if (cardBaixo) cardBaixo.classList.remove('stat-card-ativo');
+  const btnSemLocal = document.getElementById('filtroSemLocalBtn');
+  if (btnSemLocal) btnSemLocal.className = 'btn';
   atualizarBadgeFiltros();
   if (modoContagemAtivo) desativarModoContagem();
   await loadData();

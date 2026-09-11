@@ -189,6 +189,11 @@
       </div>
       <button class="btn" id="filterBtn" style="position:relative;">Filtros <span id="filterCount" style="display:none;"></span></button>
       <button class="btn" id="clearBtn">Limpar filtros</button>
+      <!-- Robson, 11/09/2026: "crie um botao que filtre todos os itens que
+           nao tem localizacao e REC que e recebimento" -- item parado no REC
+           ainda nao foi guardado no endereco final, entao conta como "sem
+           localizacao de verdade" pra quem procura o que falta guardar. -->
+      <button class="btn" id="filtroSemLocalBtn" title="Itens sem localização cadastrada, ou ainda parados no REC (recebimento) -- não guardados no endereço final">📥 Sem local / REC</button>
       <button class="btn btn-primary" id="printBtn">Exportar PDF</button>
       <!-- Só aparece na Trading (unidade 1101): imprime uma folha por item
            marcado na coluna Etiqueta. Ver atualizarBotaoEtiquetas(). -->
@@ -196,6 +201,12 @@
               title="Imprime uma folha por item marcado, com a localização em letra grande">🖨️ Etiquetas (0)</button>
       <button class="btn" id="contagemBtn" title="Planilha para contagem física de estoque" style="font-size:16px; padding:9px 12px;">📋</button>
       <button class="btn" id="quemContouBtn" style="display:none;">Quem já contou</button>
+      <!-- Robson, 11/09/2026: "coloque uma caixa de seleção, para que eu
+           selecione os itens que eu quero tirar da planilha" -- exclusão em
+           lote, mesma permissão do 🗑️ por linha (ver podeVerEstoqueMinimo()
+           em js/estoque.js). Só aparece pra quem já pode editar o estoque
+           desta unidade. -->
+      <button class="btn" id="excluirSelecionadosBtn" style="display:none;">🗑️ Excluir selecionados (0)</button>
       <!-- So a Trading escreve aqui (ver atualizarBotaoEtiquetas). Fica vazio
            nas outras unidades, e vazio nao ocupa linha. -->
       <span class="status-msg" id="etiquetaTradingMsg" style="flex-basis:100%;"></span>
@@ -243,6 +254,9 @@
       <table id="dataTable">
         <thead>
           <tr>
+            <th class="col-selecionar" style="display:none; width:30px;">
+              <input type="checkbox" id="dataSelTodos" title="Selecionar todos os itens deste filtro">
+            </th>
             <th data-key="item">Item <span class="arrow"></span></th>
             <th data-key="desc">Descrição <span class="arrow"></span></th>
             <th data-key="um">UM <span class="arrow"></span></th>
@@ -917,6 +931,11 @@
             </select>
             <button class="btn" id="confRecarregar">Recarregar</button>
             <button class="btn" id="confVerExcluidosBtn" style="display:none;" title="Itens marcados como &quot;não preciso conferir&quot;">🚫 Ver excluídos</button>
+            <!-- Robson, 11/09/2026: "coloque uma caixa de seleção, para que eu
+                 selecione os itens que eu quero tirar da planilha do exp" --
+                 mesma exclusão reversível de sempre (conferir_exp_notas), só
+                 aplicada a vários itens de uma vez em vez de um por um. -->
+            <button class="btn" id="confAcaoLoteBtn" style="display:none;" disabled>🗑️ Excluir selecionados (0)</button>
             <span class="status-msg" id="confMsg"></span>
             <span class="status-msg" id="confContagem" style="margin-left:auto;"></span>
           </div>
@@ -925,6 +944,7 @@
             <table>
               <thead>
                 <tr>
+                  <th style="width:30px;"><input type="checkbox" id="confSelTodos" title="Selecionar todos os itens deste filtro"></th>
                   <th>Item</th><th>Descrição</th><th>UM</th>
                   <th>Sistema</th><th>Físico</th><th>Diferença</th>
                   <th>Situação</th><th>Onde está</th><th>Observação</th>

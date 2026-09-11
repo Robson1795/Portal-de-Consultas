@@ -2524,6 +2524,107 @@ simulei o RLS recusando (delete sem erro, mas sem linha apagada) e o
 alerta correto apareceu, com a linha permanecendo na tela. Zero erro de
 console.
 
+## Seleção em lote: Conferir (Controle EXP) e Consulta de Itens (11/09/2026)
+
+Continuação do mesmo pedido, agora em lote. O Robson: *"coloque uma caixa
+de seleção, para que eu selecione os itens que eu quero tirar da planilha
+do exp, pode fazer para o almoxarifado também"*.
+
+Importante: em cada tela a caixa de seleção aciona a AÇÃO QUE JÁ EXISTIA
+ali, só que em várias linhas de uma vez — não é uma ação nova nem muda o
+que "excluir" significa em cada lugar:
+
+- **Conferir (Controle EXP)**: continua sendo a exclusão reversível de
+  sempre (`conferir_exp_notas`) — o 🗑️ por linha continua existindo do
+  jeito que estava. O checkbox só evita ter que clicar item por item
+  quando há muitos "Só no físico"/"Diferença" pra tratar de uma vez.
+  Botão `#confAcaoLoteBtn` muda de rótulo sozinho conforme o modo:
+  "🗑️ Excluir selecionados" na conferência normal, "↺ Restaurar
+  selecionados" dentro de "Ver excluídos" — mesma lógica de
+  `confVerExcluidosBtn`. Um `.upsert(array, ...)` só grava todos de uma
+  vez (não um loop de upserts).
+- **Consulta de Itens (almoxarifado)**: continua sendo o delete real de
+  `estoque` (linha 11/09/2026 anterior, "já dei baixa ou transferi") —
+  mesma permissão (`podeVerEstoqueMinimo()`), mesmo aviso de "não tem
+  volta". `.delete().in('id', bloco)` em blocos de 100 (mesmo motivo de
+  `gravarEtiquetaEmLote()`: o `in` do PostgREST viaja na URL).
+
+Detalhes que valem pras duas telas:
+- "Selecionar todos" no cabeçalho marca o que está **filtrado/na tela**,
+  não a unidade inteira sem filtro — mesmo comportamento já usado em
+  "Etiqueta" (Trading) e no `data-key`/ordenação: útil pra estreitar pela
+  busca antes de marcar tudo.
+- Trocar de unidade, trocar de modo (Ver excluídos ↔ normal) ou recarregar
+  os dados limpa a seleção -- o significado do que estava marcado deixou
+  de valer (são outros itens, ou o botão virou outra ação).
+- O confirm() sempre mostra a CONTAGEM antes de agitar qualquer coisa
+  (`Excluir 7 item(ns)...`), então quem clicou vê o tamanho do lote antes
+  de confirmar -- reaproveita o mesmo hábito de `limparTodasAsContagens()`.
+
+Conferido no navegador (mock de `sb.from(...).upsert()`/`.delete()`): no
+Conferir, marcar 2 de 4 itens e excluir em lote grava um `upsert` só com
+as 2 linhas certas; "Ver excluídos" mostra os 2 e o botão vira "Restaurar
+selecionados"; restaurar em lote devolve os 2 pra conferência normal;
+"selecionar todos" marca e desmarca corretamente; cancelar no `confirm()`
+não chama o banco. Na Consulta de Itens, marcar 2 de 3 itens e excluir em
+lote chama um `delete().in('id', [...])` só, com as duas linhas certas
+saindo de `currentData` e da tela; "selecionar todos" e "cancelar" também
+corretos. Zero erro de console.
+
+## Botão "Sem local / REC" na Consulta de Itens (11/09/2026)
+
+O Robson: *"crie um botao que filtre todos os itens que nao tem localização
+e REC que é recebimento"*.
+
+REC é o recebimento — item que chegou mas ainda não foi guardado no
+endereço final da prateleira. Pra quem procura "o que falta guardar", isso
+é a mesma pergunta que "item sem localização nenhuma" (ambos ainda não
+estão no lugar certo), por isso o botão junta os dois num filtro só, em
+vez de dois filtros separados.
+
+- Botão de alternância na barra principal (`filtroSemLocalBtn`), mesmo
+  padrão visual dos outros toggles do portal (`btn` ↔ `btn btn-primary`
+  enquanto ativo).
+- Compara a localização em maiúsculo e sem espaço (`REC`, `rec`, `Rec` — a
+  planilha já chegou com as duas grafias, ver captura do Robson) e também
+  considera vazio/`null` como "sem local".
+- Reseta sozinho ao trocar de unidade, ao limpar filtros e no botão
+  "Limpar" do painel avançado — mesmos três lugares que já resetavam
+  `estoqueBaixo`/`statEstoqueBaixoCard`, só que aqui é `filtros.semLocal`
+  e a classe do próprio botão.
+
+Conferido no navegador: 5 itens de teste (`REC`, vazio, `rec` minúsculo,
+`A-01`, `null`) — ligar o filtro mostra os 4 certos (tudo menos `A-01`) e
+o botão fica destacado; desligar volta aos 5; "Limpar filtros" desliga e
+tira o destaque. Zero erro de console.
+
+## Exportar HTML do Controle EXP vira planilha, Imprimir continua ficha grande (11/09/2026)
+
+O Robson, vendo o HTML baixado abrir com uma ficha gigante por item: *"ao
+exportar HTML pode deixar em um tamanho menor como planilha"* — e, quando
+perguntei se valia também pro Imprimir, confirmou: *"só ao exportar"*.
+
+Os dois botões (Exportar → HTML, e Imprimir) usavam a MESMA
+`montarHtmlExpControle()`: uma ficha enorme por item (letra de 21mm,
+pensada pra colar no pallet e ler a 3 metros — ver a seção de 09/09/2026
+sobre isso). Fazia sentido pro Imprimir, mas o arquivo exportado é pra
+abrir e OLHAR NA TELA, não colar em lugar nenhum — a ficha gigante ali só
+obrigava a rolar página por página pra ver uma lista de itens.
+
+- `montarHtmlExpControleTabela()` (nova): uma `<table>` comum, mesmas
+  colunas e mesma ordem do CSV/Excel (`EXP_EXPORT_CABECALHO` +
+  `linhasExportacaoExpControle()` — reaproveitados, não duplicados), fonte
+  normal (12px), sem quebra de página por pedido. `exportarExpControleHtml()`
+  passou a chamar esta função em vez de `montarHtmlExpControle(false)`.
+- `montarHtmlExpControle()` (a ficha grande) agora é **só** do botão
+  Imprimir — o parâmetro `scriptAutoImprimir` que já tinha só faz sentido
+  ali mesmo (o script de auto-impressão nunca era usado no HTML exportado).
+
+Conferido no navegador: `montarHtmlExpControleTabela()` gera 1 KB pra 2
+itens (contra 6 KB da ficha, mesmos dados) e não tem nenhuma `.ficha`;
+clicar em Exportar → HTML baixa exatamente essa tabela; clicar em
+Imprimir continua abrindo a ficha gigante de sempre, com o script de
+auto-impressão. Zero erro de console.
 
 ## 21. Notificação de cadastro pendente, no canto da tela (11/09/2026)
 

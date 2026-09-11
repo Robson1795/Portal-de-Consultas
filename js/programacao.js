@@ -53,6 +53,13 @@ const filtrosConf = { busca: '', situacao: 'divergentes' };
 // equipe". Mesmo padrão do "não repor" da Análise de Compras.
 let conferirExpNotas = new Map();
 let confVerExcluidos = false; // mostrando a lista dos excluídos em vez da normal
+// Chaves (normalizaCodigoItem) marcadas pra ação em lote -- Robson,
+// 11/09/2026: "coloque uma caixa de seleção, para que eu selecione os itens
+// que eu quero tirar da planilha do exp". Limpa ao trocar de modo (excluídos
+// x normal): o significado do botão muda (excluir x restaurar), e manter a
+// marcação de um pro outro poderia restaurar/excluir item que a pessoa nem
+// estava vendo quando selecionou.
+let confSelecionados = new Map(); // chave -> código original do item (p/ gravar em conferir_exp_notas)
 // Segundo clique do Imprimir quando a impressão vai passar de LIMITE_FOLHAS.
 // Desde 10/09/2026 sai uma folha POR ITEM, então o número de folhas é o
 // número de itens -- "Imprimir tudo" numa unidade cheia é resma, e quem
@@ -1645,6 +1652,8 @@ function renderConferirExp() {
     const sinal = l.diferenca > 0 ? '+' : '';
     return `
     <tr>
+      <td><input type="checkbox" class="conf-sel-check" data-chave="${escapeHtml(l.chave)}" data-item="${escapeHtml(l.codigo)}"
+                  ${confSelecionados.has(l.chave) ? 'checked' : ''}></td>
       <td class="item">${escapeHtml(l.codigo)}</td>
       <td>${escapeHtml(l.descricao || '—')}</td>
       <td class="loc">${escapeHtml(l.um || '—')}</td>
@@ -1677,6 +1686,29 @@ function renderConferirExp() {
   // renderizado (mesmo ajuste feito em analise.js -- reaproveita as mesmas
   // funções, não duplica).
   document.querySelectorAll('.conf-obs-input').forEach(ajustarLarguraObservacao);
+
+  // Redesenho zera o DOM: descarta da seleção quem não está mais na tela
+  // (trocou de modo, ou o filtro/busca mudou) -- manter marcado um item que
+  // nem aparece mais confundiria a contagem do botão de ação em lote.
+  const chavesNaTela = new Set(naTela.map(l => l.chave));
+  [...confSelecionados.keys()].forEach(chave => { if (!chavesNaTela.has(chave)) confSelecionados.delete(chave); });
+  const selTodos = document.getElementById('confSelTodos');
+  if (selTodos) selTodos.checked = marcouTodosConf();
+  atualizarBotaoAcaoLoteConf();
+}
+
+function marcouTodosConf() {
+  const boxes = [...document.querySelectorAll('#confCorpo .conf-sel-check')];
+  return boxes.length > 0 && boxes.every(c => c.checked);
+}
+
+function atualizarBotaoAcaoLoteConf() {
+  const botao = document.getElementById('confAcaoLoteBtn');
+  if (!botao) return;
+  const n = confSelecionados.size;
+  botao.style.display = n > 0 ? 'inline-block' : 'none';
+  botao.disabled = n === 0;
+  botao.textContent = confVerExcluidos ? `↺ Restaurar selecionados (${n})` : `🗑️ Excluir selecionados (${n})`;
 }
 
 
@@ -1772,6 +1804,7 @@ document.getElementById('confRecarregar').addEventListener('click', async () => 
   const msg = document.getElementById('confMsg');
   msg.textContent = 'Recarregando as duas pontas...';
   msg.className = 'status-msg';
+  confSelecionados.clear(); // dados novos: a seleção de antes pode nem existir mais
   await carregarCatalogoExp();
   await carregarProgramacao();
   await carregarConferirExpNotas();
@@ -1781,6 +1814,7 @@ document.getElementById('confRecarregar').addEventListener('click', async () => 
 
 document.getElementById('confVerExcluidosBtn').addEventListener('click', () => {
   confVerExcluidos = !confVerExcluidos;
+  confSelecionados.clear(); // o botão de ação em lote muda de significado (excluir x restaurar)
   renderConferirExp();
 });
 
@@ -1849,6 +1883,72 @@ document.getElementById('confCorpo').addEventListener('click', async (e) => {
     return;
   }
   conferirExpNotas.set(chave, { ...nota, unidade: unidadeAtual, codigo_item: btn.dataset.item, ...patch });
+  confSelecionados.delete(chave); // saiu de uma lista pra outra -- não faz mais sentido continuar marcado
+  renderConferirExp();
+});
+
+// Seleção em lote (checkbox por linha + "selecionar todos" do cabeçalho) --
+// Robson: "coloque uma caixa de seleção, para que eu selecione os itens que
+// eu quero tirar da planilha do exp".
+document.getElementById('confCorpo').addEventListener('change', (e) => {
+  const check = e.target.closest('.conf-sel-check');
+  if (!check) return;
+  if (check.checked) confSelecionados.set(check.dataset.chave, check.dataset.item);
+  else confSelecionados.delete(check.dataset.chave);
+  atualizarBotaoAcaoLoteConf();
+  const todas = document.getElementById('confSelTodos');
+  if (todas) todas.checked = marcouTodosConf();
+});
+
+document.getElementById('confSelTodos').addEventListener('change', (e) => {
+  const marcar = e.target.checked;
+  document.querySelectorAll('#confCorpo .conf-sel-check').forEach(chk => {
+    chk.checked = marcar;
+    if (marcar) confSelecionados.set(chk.dataset.chave, chk.dataset.item);
+    else confSelecionados.delete(chk.dataset.chave);
+  });
+  atualizarBotaoAcaoLoteConf();
+});
+
+// Mesma exclusão/restauração reversível de sempre (conferir_exp_notas),
+// só aplicada a todos os selecionados de uma vez -- um upsert só, com um
+// array de linhas, em vez de repetir o clique item por item.
+document.getElementById('confAcaoLoteBtn').addEventListener('click', async () => {
+  if (confSelecionados.size === 0) return;
+  const excluindo = !confVerExcluidos;
+  const itens = [...confSelecionados.entries()]; // [chave, codigoOriginal]
+  const confirmado = confirm(excluindo
+    ? `Excluir ${itens.length} item(ns) selecionado(s) da conferência?\n\nReversível -- dá pra restaurar depois em "Ver excluídos".`
+    : `Restaurar ${itens.length} item(ns) selecionado(s) de volta pra conferência?`);
+  if (!confirmado) return;
+
+  const agora = new Date().toISOString();
+  const linhas = itens.map(([chave, codigoOriginal]) => {
+    const nota = notaConferirDoItem(chave);
+    return {
+      unidade: unidadeAtual, codigo_item: codigoOriginal || nota.codigo_item,
+      observacao: nota.observacao || null,
+      excluido_em: excluindo ? agora : null,
+      excluido_por: excluindo ? nomeUsuarioAtual : null
+    };
+  });
+
+  const botao = document.getElementById('confAcaoLoteBtn');
+  botao.disabled = true;
+  const { error } = await sb.from('conferir_exp_notas')
+    .upsert(linhas, { onConflict: 'unidade,codigo_item' });
+  botao.disabled = false;
+
+  if (error) {
+    alert((excluindo ? 'Não foi possível excluir: ' : 'Não foi possível restaurar: ') + error.message);
+    return;
+  }
+  linhas.forEach(row => {
+    const chave = normalizaCodigoItem(row.codigo_item);
+    const notaAntiga = notaConferirDoItem(chave);
+    conferirExpNotas.set(chave, { ...notaAntiga, ...row });
+  });
+  confSelecionados.clear();
   renderConferirExp();
 });
 
@@ -2429,11 +2529,13 @@ async function exportarExpControleXlsx(nomeBase) {
   XLSX.writeFile(livro, nomeBase + '.xlsx');
 }
 
-// Reaproveitada pelo Exportar HTML e pelo Imprimir -- mesmo layout nos
-// dois, só muda o que acontece com o HTML depois (baixar vs abrir e
-// mandar pra impressora). `scriptAutoImprimir` só entra na versão que
-// abre pra imprimir; no arquivo baixado ninguém quer isso disparando
-// sozinho toda vez que a pessoa só quer abrir o arquivo pra olhar.
+// Só do Imprimir (botão "Imprimir", folha pro pallet) -- o Exportar HTML
+// tinha o MESMO layout gigante até 11/09/2026, quando o Robson pediu um
+// tamanho menor "como planilha" só pro exportado, e depois confirmou "só
+// ao exportar": quem imprime cola no pallet e precisa ler de 3 metros;
+// quem exporta abre o arquivo na tela pra olhar, e a ficha gigante ali só
+// atrapalhava. Ver montarHtmlExpControleTabela() logo abaixo, que é o que
+// o Exportar HTML usa agora.
 function montarHtmlExpControle(scriptAutoImprimir) {
   const linhasFiltradas = linhasParaImprimirExpControle();
   // Uma FICHA por item, e não uma linha de tabela. A folha vai colada no
@@ -2585,8 +2687,45 @@ ${scriptAutoImprimir ? '<script>window.onload = () => window.print();<' + '/scri
 </body></html>`;
 }
 
+// Uma linha por item, mesmas colunas do CSV/Excel (EXP_EXPORT_CABECALHO) --
+// pra abrir e olhar como planilha, sem rolar página por página de ficha
+// gigante (que é o que montarHtmlExpControle() faz, e continua fazendo,
+// só que agora exclusivo do Imprimir).
+function montarHtmlExpControleTabela() {
+  const impressoEm = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+  const busca = document.getElementById('expCtrlBusca').value.trim();
+  const marcados = linhasFiltradasExpControle()
+    .filter(l => expCtrlSelecionadas.has(String(l.id))).length;
+  const subtitulo = (busca ? ` — busca: "${escapeHtml(busca)}"` : '')
+    + (marcados ? ` — ${marcados} item(ns) escolhido(s) na tela` : '');
+
+  const linhasHtml = linhasExportacaoExpControle().map(linha => `<tr>${
+    linha.map(v => `<td>${escapeHtml(v != null && v !== '' ? v : '—')}</td>`).join('')
+  }</tr>`).join('');
+
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+<title>Controle EXP — ${escapeHtml(rotuloUnidade(unidadeAtual))} — ${new Date().toLocaleDateString('pt-BR')}</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 0; padding: 14px; color: #111; font-size: 12px; }
+  h2 { font-size: 15px; margin: 0 0 2px; }
+  .impresso-por { font-size: 11px; color: #444; margin: 0 0 10px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #ccc; padding: 3px 7px; text-align: left; white-space: nowrap; }
+  th { background: #eef2f6; font-weight: 700; }
+  tr:nth-child(even) td { background: #f7f9fb; }
+  @media print { @page { size: A4 landscape; margin: 10mm; } thead { display: table-header-group; } }
+</style></head><body>
+<h2>Controle EXP Acessórios — ${escapeHtml(rotuloUnidade(unidadeAtual))} — ${new Date().toLocaleDateString('pt-BR')}${subtitulo}</h2>
+<div class="impresso-por">Impresso por ${escapeHtml(nomeUsuarioAtual || emailUsuarioAtual || '—')} &mdash; ${impressoEm}</div>
+<table>
+  <thead><tr>${EXP_EXPORT_CABECALHO.map(c => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead>
+  <tbody>${linhasHtml}</tbody>
+</table>
+</body></html>`;
+}
+
 function exportarExpControleHtml(nomeBase) {
-  const html = montarHtmlExpControle(false);
+  const html = montarHtmlExpControleTabela();
   baixarArquivo(new Blob([html], { type: 'text/html;charset=utf-8;' }), nomeBase + '.html');
 }
 

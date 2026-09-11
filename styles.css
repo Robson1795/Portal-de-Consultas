@@ -1047,6 +1047,8 @@ td.col-acoes { white-space: nowrap; text-align: center; }
     thead th { position: static; }
     .ficha-btn, .compare-btn, .contagem-clear-btn { display: none; }
     .col-ficha, .col-unidades, .col-padrao { display: none; }
+    /* Caixa de seleção (exclusão em lote) não serve pra nada no papel. */
+    .col-selecionar { display: none !important; }
     .quebra-pagina { page-break-before: always; break-before: page; }
     thead { display: table-header-group; } /* repete o cabeçalho em cada página nova */
     .contagem-input {
