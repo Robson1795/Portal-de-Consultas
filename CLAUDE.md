@@ -2726,6 +2726,44 @@ em locais diferentes vira UMA linha, soma 100, bate com os 100 do
 sistema e sai como "Confere", com as duas localizações. Zero erro de
 console.
 
+## Telinha "Onde está" arrastável (11/09/2026)
+
+O Robson, sobre a telinha do 📍 "Onde está": *"essa telinha deixa livre
+para eu movimentar ela, as vezes vou tirar print da tela ai ajusto aonde
+quero ela"*. É consulta rápida pra tirar print, não uma decisão em
+andamento — os outros modais do portal (ficha, comparar, etc.) continuam
+fixos e com fundo escurecido, porque ali faz sentido bloquear o resto da
+tela.
+
+- **Fundo do overlay virou transparente** (só nesta, `#ondeEstaModal`):
+  um print com metade da tela a 50% de preto perderia exatamente a linha
+  da tabela que a pessoa quer mostrar junto. Clicar fora continua
+  fechando — o overlay ainda existe, só não escurece mais nada.
+- **Arrasto por `pointerdown`/`pointermove`/`pointerup`** (cobre mouse e
+  toque com o mesmo código), movendo por `transform: translate(...)` — não
+  por `left`/`top`, que brigaria com a centralização por flex do overlay.
+  O ✕ e a tabela (que rola pro lado) ficam de fora do arrasto, senão
+  fechar ou rolar a lista puxaria a janela junto.
+- **Trava de tela**: arrastar pra fora da área visível corrige sozinho pra
+  manter uns 60px da caixa sempre alcançáveis — sem isso, jogar a janela
+  pra fora da tela a esconderia sem um jeito de trazer de volta (o ✕ some
+  junto).
+- **Posição é lembrada** enquanto a página está aberta: ajustou uma vez,
+  reabrir em outro item nasce no mesmo lugar. Sem isso, "ajusto aonde
+  quero ela" teria que ser refeito item por item.
+- **Distinguir arrasto de clique**: um `mousedown` seguido de soltar sem
+  mover tem de continuar abrindo/fechando normal; só quando há
+  movimento de verdade (`ondeEstaArrastou`) é que o clique subsequente no
+  overlay é ignorado — senão soltar o arrasto em cima do fundo fecharia
+  a janela sozinha.
+
+Conferido no navegador: arrastando pelo título move a caixa (testado com
+`left_click_drag` de verdade, não só JS), o fundo atrás continua visível
+pra print; fechar no ✕ e reabrir volta pro MESMO lugar; clicar fora sem
+arrastar continua fechando; arrasto absurdo (-5000,-5000) é corrigido
+sozinho, mantendo a caixa alcançável no canto da tela. Zero erro de
+console.
+
 ## 21. Notificação de cadastro pendente, no canto da tela (11/09/2026)
 
 O Victor: *"o Robson implementou uma notificação que avisa quando alguém se

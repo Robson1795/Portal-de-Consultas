@@ -1022,6 +1022,28 @@ td.col-acoes { white-space: nowrap; text-align: center; }
     animation: alerta-cadastro-pulso 1.6s ease-in-out infinite;
   }
 
+  /* A telinha "Onde está" é de CONSULTA, não uma decisão em andamento: o
+     Robson posiciona ela onde quer e tira print da tela ("as vezes vou tirar
+     print da tela aí ajusto aonde quero ela", 11/09/2026). Por isso ela foge
+     do padrão dos outros modais em duas coisas:
+
+     1. O fundo não escurece o resto. Um print com metade da tela a 50% de
+        preto perde justamente o que ele quer mostrar junto -- a linha da
+        tabela atrás. Os cliques continuam chegando no overlay, então clicar
+        fora continua fechando.
+     2. A caixa é arrastável (ver o pointerdown em js/programacao.js), daí o
+        cursor de mover. O ✕ e a tabela mantêm o cursor normal: lá o gesto é
+        clicar e rolar, não arrastar a janela. */
+  #ondeEstaModal { background: transparent; }
+  #ondeEstaModalBox {
+    cursor: move;
+    /* Sem o fundo escuro em volta, é a sombra que descola a janela da tabela. */
+    box-shadow: 0 10px 40px rgba(0,0,0,0.45);
+    border: 1px solid var(--border);
+  }
+  #ondeEstaModalBox table { cursor: auto; }
+  #ondeEstaModalBox .modal-close { cursor: pointer; }
+
   /* Aba Conferir: célula "Onde está" clicável -- Robson: "ao clicar aparecer
      todas as localizações e os pedidos referentes" (ver programacao.js). */
   .onde-esta-cell {

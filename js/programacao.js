@@ -1996,9 +1996,77 @@ document.getElementById('confCorpo').addEventListener('click', (e) => {
     </table>`;
   document.getElementById('ondeEstaCloseBtn').addEventListener('click', fecharOndeEstaModal);
   ondeEstaModal.classList.add('open');
+  aplicarPosicaoOndeEsta();   // reabre no lugar onde foi deixada
 });
 ondeEstaModal.addEventListener('click', (e) => {
+  // Soltar o arrasto fora da caixa não pode contar como "clicou fora, fecha".
+  if (ondeEstaArrastou) return;
   if (e.target === ondeEstaModal) fecharOndeEstaModal();
+});
+
+// ---- Arrastar a telinha "Onde está" -------------------------------------
+// Robson, 11/09/2026: "essa telinha deixa livre para eu movimentar ela, as
+// vezes vou tirar print da tela aí ajusto aonde quero ela".
+//
+// Move por `transform`, e não por left/top: a caixa é centralizada pelo flex
+// do overlay, e mexer em left/top brigaria com essa centralização.
+//
+// A posição fica GUARDADA enquanto a página estiver aberta -- ajustou uma
+// vez, as próximas aberturas já nascem no mesmo lugar (é o que "ajusto aonde
+// quero ela" pede; reabrir no centro obrigaria a arrastar de novo a cada
+// item).
+let ondeEstaDeslocX = 0;
+let ondeEstaDeslocY = 0;
+let ondeEstaArrastou = false;   // houve arrasto de verdade desde o último clique
+
+// Segura a caixa dentro da tela: arrastada inteira pra fora, não haveria como
+// trazer de volta nem fechar (o ✕ vai junto).
+function aplicarPosicaoOndeEsta() {
+  ondeEstaModalBox.style.transform = `translate(${ondeEstaDeslocX}px, ${ondeEstaDeslocY}px)`;
+  const r = ondeEstaModalBox.getBoundingClientRect();
+  const margem = 60;   // quanto da caixa sempre continua visível
+  let corrigeX = 0, corrigeY = 0;
+  if (r.right  < margem)                     corrigeX = margem - r.right;
+  if (r.left   > window.innerWidth - margem)  corrigeX = (window.innerWidth - margem) - r.left;
+  if (r.bottom < margem)                     corrigeY = margem - r.bottom;
+  if (r.top    > window.innerHeight - margem) corrigeY = (window.innerHeight - margem) - r.top;
+  if (corrigeX || corrigeY) {
+    ondeEstaDeslocX += corrigeX;
+    ondeEstaDeslocY += corrigeY;
+    ondeEstaModalBox.style.transform = `translate(${ondeEstaDeslocX}px, ${ondeEstaDeslocY}px)`;
+  }
+}
+
+// `pointerdown` (e não mousedown) cobre mouse e toque com um código só.
+ondeEstaModalBox.addEventListener('pointerdown', (e) => {
+  // O ✕ e a tabela ficam de fora: a tabela rola pro lado quando a lista é
+  // comprida, e arrastar a janela roubaria esse gesto.
+  if (e.target.closest('.modal-close, table')) return;
+
+  ondeEstaArrastou = false;
+  const origemX = e.clientX - ondeEstaDeslocX;
+  const origemY = e.clientY - ondeEstaDeslocY;
+  // Captura o ponteiro: o arrasto continua valendo mesmo quando o cursor sai
+  // da caixa, que é o caso normal ao jogar a janela pro canto.
+  ondeEstaModalBox.setPointerCapture(e.pointerId);
+
+  const mover = (ev) => {
+    ondeEstaArrastou = true;
+    ondeEstaDeslocX = ev.clientX - origemX;
+    ondeEstaDeslocY = ev.clientY - origemY;
+    aplicarPosicaoOndeEsta();
+  };
+  const soltar = () => {
+    ondeEstaModalBox.removeEventListener('pointermove', mover);
+    ondeEstaModalBox.removeEventListener('pointerup', soltar);
+    ondeEstaModalBox.removeEventListener('pointercancel', soltar);
+    // Zera só depois que o `click` do fim do arrasto já passou.
+    setTimeout(() => { ondeEstaArrastou = false; }, 0);
+  };
+  ondeEstaModalBox.addEventListener('pointermove', mover);
+  ondeEstaModalBox.addEventListener('pointerup', soltar);
+  ondeEstaModalBox.addEventListener('pointercancel', soltar);
+  e.preventDefault();   // sem isso o arrasto seleciona o texto da janela
 });
 
 // Marcar/desmarcar um item. Guarda o id, nao a posicao da linha: a ordem e
