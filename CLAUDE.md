@@ -2764,6 +2764,61 @@ arrastar continua fechando; arrasto absurdo (-5000,-5000) é corrigido
 sozinho, mantendo a caixa alcançável no canto da tela. Zero erro de
 console.
 
+## Situação detalhada, quantidade por pedido e aviso de pedido suspeito (11/09/2026)
+
+Três pedidos do Robson, em sequência, sobre a mesma coluna "Situação" e a
+telinha "Onde está" da aba Conferir:
+
+1. *"aqui quero mais detalhado, que diz se esta a mais no fisico ou no
+   sistema nessa aba de situação pode colocar"* — o badge "Diferença"
+   sozinho não dizia PRA QUE LADO; a pessoa tinha que olhar o sinal da
+   coluna Diferença do lado pra descobrir.
+2. *"coloque as quantidades por pedido tambem"* — a telinha "Onde está" só
+   listava os pedidos por localização, sem quantidade.
+3. *"outra coisa, se estiver a mais no fisico me mostre qual pedido que
+   falta alimentar no sistema"* — perguntei o que exatamente mostrar (o
+   Catálogo EXP não separa por pedido, só traz a quantidade total esperada
+   do item — não tem como AFIRMAR qual pedido está de fora, só estimar), o
+   Robson pediu pra eu recomendar, sugeri mostrar todos os pedidos como
+   candidatos, e ele fechou em: *"pode me dar só um aviso do que pode ter
+   acontecido, pelas quantidades seria mais facil de identificar qual
+   pedido é"*.
+
+**1) Situação com direção**: continua sendo o MESMO estado interno
+(`situacao: 'diferenca'`, mesmo card, mesmo filtro "Com diferença") — só
+o rótulo exibido muda conforme o sinal: "A mais no físico" (diferença
+positiva) ou "A mais no sistema" (negativa). "Só no físico"/"Só no
+sistema"/"Confere" não mudam.
+
+**2) Quantidade por pedido**: `montarConferirExp()` passou a guardar,
+por localização, um `Map<pedido, quantidade>` em vez de um `Set<pedido>`
+(soma quando o mesmo pedido aparece duas vezes na mesma localização —
+dois lotes, por exemplo). A tabela da telinha ganhou uma linha por
+(localização, pedido) em vez de uma por localização só, com a
+localização em `rowspan` quando tem mais de um pedido no mesmo endereço.
+
+**3) Aviso, não certeza**: `pedidosTotais` soma a quantidade de cada
+pedido em TODAS as localizações do item (o mesmo pedido pode estar em
+mais de um endereço). Só quando a diferença é POSITIVA ("a mais no
+físico" -- se fosse "a mais no sistema", não tem pedido físico nenhum
+pra apontar, é o oposto: registro que ainda falta fazer), procura um
+pedido cuja quantidade bata (±0,005, tolerância de arredondamento) com a
+diferença. Bateu: banner amarelo dizendo qual pedido, com a linha dele
+destacada na tabela e um ⚠ na frente do número. Não bateu: aviso neutro
+("pode ser soma de mais de um pedido"), sem apontar nada errado. A
+linguagem em todo canto deixa claro que é palpite pela conta, não fato
+("pode ser", "não é certeza") -- o Catálogo EXP genuinamente não tem
+coluna de pedido pra confirmar.
+
+Conferido no navegador, três cenários: (1) diferença de +50 com um único
+pedido de 50 entre outros — acha, avisa e destaca esse pedido; (2)
+diferença de +50 sem nenhum pedido batendo sozinho (30 + 20) — aviso
+neutro, sem destacar nada; (3) diferença de -50 (a mais no sistema) —
+nenhum aviso aparece, nem o "bateu" nem o "não bateu" (a régua só vale
+pro lado "a mais no físico"). Também: rowspan da localização com dois
+pedidos aparece só uma vez; badge de "Só no físico" continua igual (só
+"Diferença" virou detalhado). Zero erro de console.
+
 ## 21. Notificação de cadastro pendente, no canto da tela (11/09/2026)
 
 O Victor: *"o Robson implementou uma notificação que avisa quando alguém se

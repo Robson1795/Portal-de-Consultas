@@ -1507,21 +1507,26 @@ function montarConferirExp() {
 
   // --- lado do físico ---
   const fisico = new Map();
-  // codigo normalizado -> Map<localização, Set<nº pedido>> -- guarda o pedido
-  // junto pra responder "ao clicar aparecer todas as localizações e os
-  // pedidos referentes" (Robson), não só a lista solta de localizações.
+  // codigo normalizado -> Map<localização, Map<nº pedido, quantidade>> --
+  // guarda pedido E quantidade juntos pra responder "ao clicar aparecer
+  // todas as localizações e os pedidos referentes" (Robson) -- depois
+  // também "coloque as quantidades por pedido também", 11/09/2026.
   const ondeEsta = new Map();
   linhasDoSetorAtual().forEach(l => {
     if (l.status === 'retirado') return;
     const chave = normalizaCodigoItem(l.codigo_item);
     if (!chave) return;
-    somar(fisico, chave, parseNum(l.quantidade));
+    const qtdLinha = parseNum(l.quantidade);
+    somar(fisico, chave, qtdLinha);
     const local = (l.localizacao || '').trim();
     if (local) {
       if (!ondeEsta.has(chave)) ondeEsta.set(chave, new Map());
       const porLocal = ondeEsta.get(chave);
-      if (!porLocal.has(local)) porLocal.set(local, new Set());
-      porLocal.get(local).add((l.numero_pedido || '').trim() || '—');
+      if (!porLocal.has(local)) porLocal.set(local, new Map());
+      // Duas linhas do MESMO pedido na MESMA localização (dois lotes, por
+      // exemplo) somam -- listar duas vezes o mesmo pedido confundiria mais
+      // do que ajudaria.
+      somar(porLocal.get(local), (l.numero_pedido || '').trim() || '—', qtdLinha);
     }
     // A descrição do catálogo é a preferida (é a do sistema); esta cobre o item
     // que só existe no físico, e que por definição não está no catálogo.
@@ -1551,13 +1556,27 @@ function montarConferirExp() {
     const info = infoItem.get(chave) || { codigo: chave, descricao: '', um: '' };
     const porLocal = ondeEsta.get(chave) || new Map();
     const locaisDetalhe = [...porLocal.entries()]
-      .map(([localizacao, pedidos]) => ({ localizacao, pedidos: [...pedidos].sort() }))
+      .map(([localizacao, porPedido]) => ({
+        localizacao,
+        pedidos: [...porPedido.entries()]
+          .map(([pedido, quantidade]) => ({ pedido, quantidade }))
+          .sort((a, b) => a.pedido.localeCompare(b.pedido))
+      }))
       .sort((a, b) => a.localizacao.localeCompare(b.localizacao));
+
+    // Um pedido pode aparecer em mais de uma localização (lotes diferentes,
+    // por exemplo) -- soma o TOTAL do pedido pro item, não só o pedaço de
+    // cada endereço. É essa soma que se compara com a diferença, não a
+    // parcela de uma localização só.
+    const totalPorPedido = new Map();
+    locaisDetalhe.forEach(d => d.pedidos.forEach(p => somar(totalPorPedido, p.pedido, p.quantidade)));
+    const pedidosTotais = [...totalPorPedido.entries()].map(([pedido, quantidade]) => ({ pedido, quantidade }));
+
     return {
       chave, codigo: info.codigo, descricao: info.descricao, um: info.um,
       qtdSistema, qtdFisico, diferenca, situacao,
       locais: locaisDetalhe.map(d => d.localizacao),
-      locaisDetalhe
+      locaisDetalhe, pedidosTotais
     };
   });
 }
@@ -1658,7 +1677,17 @@ function renderConferirExp() {
   }
 
   corpo.innerHTML = naTela.map(l => {
-    const s = SITUACOES_CONF[l.situacao];
+    // Robson, 11/09/2026, sobre a coluna Situação: "quero mais detalhado,
+    // que diz se esta a mais no fisico ou no sistema". "Diferença" sozinho
+    // não dizia PRA QUE LADO -- a pessoa tinha que olhar a coluna Diferença
+    // do lado (com sinal) pra descobrir. Sistema/Físico continuam sendo os
+    // MESMOS dois estados internos (contam nos mesmos cards, mesmo filtro
+    // "Com diferença") -- só o rótulo exibido muda conforme o sinal.
+    const s = l.situacao === 'diferenca'
+      ? (l.diferenca > 0
+          ? { rotulo: 'A mais no físico', classe: SITUACOES_CONF.diferenca.classe }
+          : { rotulo: 'A mais no sistema', classe: SITUACOES_CONF.diferenca.classe })
+      : SITUACOES_CONF[l.situacao];
     const nota = notaConferirDoItem(l.chave);
     // O sinal da diferença é a informação: + é sobra no físico, - é falta. Sem
     // ele a pessoa lê "3" e não sabe para que lado.
@@ -1977,21 +2006,73 @@ document.getElementById('confCorpo').addEventListener('click', (e) => {
   const linha = montarConferirExp().find(l => l.chave === celula.dataset.chave);
   if (!linha || !linha.locaisDetalhe.length) return;
 
+  // Robson, 11/09/2026: "coloque as quantidades por pedido também" -- uma
+  // linha por (localização, pedido), pra quantidade não ficar solta sem
+  // dizer de qual pedido é (uma localização pode ter mais de um pedido).
+  const linhasTabela = linha.locaisDetalhe.flatMap(d =>
+    d.pedidos.map((p, i) => ({
+      // Localização só aparece na primeira linha do grupo (rowspan) -- repetir
+      // em toda linha do mesmo endereço poluiria mais do que ajudaria.
+      localizacao: i === 0 ? d.localizacao : null,
+      rowspan: d.pedidos.length,
+      pedido: p.pedido,
+      quantidade: p.quantidade
+    })));
+
+  // Robson, 11/09/2026: "pode me dar só um aviso do que pode ter
+  // acontecido, pelas quantidades seria mais facil de identificar qual
+  // pedido é" -- SÓ um aviso, não uma certeza: o Catálogo EXP não separa
+  // por pedido (é só a quantidade total esperada do item), então não tem
+  // como AFIRMAR qual pedido está de fora. O que dá pra fazer com segurança
+  // é comparar: se a quantidade de algum pedido bate (quase) exatamente com
+  // a diferença "a mais no físico", esse pedido é candidato forte -- avisa
+  // qual é, sem apagar os outros da lista.
+  //
+  // Só entra quando diferenca > 0 (a mais no físico): se fosse a mais no
+  // SISTEMA, a falta não tem pedido físico nenhum pra apontar -- é
+  // exatamente o oposto, física ainda não registrada.
+  const EPSILON_QTD = 0.005; // tolera arredondamento de casa decimal
+  let pedidoSuspeito = null;
+  if (linha.diferenca > 0) {
+    pedidoSuspeito = linha.pedidosTotais.find(p => Math.abs(p.quantidade - linha.diferenca) < EPSILON_QTD) || null;
+  }
+  const aviso = pedidoSuspeito
+    ? `<div class="modal-text" style="margin-bottom:10px; padding:8px 10px; background:var(--aviso-fundo); color:var(--aviso-texto); border-radius:8px; font-weight:600;">
+         ⚠ Pedido <b>${escapeHtml(pedidoSuspeito.pedido)}</b> tem exatamente ${numeroBR(pedidoSuspeito.quantidade)}${linha.um ? ' ' + escapeHtml(linha.um) : ''}
+         — bate com a diferença "a mais no físico". Pode ser o que ainda não foi lançado no sistema
+         (não é certeza, é só a pista mais provável pela quantidade).
+       </div>`
+    : (linha.diferenca > 0
+        ? `<div class="modal-text" style="margin-bottom:10px; color:var(--muted);">
+             Nenhum pedido bate sozinho com a diferença de ${numeroBR(linha.diferenca)}${linha.um ? ' ' + escapeHtml(linha.um) : ''}
+             — pode ser soma de mais de um pedido, ou a diferença não vem de pedido nenhum.
+           </div>`
+        : '');
+
   ondeEstaModalBox.innerHTML = `
     <button class="modal-close" id="ondeEstaCloseBtn">✕</button>
     <h3 style="margin-top:0;">📍 ${escapeHtml(linha.codigo)}</h3>
     <div class="modal-text" style="margin-bottom:10px;">${escapeHtml(linha.descricao || '—')}</div>
+    ${aviso}
     <table style="width:100%; border-collapse:collapse;">
       <thead><tr>
         <th style="text-align:left; padding:4px 8px; border-bottom:1px solid var(--border);">Localização</th>
         <th style="text-align:left; padding:4px 8px; border-bottom:1px solid var(--border);">Nº Pedido</th>
+        <th style="text-align:right; padding:4px 8px; border-bottom:1px solid var(--border);">Quantidade</th>
       </tr></thead>
       <tbody>
-        ${linha.locaisDetalhe.map(d => `
-          <tr>
-            <td style="padding:4px 8px; border-bottom:1px solid var(--border);">${escapeHtml(d.localizacao)}</td>
-            <td style="padding:4px 8px; border-bottom:1px solid var(--border);">${escapeHtml(d.pedidos.join(', '))}</td>
-          </tr>`).join('')}
+        ${linhasTabela.map(r => {
+          const suspeito = pedidoSuspeito && r.pedido === pedidoSuspeito.pedido;
+          const estilo = suspeito ? ' style="background:var(--aviso-fundo);"' : '';
+          return `
+          <tr${estilo}>
+            ${r.localizacao !== null
+              ? `<td rowspan="${r.rowspan}" style="padding:4px 8px; border-bottom:1px solid var(--border); vertical-align:top;">${escapeHtml(r.localizacao)}</td>`
+              : ''}
+            <td style="padding:4px 8px; border-bottom:1px solid var(--border);">${suspeito ? '⚠ ' : ''}${escapeHtml(r.pedido)}</td>
+            <td style="padding:4px 8px; border-bottom:1px solid var(--border); text-align:right;">${numeroBR(r.quantidade)}${linha.um ? ' ' + escapeHtml(linha.um) : ''}</td>
+          </tr>`;
+        }).join('')}
       </tbody>
     </table>`;
   document.getElementById('ondeEstaCloseBtn').addEventListener('click', fecharOndeEstaModal);
