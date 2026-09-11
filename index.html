@@ -195,6 +195,11 @@
       </div>
       <button class="btn" id="filterBtn" style="position:relative;">Filtros <span id="filterCount" style="display:none;"></span></button>
       <button class="btn" id="clearBtn">Limpar filtros</button>
+      <!-- Robson, 11/09/2026: "crie um botao que filtre todos os itens que
+           nao tem localizacao e REC que e recebimento" -- item parado no REC
+           ainda nao foi guardado no endereco final, entao conta como "sem
+           localizacao de verdade" pra quem procura o que falta guardar. -->
+      <button class="btn" id="filtroSemLocalBtn" title="Itens sem localização cadastrada, ou ainda parados no REC (recebimento) -- não guardados no endereço final">📥 Sem local / REC</button>
       <button class="btn btn-primary" id="printBtn">Exportar PDF</button>
       <!-- Só aparece na Trading (unidade 1101): imprime uma folha por item
            marcado na coluna Etiqueta. Ver atualizarBotaoEtiquetas(). -->

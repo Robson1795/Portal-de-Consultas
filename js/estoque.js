@@ -298,7 +298,7 @@ document.getElementById('pgPorPagina').addEventListener('change', (e) => {
   applyFilterAndSort();
 });
 
-let filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false, estoqueBaixo: false };
+let filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false, estoqueBaixo: false, semLocal: false };
 
 // Paginacao (Fase 3). `imprimindoTudo` existe porque a impressao precisa sair
 // com TODAS as linhas filtradas, nao so a pagina na tela.
@@ -370,6 +370,16 @@ function applyFilterAndSort() {
   if (filtros.padrao === 'pendente') rows = rows.filter(r => !fichaBoxMap.has(r.item));
   if (filtros.zerado) rows = rows.filter(r => parseQtd(r.quantidade) === 0);
   if (filtros.estoqueBaixo) { const baixos = itensAbaixoDoEstoqueSeguro(currentData); rows = rows.filter(r => baixos.has(r.item)); }
+  // Robson, 11/09/2026: "filtre todos os itens que nao tem localizacao e
+  // REC que e recebimento" -- item parado no REC ainda nao foi guardado no
+  // endereco final, entao conta junto com "sem localizacao nenhuma" pra
+  // quem procura o que falta guardar.
+  if (filtros.semLocal) {
+    rows = rows.filter(r => {
+      const loc = String(r.localizacao || '').trim().toUpperCase();
+      return loc === '' || loc === 'REC';
+    });
+  }
   if (filtros.comFoto) rows = rows.filter(r => fichaImageMap.has(r.item));
   if (filtros.divergente) {
     // Conta como divergencia tanto quantidade diferente quanto localizacao
@@ -784,6 +794,13 @@ function atualizarSubtituloUnidade() {
 document.getElementById('statEstoqueBaixoCard').addEventListener('click', () => {
   filtros.estoqueBaixo = !filtros.estoqueBaixo;
   document.getElementById('statEstoqueBaixoCard').classList.toggle('stat-card-ativo', filtros.estoqueBaixo);
+  pagina = 1;
+  applyFilterAndSort();
+});
+
+document.getElementById('filtroSemLocalBtn').addEventListener('click', () => {
+  filtros.semLocal = !filtros.semLocal;
+  document.getElementById('filtroSemLocalBtn').className = filtros.semLocal ? 'btn btn-primary' : 'btn';
   pagina = 1;
   applyFilterAndSort();
 });
@@ -2126,8 +2143,9 @@ contagemModal.addEventListener('click', (e) => {
 document.getElementById('searchBox').addEventListener('input', () => { pagina = 1; applyFilterAndSort(); });
 document.getElementById('clearBtn').addEventListener('click', () => {
   document.getElementById('searchBox').value = '';
-  filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false, estoqueBaixo: false };
+  filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false, estoqueBaixo: false, semLocal: false };
   document.getElementById('statEstoqueBaixoCard').classList.remove('stat-card-ativo');
+  document.getElementById('filtroSemLocalBtn').className = 'btn';
   pagina = 1;
   const sel = document.getElementById('filterPadrao'); if (sel) sel.value = '';
   document.getElementById('filterZerado').checked = false;
@@ -2349,8 +2367,9 @@ document.getElementById('filterLocalizacao').addEventListener('input', (e) => {
 });
 
 document.getElementById('filterClearAllBtn').addEventListener('click', () => {
-  filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false, estoqueBaixo: false };
+  filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false, estoqueBaixo: false, semLocal: false };
   document.getElementById('statEstoqueBaixoCard').classList.remove('stat-card-ativo');
+  document.getElementById('filtroSemLocalBtn').className = 'btn';
   pagina = 1;
   document.getElementById('filterLocalizacao').value = '';
   document.getElementById('filterUm').value = '';
@@ -2477,9 +2496,11 @@ async function trocarUnidade(cod) {
   atualizarSubtituloUnidade();
   document.getElementById('searchBox').value = '';
   sortKey = null;
-  filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false, estoqueBaixo: false };
+  filtros = { localizacao: '', um: '', padrao: '', zerado: false, comFoto: false, divergente: false, estoqueBaixo: false, semLocal: false };
   const cardBaixo = document.getElementById('statEstoqueBaixoCard');
   if (cardBaixo) cardBaixo.classList.remove('stat-card-ativo');
+  const btnSemLocal = document.getElementById('filtroSemLocalBtn');
+  if (btnSemLocal) btnSemLocal.className = 'btn';
   atualizarBadgeFiltros();
   if (modoContagemAtivo) desativarModoContagem();
   await loadData();

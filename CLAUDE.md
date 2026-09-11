@@ -2570,6 +2570,33 @@ lote chama um `delete().in('id', [...])` só, com as duas linhas certas
 saindo de `currentData` e da tela; "selecionar todos" e "cancelar" também
 corretos. Zero erro de console.
 
+## Botão "Sem local / REC" na Consulta de Itens (11/09/2026)
+
+O Robson: *"crie um botao que filtre todos os itens que nao tem localização
+e REC que é recebimento"*.
+
+REC é o recebimento — item que chegou mas ainda não foi guardado no
+endereço final da prateleira. Pra quem procura "o que falta guardar", isso
+é a mesma pergunta que "item sem localização nenhuma" (ambos ainda não
+estão no lugar certo), por isso o botão junta os dois num filtro só, em
+vez de dois filtros separados.
+
+- Botão de alternância na barra principal (`filtroSemLocalBtn`), mesmo
+  padrão visual dos outros toggles do portal (`btn` ↔ `btn btn-primary`
+  enquanto ativo).
+- Compara a localização em maiúsculo e sem espaço (`REC`, `rec`, `Rec` — a
+  planilha já chegou com as duas grafias, ver captura do Robson) e também
+  considera vazio/`null` como "sem local".
+- Reseta sozinho ao trocar de unidade, ao limpar filtros e no botão
+  "Limpar" do painel avançado — mesmos três lugares que já resetavam
+  `estoqueBaixo`/`statEstoqueBaixoCard`, só que aqui é `filtros.semLocal`
+  e a classe do próprio botão.
+
+Conferido no navegador: 5 itens de teste (`REC`, vazio, `rec` minúsculo,
+`A-01`, `null`) — ligar o filtro mostra os 4 certos (tudo menos `A-01`) e
+o botão fica destacado; desligar volta aos 5; "Limpar filtros" desliga e
+tira o destaque. Zero erro de console.
+
 ## 21. Notificação de cadastro pendente, no canto da tela (11/09/2026)
 
 O Victor: *"o Robson implementou uma notificação que avisa quando alguém se
