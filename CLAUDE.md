@@ -3,7 +3,7 @@
 Contexto do projeto para qualquer agente de IA ou pessoa que for mexer neste repositório.
 Sempre em **português do Brasil**.
 
-**Atualizado:** 10/09/2026 (consultor só consulta, tour do primeiro acesso)
+**Atualizado:** 11/09/2026 (notificação de cadastro pendente no canto da tela)
 **Mantenedores:** Robson (dono do projeto e admin geral) · Victor Dobner (colaborador)
 
 > Este arquivo é lido automaticamente pelo Claude Code ao abrir a pasta do projeto.
@@ -38,6 +38,7 @@ servidos são o próprio código-fonte. Divididos na Fase 2a (03/09/2026):
 | `js/requisicao.js` | Tela Requisição ALM e o cadastro de centro de custo e item (Fase 6) |
 | `js/programacao.js` | Programação de Separação, Controle EXP Acessórios e Depósito Benchmark — o maior arquivo do projeto (~2.200 linhas) |
 | `js/analise.js` | Análise de Compras: demanda dos pedidos x saldo do almoxarifado (seção 14) |
+| `js/notificacoes.js` | Popup de canto: avisa o admin de cadastro pendente, em qualquer tela (seção 21) |
 
 São **scripts clássicos, não módulos**, carregados nessa ordem no fim do `body`. O `let`/`const` de
 nível superior vai para o escopo lexical global, compartilhado entre os arquivos — é por isso que o
@@ -2521,3 +2522,79 @@ tabela, atualiza o card de itens encontrados e não mexe na outra linha;
 simulei o RLS recusando (delete sem erro, mas sem linha apagada) e o
 alerta correto apareceu, com a linha permanecendo na tela. Zero erro de
 console.
+
+
+## 21. Notificação de cadastro pendente, no canto da tela (11/09/2026)
+
+O Victor: *"o Robson implementou uma notificação que avisa quando alguém se
+cadastra e fica pendente de aprovação, mas ela só aparece na tela de
+configurações, o que não ajuda muito pois é meio redundante ali. Modifique esse
+comportamento (...) tipo um popup no canto inferior direito em tempo real, que
+aparece em qualquer tela, mas somente para admin."*
+
+O aviso do Robson (10/09) era um **banner dentro da aba Configurações**. Quem
+já estava ali não precisava dele — o card "Aguardando aprovação" e a própria
+lista diziam a mesma coisa — e quem estava em qualquer outra tela não recebia
+nada. A notificação mudou de lugar: `js/notificacoes.js`, empilhada no canto
+inferior direito, por cima de qualquer tela.
+
+- **O empilhador é genérico** (`mostrarNotificacao({...})`), de propósito: a
+  próxima notificação do portal entra por ele em vez de nascer outro canto com
+  outro estilo.
+- ⚠️ **Não some sozinha, e isso é decisão.** "Fulano está esperando aprovação"
+  é **tarefa**, não recado: sumir em 5 segundos enquanto a pessoa olha o outro
+  monitor é exatamente como uma aprovação fica esquecida por dois dias. Sai no
+  ✕ ou no botão de ação.
+- **Teto de 4 cartões**, a mais antiga sai primeiro, e a mais nova entra em
+  cima. **Duplicata não empilha**: a chave é o e-mail, então o mesmo cadastro
+  chegando pelo aviso ao vivo e pela conferência de entrada vira um cartão só.
+- **`pointer-events: none` na caixa, `auto` em cada cartão.** A caixa cobre o
+  canto inteiro mesmo vazia; sem isso ela engoliria o clique de quem tenta usar
+  o que está embaixo.
+- **`z-index` acima do menu, abaixo dos modais.** Um modal aberto é uma decisão
+  em andamento, e um aviso por cima dele roubaria o clique.
+- Fora da impressão, e as cores saem dos tokens — acompanha claro e escuro sem
+  uma segunda regra (seção 16).
+
+### ⚠️ O buraco do broadcast, e o que o tapa
+
+O aviso ao vivo é **broadcast** (`sb.channel('alertas-cadastro')`), decisão do
+Robson que continua valendo: broadcast **não exige ligar o Realtime na tabela**
+— sem `ALTER PUBLICATION`, sem mexer em replica identity (ver o histórico do
+fase23 sobre como isso dá errado). Quem dispara é `dispararAlertaCadastro()` em
+`js/auth.js`, logo depois do INSERT de verdade.
+
+**O preço é não alcançar quem está offline.** Se nenhum admin estiver com o
+portal aberto no instante do cadastro, aquele evento se perde para sempre — e a
+fila ficaria parada sem ninguém saber, que é justamente o que a notificação
+deveria resolver. Por isso `iniciarAvisoCadastro()` faz **duas** coisas:
+
+1. **Conta quem já está esperando** (`select ... { count: 'exact', head: true }`
+   — só o número, nenhuma linha trafega) e mostra um resumo: *"3 cadastros
+   aguardando aprovação"*. É isto que faz a notificação funcionar para quem
+   chegou depois.
+2. **Assina o broadcast** para o que vier daqui para a frente.
+
+Falha na contagem vira `console.warn`, não mensagem na tela: é aviso de
+cortesia, não uma tela que a pessoa pediu, e o card em Configurações continua
+contando de qualquer jeito.
+
+### ⚠️ Passou de super admin para admin
+
+O aviso do Robson era só para **super admin** (*"eu e o Victor"*). O pedido
+agora diz **"somente para admin"**, e é o que está no código
+(`perfilAtual === 'admin'`). Faz sentido: **é o admin quem aprova** (seção 5) —
+notificar quem não pode aprovar não resolve nada, e não notificar quem pode
+deixa a fila parada. Vale confirmar com o Robson, porque muda o alcance do que
+ele pediu.
+
+O recorte é conferido **na hora de notificar**, não só na hora de assinar: o
+perfil pode mudar no meio da sessão (um super admin tirando o admin de alguém),
+e quem deixou de ser admin não pode continuar recebendo nome e e-mail de quem
+se cadastrou. Quem não é admin **nem chega a consultar o banco**.
+
+### O card que pulsa continua em Configurações
+
+E não é duplicação: ele é o **estado** da fila — "ainda tem alguém esperando?" —
+e a notificação é o **evento**. Os dois respondem perguntas diferentes, e o card
+é o que sobra depois de a notificação ser dispensada.
