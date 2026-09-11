@@ -185,7 +185,11 @@ function render(rows, intervalo) {
       <td>${escapeHtml(r.descricao)}</td>
       <td>${escapeHtml(r.um)}</td>
       <td class="loc">
-        <span class="loc-chip">${escapeHtml(r.localizacao)}</span>
+        ${(!modoContagemAtivo && podeVerEstoqueMinimo())
+          ? `<input type="text" class="loc-editavel-input" data-id="${escapeHtml(r.id)}" data-item="${escapeHtml(r.item)}"
+                     value="${escapeHtml(r.localizacao || '')}" placeholder="—"
+                     style="width:90px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px; font-weight:700;">`
+          : `<span class="loc-chip">${escapeHtml(r.localizacao)}</span>`}
         ${(() => {
           const chave = chaveContagem(r.item, r.localizacao);
           const localFisico = localizacaoFisicaMap[chave];
@@ -229,6 +233,8 @@ function render(rows, intervalo) {
         ${parseQtd(r.quantidade) === 0
           ? `<button class="acao-btn substituto-btn" data-item="${escapeHtml(r.item)}" title="Sugestão de item equivalente já em estoque, mesma medida e material">💡</button>`
           : ''}
+        <button class="acao-btn loc-historico-btn" data-id="${escapeHtml(r.id)}" data-item="${escapeHtml(r.item)}"
+                title="Histórico de localização deste item">🕒</button>
         ${podeVerEstoqueMinimo()
           ? `<button class="acao-btn excluir-item-btn" data-id="${escapeHtml(r.id)}" data-item="${escapeHtml(r.item)}" data-loc="${escapeHtml(r.localizacao)}"
                      title="Excluir esta linha -- já deu baixa ou transferiu pra outro depósito">🗑️</button>`
@@ -1788,6 +1794,115 @@ document.getElementById('tableBody').addEventListener('keydown', (e) => {
     const btn = e.target.parentElement.querySelector('.loc-fisica-confirmar');
     if (btn) btn.click();
   }
+});
+
+// Localização editável direto na lista -- Robson, 11/09/2026: "localização
+// editavel para o almoxarifado" (mesmo padrão já usado no Entrada do
+// Controle EXP, js/programacao.js). Cada edição também grava uma linha em
+// estoque_localizacao_historico (de onde saiu, pra onde foi) -- é o que
+// alimenta o botão 🕒 Histórico logo abaixo. Sem isso, editar por cima da
+// localização apagaria a pergunta "onde é que esse item estava antes?".
+document.getElementById('tableBody').addEventListener('focusout', async (e) => {
+  const input = e.target.closest('.loc-editavel-input');
+  if (!input) return;
+  const item = currentData.find(r => String(r.id) === String(input.dataset.id));
+  if (!item) return;
+
+  const antiga = item.localizacao || null;
+  const nova = input.value.trim() || null;
+  if (nova === antiga) return; // nada mudou
+
+  input.disabled = true;
+  const { data, error } = await sb.from('estoque')
+    .update({ localizacao: nova }).eq('id', item.id).select('id');
+  input.disabled = false;
+
+  if (error) {
+    alert('Não foi possível salvar a localização: ' + error.message);
+    input.value = antiga || '';
+    return;
+  }
+  if (!data || data.length === 0) {
+    alert('Não foi possível salvar: nenhuma linha foi atualizada (sem permissão para esta unidade?).');
+    input.value = antiga || '';
+    return;
+  }
+
+  // Histórico é registro de auditoria, não o dado principal: se ele falhar
+  // (ex.: fase34 ainda não rodou no Supabase), a localização já foi salva
+  // de verdade -- não desfaz a edição por causa disso, só avisa no console.
+  const { error: erroHistorico } = await sb.from('estoque_localizacao_historico').insert({
+    estoque_id: String(item.id), unidade: unidadeAtual, deposito: depositoAtual, item: item.item,
+    localizacao_anterior: antiga, localizacao_nova: nova, alterado_por: nomeUsuarioAtual
+  });
+  if (erroHistorico) console.warn('Não foi possível registrar o histórico de localização:', erroHistorico.message);
+
+  item.localizacao = nova;
+  input.style.borderColor = 'var(--blue)';
+  setTimeout(() => { input.style.borderColor = ''; }, 1200);
+  // Localização é coluna ordenável e filtrável (data-key="loc",
+  // filtros.localizacao, filtros.semLocal) -- sem redesenhar, a linha
+  // ficaria fora do lugar certo até a próxima busca ou clique de ordenação.
+  applyFilterAndSort();
+});
+
+// 🕒 Histórico -- lista as trocas de localização desta linha específica
+// (estoque_id), mais recente primeiro. Mesmo padrão de modal já usado em
+// fichaModal/compareModal/padraoModal.
+const locHistoricoModal = document.getElementById('locHistoricoModal');
+const locHistoricoModalBox = document.getElementById('locHistoricoModalBox');
+function fecharLocHistoricoModal() { locHistoricoModal.classList.remove('open'); }
+
+async function abrirLocHistoricoModal(id, itemCode) {
+  locHistoricoModalBox.innerHTML = `
+    <button class="modal-close" id="locHistoricoCloseBtn">✕</button>
+    <h3 style="margin-top:0;">🕒 Histórico de localização</h3>
+    <div class="modal-item-code">Código: ${escapeHtml(itemCode)}</div>
+    <div class="modal-empty">Carregando...</div>`;
+  document.getElementById('locHistoricoCloseBtn').addEventListener('click', fecharLocHistoricoModal);
+  locHistoricoModal.classList.add('open');
+
+  const { data, error } = await sb.from('estoque_localizacao_historico')
+    .select('*').eq('estoque_id', String(id)).order('alterado_em', { ascending: false });
+
+  const corpo = error
+    ? `<div class="modal-empty">Não foi possível carregar o histórico: ${escapeHtml(error.message)}`
+      + ` — se a mensagem falar em tabela inexistente, sql/fase34-estoque-localizacao-historico.sql`
+      + ` ainda não foi rodado no Supabase.</div>`
+    : !data || data.length === 0
+      ? `<div class="modal-empty">Nenhuma mudança de localização registrada ainda pra esta linha.</div>`
+      : `<table style="width:100%; border-collapse:collapse; margin-top:6px; font-size:13px;">
+          <thead><tr>
+            <th style="text-align:left; padding:4px 8px; border-bottom:1px solid var(--border);">Quando</th>
+            <th style="text-align:left; padding:4px 8px; border-bottom:1px solid var(--border);">De</th>
+            <th style="text-align:left; padding:4px 8px; border-bottom:1px solid var(--border);">Para</th>
+            <th style="text-align:left; padding:4px 8px; border-bottom:1px solid var(--border);">Quem</th>
+          </tr></thead>
+          <tbody>
+            ${data.map(h => `<tr>
+              <td style="padding:4px 8px; border-bottom:1px solid var(--border);">${escapeHtml(new Date(h.alterado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }))}</td>
+              <td style="padding:4px 8px; border-bottom:1px solid var(--border);">${escapeHtml(h.localizacao_anterior || '—')}</td>
+              <td style="padding:4px 8px; border-bottom:1px solid var(--border);">${escapeHtml(h.localizacao_nova || '—')}</td>
+              <td style="padding:4px 8px; border-bottom:1px solid var(--border);">${escapeHtml(h.alterado_por || '—')}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>`;
+
+  locHistoricoModalBox.innerHTML = `
+    <button class="modal-close" id="locHistoricoCloseBtn">✕</button>
+    <h3 style="margin-top:0;">🕒 Histórico de localização</h3>
+    <div class="modal-item-code">Código: ${escapeHtml(itemCode)}</div>
+    ${corpo}`;
+  document.getElementById('locHistoricoCloseBtn').addEventListener('click', fecharLocHistoricoModal);
+}
+
+document.getElementById('tableBody').addEventListener('click', (e) => {
+  const btn = e.target.closest('.loc-historico-btn');
+  if (!btn) return;
+  abrirLocHistoricoModal(btn.dataset.id, btn.dataset.item);
+});
+locHistoricoModal.addEventListener('click', (e) => {
+  if (e.target === locHistoricoModal) fecharLocHistoricoModal();
 });
 
 let canalContagem = null;

@@ -2625,6 +2625,63 @@ clicar em Exportar → HTML baixa exatamente essa tabela; clicar em
 Imprimir continua abrindo a ficha gigante de sempre, com o script de
 auto-impressão. Zero erro de console.
 
+## Localização editável + histórico de movimentação na Consulta de Itens (11/09/2026)
+
+O Robson, olhando a lista cheia de "REC" e "null" na coluna Localização:
+*"localização editavel para o almoxarifado, e ter um botao de historico de
+movimentação de qual localizaçao saiu e localização que deu entrada"*.
+
+Duas coisas, uma dependendo da outra:
+
+- **Localização editável**: o chip fixo (`<span class="loc-chip">`) virou
+  um `<input>` — mas só quando `podeVerEstoqueMinimo()` é verdadeiro (mesma
+  trava do Estoque Seguro e do excluir linha) e fora do modo Contagem (que
+  já tem seu PRÓPRIO campo de localização, `.loc-fisica-input`, com outro
+  propósito: registrar o que foi contado no chão, sem sobrescrever o
+  cadastro sozinho). Mesmo padrão salvar-ao-sair já usado no Entrada do
+  Controle EXP (`js/programacao.js`, `.expctrl-loc-input`) — não
+  reinventado, só replicado pra esta tela.
+- **Histórico (🕒)**: toda vez que a localização é editada, grava uma linha
+  em `estoque_localizacao_historico` (de onde saiu, pra onde foi, quem,
+  quando) — sem isso, editar por cima da localização apagaria pra sempre a
+  pergunta que o Robson quer responder depois. O botão 🕒, na coluna Ações,
+  abre um modal com a lista (mais recente primeiro) **desta linha
+  específica** (`estoque_id`) — não do item como um todo, porque o mesmo
+  código pode estar em mais de uma prateleira ao mesmo tempo, e misturar o
+  histórico das duas confundiria mais do que ajudaria.
+
+Tabela nova (`sql/fase34-estoque-localizacao-historico.sql`), **não**
+reaproveita `log_movimentacao` (fase da Programação de Separação): aquela
+exige `pedido_id uuid not null`, e mudança de localização no Almoxarifado
+não tem pedido nenhum por trás. Mesmo motivo que já separou
+`conferir_exp_notas` de `analise_item_notas`. `estoque_id` guardado como
+TEXT — o tipo real de `estoque.id` não está definido em nenhum arquivo
+deste repositório (tabela anterior à numeração por fase), texto evita
+qualquer risco de incompatibilidade numa FK que não dá pra conferir com
+certeza. RLS: leitura com o mesmo recorte do `estoque` (fase31 —
+consultor não vê depósito que também não vê na tabela principal);
+escrita só de quem já pode editar o estoque da unidade
+(`pode_atualizar_estoque`), sem UPDATE/DELETE — histórico não se
+corrige, se corrigiu é outra linha.
+
+Histórico é auditoria, não o dado principal: se a gravação dele falhar
+(ex.: fase34 ainda não rodou), a localização já foi salva de verdade —
+só um `console.warn`, a edição não é desfeita por causa disso. O
+`applyFilterAndSort()` depois de salvar é proposital: Localização é
+coluna ordenável (`data-key="loc"`) e filtrável (`filtros.localizacao`,
+o novo `filtros.semLocal`), então sem redesenhar a linha ficaria fora do
+lugar certo até a próxima busca ou clique de ordenação.
+
+Conferido no navegador (mock de `sb.from('estoque').update()` e
+`sb.from('estoque_localizacao_historico').insert()`): editar o campo e
+sair grava as DUAS chamadas certas (update com a localização nova, insert
+com anterior/nova/quem); botão 🕒 abre o modal com a tabela de trocas,
+mais recente primeiro; lista vazia mostra aviso amigável; erro de tabela
+inexistente aponta pro arquivo SQL certo; fechar pelo ✕ ou clicando fora
+funciona; sem `podeVerEstoqueMinimo()` o campo volta a ser só leitura
+(chip) mas o botão 🕒 continua visível (histórico é consulta, não edição).
+Zero erro de console.
+
 ## 21. Notificação de cadastro pendente, no canto da tela (11/09/2026)
 
 O Victor: *"o Robson implementou uma notificação que avisa quando alguém se
