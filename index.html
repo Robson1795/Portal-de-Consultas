@@ -848,6 +848,15 @@
         <div class="cfg-barra">
           <input type="text" id="auditBusca" placeholder="Buscar por localização, item ou nº do pedido..."
                  style="flex:1; min-width:220px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <!-- Robson, 11/09/2026: "depois de conferido gere uma aba aonde
+               que eu consiga extrair as planilhas em HTM, excel etc,
+               depois daí que vou transferir no sistema Datasul" -->
+          <select id="auditExportarFormato" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+            <option value="xlsx">Excel (.xlsx)</option>
+            <option value="csv">CSV</option>
+            <option value="html">HTML</option>
+          </select>
+          <button class="btn" id="auditExportarBtn">Exportar</button>
         </div>
         <div class="modal-text" style="padding:0 16px 12px;">
           Só o que ainda está na expedição, agrupado por localização. Confirme item a item que

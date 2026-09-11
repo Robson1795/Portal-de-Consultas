@@ -2766,24 +2766,34 @@ function baixarArquivo(blob, nomeArquivo) {
   URL.revokeObjectURL(url);
 }
 
-function exportarExpControleCsv(nomeBase) {
+// Reaproveitado por qualquer aba que exporte planilha (Entrada, Auditoria)
+// -- só cabeçalho e linhas mudam entre elas.
+function exportarCsvGenerico(cabecalho, linhas, nomeBase) {
   // ; como separador (nao vírgula) porque o numero brasileiro usa vírgula
   // decimal -- Excel PT-BR abre certo direto com ;.
-  const csv = [EXP_EXPORT_CABECALHO, ...linhasExportacaoExpControle()]
+  const csv = [cabecalho, ...linhas]
     .map(linha => linha.map(v => `"${String(v != null ? v : '').replace(/"/g, '""')}"`).join(';'))
     .join('\r\n');
   baixarArquivo(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' }), nomeBase + '.csv');
 }
 
+function exportarExpControleCsv(nomeBase) {
+  exportarCsvGenerico(EXP_EXPORT_CABECALHO, linhasExportacaoExpControle(), nomeBase);
+}
+
 // O xlsx.full.min.js tem 861 KB e so esta funcao o usa: e buscado aqui, na
 // primeira exportacao da sessao. Ver carregarBiblioteca() no config.js.
-async function exportarExpControleXlsx(nomeBase) {
+async function exportarXlsxGenerico(cabecalho, linhas, nomeAba, nomeBase) {
   await carregarBiblioteca('o Exportar Excel', CDN_XLSX,
                            () => typeof XLSX !== 'undefined');
-  const planilha = XLSX.utils.aoa_to_sheet([EXP_EXPORT_CABECALHO, ...linhasExportacaoExpControle()]);
+  const planilha = XLSX.utils.aoa_to_sheet([cabecalho, ...linhas]);
   const livro = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(livro, planilha, 'Controle EXP');
+  XLSX.utils.book_append_sheet(livro, planilha, nomeAba);
   XLSX.writeFile(livro, nomeBase + '.xlsx');
+}
+
+async function exportarExpControleXlsx(nomeBase) {
+  await exportarXlsxGenerico(EXP_EXPORT_CABECALHO, linhasExportacaoExpControle(), 'Controle EXP', nomeBase);
 }
 
 // Só do Imprimir (botão "Imprimir", folha pro pallet) -- o Exportar HTML
@@ -2944,24 +2954,19 @@ ${scriptAutoImprimir ? '<script>window.onload = () => window.print();<' + '/scri
 </body></html>`;
 }
 
-// Uma linha por item, mesmas colunas do CSV/Excel (EXP_EXPORT_CABECALHO) --
-// pra abrir e olhar como planilha, sem rolar página por página de ficha
-// gigante (que é o que montarHtmlExpControle() faz, e continua fazendo,
-// só que agora exclusivo do Imprimir).
-function montarHtmlExpControleTabela() {
+// Planilha em HTML genérica -- reaproveitada por qualquer aba que exporte
+// tabela (Entrada, Auditoria): só título, cabeçalho e linhas mudam. `titulo`
+// e `subtitulo` já chegam prontos pra ir direto no HTML (o subtítulo em
+// especial já vem com o que precisar de escapeHtml feito por quem chamou,
+// porque mistura texto fixo com `—` e afins).
+function montarHtmlTabelaGenerica({ titulo, cabecalho, linhas, subtitulo }) {
   const impressoEm = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
-  const busca = document.getElementById('expCtrlBusca').value.trim();
-  const marcados = linhasFiltradasExpControle()
-    .filter(l => expCtrlSelecionadas.has(String(l.id))).length;
-  const subtitulo = (busca ? ` — busca: "${escapeHtml(busca)}"` : '')
-    + (marcados ? ` — ${marcados} item(ns) escolhido(s) na tela` : '');
-
-  const linhasHtml = linhasExportacaoExpControle().map(linha => `<tr>${
+  const linhasHtml = linhas.map(linha => `<tr>${
     linha.map(v => `<td>${escapeHtml(v != null && v !== '' ? v : '—')}</td>`).join('')
   }</tr>`).join('');
 
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
-<title>Controle EXP — ${escapeHtml(rotuloUnidade(unidadeAtual))} — ${new Date().toLocaleDateString('pt-BR')}</title>
+<title>${escapeHtml(titulo)}</title>
 <style>
   body { font-family: Arial, sans-serif; margin: 0; padding: 14px; color: #111; font-size: 12px; }
   h2 { font-size: 15px; margin: 0 0 2px; }
@@ -2972,13 +2977,32 @@ function montarHtmlExpControleTabela() {
   tr:nth-child(even) td { background: #f7f9fb; }
   @media print { @page { size: A4 landscape; margin: 10mm; } thead { display: table-header-group; } }
 </style></head><body>
-<h2>Controle EXP Acessórios — ${escapeHtml(rotuloUnidade(unidadeAtual))} — ${new Date().toLocaleDateString('pt-BR')}${subtitulo}</h2>
+<h2>${escapeHtml(titulo)}${subtitulo || ''}</h2>
 <div class="impresso-por">Impresso por ${escapeHtml(nomeUsuarioAtual || emailUsuarioAtual || '—')} &mdash; ${impressoEm}</div>
 <table>
-  <thead><tr>${EXP_EXPORT_CABECALHO.map(c => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead>
+  <thead><tr>${cabecalho.map(c => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead>
   <tbody>${linhasHtml}</tbody>
 </table>
 </body></html>`;
+}
+
+// Uma linha por item, mesmas colunas do CSV/Excel (EXP_EXPORT_CABECALHO) --
+// pra abrir e olhar como planilha, sem rolar página por página de ficha
+// gigante (que é o que montarHtmlExpControle() faz, e continua fazendo,
+// só que agora exclusivo do Imprimir).
+function montarHtmlExpControleTabela() {
+  const busca = document.getElementById('expCtrlBusca').value.trim();
+  const marcados = linhasFiltradasExpControle()
+    .filter(l => expCtrlSelecionadas.has(String(l.id))).length;
+  const subtitulo = (busca ? ` — busca: "${escapeHtml(busca)}"` : '')
+    + (marcados ? ` — ${marcados} item(ns) escolhido(s) na tela` : '');
+
+  return montarHtmlTabelaGenerica({
+    titulo: `Controle EXP Acessórios — ${rotuloUnidade(unidadeAtual)} — ${new Date().toLocaleDateString('pt-BR')}`,
+    cabecalho: EXP_EXPORT_CABECALHO,
+    linhas: linhasExportacaoExpControle(),
+    subtitulo
+  });
 }
 
 function exportarExpControleHtml(nomeBase) {
@@ -3209,8 +3233,9 @@ function renderConferencia() {
         <div class="cfg-barra">
           <span class="loc-chip">${escapeHtml(local)}</span>
           <span style="font-size:12px; color:var(--muted);">${itens.length} item(ns)</span>
-          <button class="btn btn-primary conf-retirar-tudo" data-local="${escapeHtml(local)}" style="margin-left:auto;">
-            Confirmar tudo desta localização
+          <button class="btn btn-primary conf-retirar-tudo" data-local="${escapeHtml(local)}" style="margin-left:auto;"
+                  title="Todo mundo saiu deste endereço pra área de carregamento">
+            🚚 Tudo pra DOCA
           </button>
         </div>
         <div class="scroll-area">
@@ -3226,7 +3251,8 @@ function renderConferencia() {
                   <td class="num">${l.quantidade != null ? escapeHtml(l.quantidade) : '—'}</td>
                   <td class="loc">${escapeHtml(l.numero_pedido || '—')}</td>
                   <td class="col-acoes">
-                    <button class="btn conf-retirar-item" data-id="${escapeHtml(l.id)}">Confirmar retirada</button>
+                    <button class="btn conf-retirar-item" data-id="${escapeHtml(l.id)}"
+                            title="Saiu deste endereço pra área de carregamento">🚚 DOCA</button>
                   </td>
                 </tr>`;
               }).join('')}
@@ -3455,15 +3481,23 @@ function statusAuditoriaDoItem(id) {
   return confFisicaMap.get(String(id)) || null;
 }
 
-function renderAuditoriaFisica() {
+// Extraído do render pra ser reaproveitado também pela exportação --
+// exportar tem de respeitar a mesma busca que está filtrando a tela
+// (mesmo padrão do Entrada: "Exportar/Imprimir respeitam a busca").
+function linhasAuditoriaFiltradas() {
   const busca = normalizaBuscaLocal(buscaAuditoria);
-  const pendentes = linhasDoSetorAtual().filter(l => {
+  return linhasDoSetorAtual().filter(l => {
     if (l.status === 'retirado') return false;
     if (!busca) return true;
     return normalizaBuscaLocal(l.localizacao).includes(busca)
         || normalizaBuscaLocal(l.numero_pedido).includes(busca)
         || normalizaBuscaLocal(l.codigo_item).includes(busca);
   });
+}
+
+function renderAuditoriaFisica() {
+  const busca = normalizaBuscaLocal(buscaAuditoria);
+  const pendentes = linhasAuditoriaFiltradas();
   const corpo = document.getElementById('auditBody');
   const vazio = document.getElementById('auditVazio');
 
@@ -3502,10 +3536,6 @@ function renderAuditoriaFisica() {
         <button class="btn btn-primary audit-tudo-confere" data-local="${escapeHtml(local)}" style="margin-left:auto;">
           ✓ Tudo confere neste endereço
         </button>
-        <button class="btn audit-tudo-doca" data-local="${escapeHtml(local)}"
-                title="Todo mundo saiu deste endereço pra área de carregamento">
-          🚚 Tudo pra DOCA
-        </button>
       </div>
       <div class="scroll-area">
         <table>
@@ -3531,8 +3561,6 @@ function renderAuditoriaFisica() {
                   ${statusHtml}
                   <button class="acao-btn audit-confere" data-id="${escapeHtml(l.id)}" title="Confirma que o item está neste endereço">✓</button>
                   <button class="acao-btn audit-nao-achei" data-id="${escapeHtml(l.id)}" title="Avisa que não achou o item neste endereço">⚠</button>
-                  <button class="acao-btn audit-doca" data-id="${escapeHtml(l.id)}"
-                          title="Saiu deste endereço pra área de carregamento (DOCA)">🚚 DOCA</button>
                 </td>
               </tr>`;
             }).join('')}
@@ -3570,8 +3598,6 @@ document.getElementById('auditBody').addEventListener('click', async (e) => {
   const btnConfere = e.target.closest('.audit-confere');
   const btnNaoAchei = e.target.closest('.audit-nao-achei');
   const btnTudo = e.target.closest('.audit-tudo-confere');
-  const btnDoca = e.target.closest('.audit-doca');
-  const btnTudoDoca = e.target.closest('.audit-tudo-doca');
 
   if (btnConfere) { await gravarStatusAuditoria(btnConfere.dataset.id, 'confere'); return; }
   if (btnNaoAchei) { await gravarStatusAuditoria(btnNaoAchei.dataset.id, 'nao_achei'); return; }
@@ -3598,36 +3624,79 @@ document.getElementById('auditBody').addEventListener('click', async (e) => {
     }
     (data || linhas).forEach(r => confFisicaMap.set(String(r.exp_controle_id), r));
     renderAuditoriaFisica();
+  }
+});
+
+// ---- Exportar a Auditoria: HTML/Excel/CSV -------------------------------
+// Robson, 11/09/2026: "depois de conferido gere uma aba aonde que eu
+// consiga extrair as planilhas em HTM, excel etc, depois daí que vou
+// transferir no sistema Datasul" -- mesma ideia do Exportar da aba Entrada
+// (reaproveita exportarCsvGenerico/exportarXlsxGenerico/
+// montarHtmlTabelaGenerica, cabeçalho e linhas próprios), com a Situação
+// da conferência (Confere/Não achei/Ainda não conferido) e quem/quando
+// junto -- é isso que ele leva pro Datasul.
+const AUDIT_EXPORT_CABECALHO = ['Localização', 'Item', 'Descrição', 'UM', 'Nº Pedido', 'Quantidade', 'Situação', 'Conferido por', 'Conferido em'];
+
+function linhasExportacaoAuditoria() {
+  // Mesma ordem A-Z da tela -- exportar fora de ordem desfaria o motivo de
+  // ordenar (Robson: "daí vou conferindo por sequência").
+  const linhas = [...linhasAuditoriaFiltradas()].sort((a, b) =>
+    String(a.localizacao || '').localeCompare(String(b.localizacao || ''), 'pt-BR'));
+
+  return linhas.map(l => {
+    const desc = expCtrlDescMap.get(normalizaCodigoItem(l.codigo_item));
+    const st = statusAuditoriaDoItem(l.id);
+    const situacao = !st ? 'Ainda não conferido' : st.status === 'confere' ? 'Confere' : 'Não achei';
+    return [
+      l.localizacao || '', l.codigo_item, desc && desc.descricao ? desc.descricao : '', desc && desc.um ? desc.um : '',
+      l.numero_pedido || '', l.quantidade != null ? l.quantidade : null,
+      situacao,
+      st?.conferido_por || '',
+      st?.conferido_em ? formatarDataHoraBR(st.conferido_em) : ''
+    ];
+  });
+}
+
+function montarHtmlAuditoriaTabela() {
+  const busca = document.getElementById('auditBusca').value.trim();
+  return montarHtmlTabelaGenerica({
+    titulo: `Auditoria física — Controle EXP — ${rotuloUnidade(unidadeAtual)} — ${new Date().toLocaleDateString('pt-BR')}`,
+    cabecalho: AUDIT_EXPORT_CABECALHO,
+    linhas: linhasExportacaoAuditoria(),
+    subtitulo: busca ? ` — busca: "${escapeHtml(busca)}"` : ''
+  });
+}
+
+document.getElementById('auditExportarBtn').addEventListener('click', async () => {
+  const linhas = linhasExportacaoAuditoria();
+  if (!linhas.length) {
+    alert('Nenhum item pra exportar -- a expedição está vazia ou a busca não bate com nada.');
     return;
   }
 
-  // Robson, 11/09/2026: "esses itens do EXP saem do endereço e vai para
-  // area de carregamento, a ideia é ter um botao para quando a gente
-  // tirar o item do endereço e ir para area de carregamento, pode
-  // colocar o nome de DOCA" -- mesma ação de sempre (marcarSaidaExpControle,
-  // já usada no 🚚 da aba Entrada e no "Confirmar retirada" da Saída/
-  // Conferência), só que direto daqui, no meio da caminhada -- sem
-  // precisar trocar de aba pra registrar que o item já saiu.
-  if (btnDoca) {
-    btnDoca.disabled = true;
-    const ok = await marcarSaidaExpControle(btnDoca.dataset.id, nomeUsuarioAtual);
-    if (ok) await carregarProgramacao();
-    else btnDoca.disabled = false;
-    renderAuditoriaFisica();
-    return;
-  }
+  const formato = document.getElementById('auditExportarFormato').value;
+  const busca = document.getElementById('auditBusca').value.trim();
+  const sufixoBusca = busca ? '-' + busca.replace(/[^a-z0-9]+/gi, '') : '';
+  const nomeBase = `auditoria-exp-${unidadeAtual}${sufixoBusca}-${new Date().toISOString().slice(0, 10)}`;
 
-  if (btnTudoDoca) {
-    const local = btnTudoDoca.dataset.local;
-    const itens = linhasDoSetorAtual().filter(l =>
-      l.status !== 'retirado' && (l.localizacao || '(sem localização)') === local);
-    if (!itens.length) return;
-    if (!confirm(`Confirmar que ${itens.length} item(ns) de "${local}" saíram pra área de carregamento (DOCA)?`)) return;
-
-    btnTudoDoca.disabled = true;
-    for (const item of itens) await marcarSaidaExpControle(item.id, nomeUsuarioAtual);
-    await carregarProgramacao();
-    renderAuditoriaFisica();
+  if (formato === 'xlsx') {
+    const botao = document.getElementById('auditExportarBtn');
+    const rotulo = botao.textContent;
+    botao.disabled = true;
+    botao.textContent = 'Preparando...';
+    try {
+      await exportarXlsxGenerico(AUDIT_EXPORT_CABECALHO, linhas, 'Auditoria EXP', nomeBase);
+    } catch (err) {
+      alert(err.message);
+      console.error('Falha ao exportar a auditoria em Excel:', err.message);
+    } finally {
+      botao.disabled = false;
+      botao.textContent = rotulo;
+    }
+  } else if (formato === 'html') {
+    baixarArquivo(new Blob([montarHtmlAuditoriaTabela()], { type: 'text/html;charset=utf-8;' }), nomeBase + '.html');
+  } else {
+    exportarCsvGenerico(AUDIT_EXPORT_CABECALHO, linhas, nomeBase);
   }
 });
 

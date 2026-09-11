@@ -3080,37 +3080,76 @@ de item funcionam; erro de tabela inexistente aponta pro arquivo SQL
 certo, sem travar a aba. Zero erro de console (fora erros de mocks de
 outras chamadas, não desta feature).
 
-### Botão DOCA + ordem A-Z dos endereços (11/09/2026)
+### Botão DOCA (corrigido de lugar) + ordem A-Z dos endereços (11/09/2026)
 
-Dois ajustes na mesma aba, ainda no mesmo dia:
+Três ajustes na mesma tela, no mesmo dia:
 
-- **"🚚 DOCA"**: *"esses itens do EXP saem do endereço e vai para area
-  de carregamento, a ideia é ter um botao para quando a gente tirar o
-  item do endereço e ir para area de carregamento, pode colocar o nome
-  de DOCA"*. Não é ação nova — reaproveita `marcarSaidaExpControle()`,
-  a MESMA função por trás do 🚚 da aba Entrada e do "Confirmar retirada"
-  da Saída/Conferência (marca `status: 'retirado'`, `retirado_por`,
-  `retirado_em`, e loga em `log_movimentacao` quando acha o pedido). A
-  diferença é só estar disponível AQUI, no meio da caminhada da
-  Auditoria, sem precisar trocar de aba pra registrar que o item já
-  saiu. Item marcado DOCA some da lista (mesmo filtro `status !==
-  'retirado'` que já existia). Tem versão por item (🚚 DOCA) e por
-  endereço inteiro (🚚 Tudo pra DOCA, com `confirm()` — mesmo padrão do
-  "Confirmar tudo" da Saída/Conferência).
-- **Ordem A-Z**: *"na auditoria quero filtrar de a-z"*, confirmado com
-  *"daí vou conferindo por sequência"* — os endereços apareciam na
-  ordem solta em que os itens foram registrados (ex.: "EXP CX-10" antes
-  de "EXP C-02"), e o Robson anda pelo depósito em ordem alfabética de
-  endereço. `gruposOrdenados` ordena os grupos por localização
-  (`localeCompare` com `'pt-BR'`) antes de desenhar — só a Auditoria,
-  não mexe na Saída/Conferência (que tem a própria ordem, não foi
-  pedido lá).
+- **"🚚 DOCA" nasceu na Auditoria, mas o lugar certo é a Saída/
+  Conferência** — o Robson pediu o botão (*"esses itens do EXP saem do
+  endereço e vai para area de carregamento, a ideia é ter um botao...
+  pode colocar o nome de DOCA"*), eu coloquei na Auditoria, e ele
+  corrigiu na hora: *"QUERO BOTAO DA DOCA NA ABA DE SAIDA, DE AUDITORIA
+  NAO"*. A Auditoria é só conferência de presença (✓ Confere / ⚠ Não
+  achei); marcar que o item SAIU pro carregamento é a Saída/Conferência,
+  que já tinha exatamente essa ação — só precisava do nome "DOCA".
+  Removido de vez da Auditoria (nada de `marcarSaidaExpControle()` lá);
+  os botões que já existiam na Saída/Conferência (`conf-retirar-item` /
+  `conf-retirar-tudo`) ganharam o rótulo **"🚚 DOCA"** e **"🚚 Tudo pra
+  DOCA"** — mesma função de sempre, só o texto mudou.
+- **Ordem A-Z na Auditoria**: *"na auditoria quero filtrar de a-z"*,
+  confirmado com *"daí vou conferindo por sequência"* — os endereços
+  apareciam na ordem solta do registro (ex.: "EXP CX-10" antes de "EXP
+  C-02"), e o Robson anda pelo depósito em ordem alfabética. Grupos
+  ordenados por localização (`localeCompare` com `'pt-BR'`) antes de
+  desenhar — só a Auditoria, não mexe na Saída/Conferência.
+- **Exportar a Auditoria (HTML/Excel/CSV)**: *"depois de conferido gere
+  uma aba aonde que eu consiga extrair as planilhas em HTM, excel etc,
+  depois daí que vou transferir no sistema Datasul"* — ver seção
+  própria logo abaixo.
 
-Conferido no navegador: endereços aparecem em ordem alfabética (EXP
-A-01, EXP C-02, EXP CX-10); 🚚 DOCA por item grava o update certo
-(status retirado) e o item some da lista depois de recarregar; 🚚 Tudo
-pra DOCA por endereço grava um update por item e o grupo inteiro some.
-Zero erro de console.
+Conferido no navegador: endereços em ordem alfabética; botões da Saída/
+Conferência mostram "🚚 DOCA"/"🚚 Tudo pra DOCA"; Auditoria não tem
+nenhum botão DOCA, só ✓ Confere e ⚠ Não achei. Zero erro de console.
+
+## Exportar a Auditoria: HTML/Excel/CSV (11/09/2026)
+
+Continuação do pedido acima: depois de conferir os endereços, o Robson
+leva os resultados pro Datasul manualmente, e precisa da planilha pra
+isso — mesma ideia do Exportar já existente na aba Entrada.
+
+**Reuso, não duplicação**: as três funções de exportação da aba Entrada
+viraram genéricas, e a Auditoria usa as mesmas:
+- `exportarCsvGenerico(cabecalho, linhas, nomeBase)` — era
+  `exportarExpControleCsv()`, que virou uma casca fina por cima dela.
+- `exportarXlsxGenerico(cabecalho, linhas, nomeAba, nomeBase)` — idem,
+  `exportarExpControleXlsx()` virou casca fina.
+- `montarHtmlTabelaGenerica({titulo, cabecalho, linhas, subtitulo})` —
+  o miolo de `montarHtmlExpControleTabela()` (a versão "planilha
+  compacta" do HTML, ver seção de 11/09/2026 sobre isso), generalizado
+  pra receber título/cabeçalho/linhas por fora em vez de fixos.
+
+Isso significa que qualquer aba nova que precisar exportar tabela daqui
+pra frente só escreve o próprio `linhasExportacaoX()` e cabeçalho —
+não reescreve CSV/Excel/HTML do zero.
+
+`AUDIT_EXPORT_CABECALHO`: Localização, Item, Descrição, UM, Nº Pedido,
+Quantidade, **Situação** (Confere/Não achei/Ainda não conferido),
+**Conferido por**, **Conferido em** — é a Situação + quem/quando que
+diferencia esta planilha da de Entrada; sem isso, exportar a Auditoria
+seria só reexportar o Entrada com um nome diferente. `linhasExportacaoAuditoria()`
+ordena pela mesma ordem A-Z da tela (não teria sentido a export sair
+fora de ordem depois de pedir a tela em ordem). Reaproveita
+`linhasAuditoriaFiltradas()` (extraída de `renderAuditoriaFisica()`) —
+a exportação respeita a mesma busca que já filtra a tela, mesmo
+princípio do "Exportar/Imprimir respeitam a busca" da aba Entrada.
+
+Conferido no navegador: exportar HTML traz a tabela certa com "Confere"
+e "Ainda não conferido" nas linhas certas, cabeçalhos "Situação" e
+"Conferido por" presentes; exportar CSV sai com `;` (padrão Excel
+PT-BR); nenhum item pra exportar (busca sem resultado) mostra alerta em
+vez de baixar arquivo vazio; **a exportação da aba Entrada, já existente,
+continua idêntica depois da refatoração** (testado título, cabeçalho
+"Nº Pedido" e conteúdo do item). Zero erro de console.
 
 ## 21. Notificação de cadastro pendente, no canto da tela (11/09/2026)
 
