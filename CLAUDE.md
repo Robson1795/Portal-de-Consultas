@@ -3006,6 +3006,34 @@ grupo; busca por pedido continua funcionando; item retirado na mesma
 localização continua fora, mesmo buscando por ela. Zero erro de
 console.
 
+## Correção: aviso de pedido suspeito escondia empate (11/09/2026)
+
+O Robson conferiu na mão o pedido que o aviso apontava (item 804386,
+"a mais no físico" de 1 Pç) e **não era esse** — era outro pedido, com a
+MESMA quantidade (1 Pç), que já tinha sido faturado de verdade: *"esse
+pedido no retângulo verde verifiquei que já foi faturado, então temos
+que melhorar esse aviso"*.
+
+A causa: `pedidoSuspeito = linha.pedidosTotais.find(...)` pegava só o
+PRIMEIRO pedido que batesse com a diferença (em ordem alfabética de
+localização) e mostrava como se fosse o único candidato — escondendo
+que outro pedido, com a mesma quantidade, batia igualzinho. Numa
+conferência que "não pode errar", apontar um só quando há empate é pior
+que não apontar nenhum: dá uma falsa certeza.
+
+Trocado `.find()` por `.filter()` (`pedidosSuspeitos`, agora sempre uma
+lista): um só candidato → mesmo aviso de antes, apontando ele; **dois
+ou mais empatados** → lista todos ("⚠ 2 pedidos batem igual... não dá
+pra saber qual pela quantidade sozinha, confira cada um") e destaca as
+linhas de TODOS na tabela, não só a primeira.
+
+Conferido no navegador com o caso real (dois pedidos, 1 Pç cada, mesma
+diferença): os dois aparecem como candidatos, o aviso avisa do empate
+em vez de apontar um só, e as duas linhas ficam destacadas. Reconferido
+que os outros dois casos não regrediram: só um pedido bate (comportamento
+de antes, sem menção a empate) e nenhum pedido bate (mensagem neutra
+igual). Zero erro de console.
+
 ## 21. Notificação de cadastro pendente, no canto da tela (11/09/2026)
 
 O Victor: *"o Robson implementou uma notificação que avisa quando alguém se

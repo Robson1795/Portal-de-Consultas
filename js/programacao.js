@@ -2062,8 +2062,18 @@ document.getElementById('confCorpo').addEventListener('click', (e) => {
   const EPSILON_QTD = 0.005; // tolera arredondamento de casa decimal
   let aviso = '';
   // Declarado fora do `if` de propósito: a tabela mais abaixo usa
-  // `pedidoSuspeito` pra destacar a linha, mesmo depois deste bloco acabar.
-  let pedidoSuspeito = null;
+  // `pedidosSuspeitos` pra destacar a(s) linha(s), mesmo depois deste
+  // bloco acabar.
+  //
+  // ⚠️ Corrigido 11/09/2026: o Robson conferiu na mão e o pedido apontado
+  // (o primeiro que batia com a diferença) NÃO era o que já tinha sido
+  // faturado -- era outro pedido, com a MESMA quantidade. `.find()`
+  // pegava só o primeiro em ordem alfabética de localização e o mostrava
+  // como se fosse o único candidato, escondendo que havia empate. Agora é
+  // `.filter()`: quando duas pedidos batem igual, os DOIS aparecem como
+  // candidatos -- apontar um só, escondendo o empate, é pior que não
+  // apontar nenhum (dá falsa certeza numa conferência que não pode errar).
+  let pedidosSuspeitos = [];
   if (linha.situacao === 'diferenca') {
     // Robson, 11/09/2026: "pode dar uma informação que o pedido pode ter
     // sido faturado e não carregou... pode ser ao contrário também, quando
@@ -2072,17 +2082,24 @@ document.getElementById('confCorpo').addEventListener('click', (e) => {
     // por extenso porque a telinha tem espaço.
     const explicacao = explicacaoDivergenciaConf(linha.situacao, linha.diferenca);
     if (linha.diferenca > 0) {
-      pedidoSuspeito = linha.pedidosTotais.find(p => Math.abs(p.quantidade - linha.diferenca) < EPSILON_QTD) || null;
-      aviso = pedidoSuspeito
+      pedidosSuspeitos = linha.pedidosTotais.filter(p => Math.abs(p.quantidade - linha.diferenca) < EPSILON_QTD);
+      const listaPedidos = pedidosSuspeitos.map(p => `<b>${escapeHtml(p.pedido)}</b>`).join(', ');
+      aviso = pedidosSuspeitos.length === 1
         ? `<div class="modal-text" style="margin-bottom:10px; padding:8px 10px; background:var(--aviso-fundo); color:var(--aviso-texto); border-radius:8px; font-weight:600;">
-             ⚠ Pedido <b>${escapeHtml(pedidoSuspeito.pedido)}</b> tem exatamente ${numeroBR(pedidoSuspeito.quantidade)}${linha.um ? ' ' + escapeHtml(linha.um) : ''}
+             ⚠ Pedido ${listaPedidos} tem exatamente ${numeroBR(pedidosSuspeitos[0].quantidade)}${linha.um ? ' ' + escapeHtml(linha.um) : ''}
              — bate com a diferença "a mais no físico". Pode ser o que ainda não foi lançado no sistema
              (não é certeza, é só a pista mais provável pela quantidade). ${escapeHtml(explicacao)}
            </div>`
-        : `<div class="modal-text" style="margin-bottom:10px; color:var(--muted);">
-             Nenhum pedido bate sozinho com a diferença de ${numeroBR(linha.diferenca)}${linha.um ? ' ' + escapeHtml(linha.um) : ''}
-             — pode ser soma de mais de um pedido, ou a diferença não vem de pedido nenhum. ${escapeHtml(explicacao)}
-           </div>`;
+        : pedidosSuspeitos.length > 1
+          ? `<div class="modal-text" style="margin-bottom:10px; padding:8px 10px; background:var(--aviso-fundo); color:var(--aviso-texto); border-radius:8px; font-weight:600;">
+               ⚠ ${pedidosSuspeitos.length} pedidos batem igual com a diferença de ${numeroBR(linha.diferenca)}${linha.um ? ' ' + escapeHtml(linha.um) : ''}
+               (${listaPedidos}) — não dá pra saber qual pela quantidade sozinha, confira cada um.
+               ${escapeHtml(explicacao)}
+             </div>`
+          : `<div class="modal-text" style="margin-bottom:10px; color:var(--muted);">
+               Nenhum pedido bate sozinho com a diferença de ${numeroBR(linha.diferenca)}${linha.um ? ' ' + escapeHtml(linha.um) : ''}
+               — pode ser soma de mais de um pedido, ou a diferença não vem de pedido nenhum. ${escapeHtml(explicacao)}
+             </div>`;
     } else {
       aviso = `<div class="modal-text" style="margin-bottom:10px; color:var(--muted);">
           O sistema espera ${numeroBR(Math.abs(linha.diferenca))}${linha.um ? ' ' + escapeHtml(linha.um) : ''} a mais do que está
@@ -2104,7 +2121,7 @@ document.getElementById('confCorpo').addEventListener('click', (e) => {
       </tr></thead>
       <tbody>
         ${linhasTabela.map(r => {
-          const suspeito = pedidoSuspeito && r.pedido === pedidoSuspeito.pedido;
+          const suspeito = pedidosSuspeitos.some(p => p.pedido === r.pedido);
           const estilo = suspeito ? ' style="background:var(--aviso-fundo);"' : '';
           return `
           <tr${estilo}>
