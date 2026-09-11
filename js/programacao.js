@@ -3485,7 +3485,14 @@ function renderAuditoriaFisica() {
     porLocal.get(chave).push(l);
   });
 
-  corpo.innerHTML = [...porLocal.entries()].map(([local, itens]) => {
+  // Robson, 11/09/2026: "na auditoria quero filtrar de a-z" / "daí vou
+  // conferindo por sequência" -- a ordem em que os endereços aparecem na
+  // tela é a ordem em que ele anda no depósito, então tem de bater com a
+  // ordem alfabética do endereço físico, não a ordem solta em que os
+  // itens foram registrados.
+  const gruposOrdenados = [...porLocal.entries()].sort((a, b) => a[0].localeCompare(b[0], 'pt-BR'));
+
+  corpo.innerHTML = gruposOrdenados.map(([local, itens]) => {
     const conferidos = itens.filter(l => statusAuditoriaDoItem(l.id)?.status === 'confere').length;
     return `
     <div style="border:1px solid var(--border); border-radius:10px; margin-top:12px; overflow:hidden;">
@@ -3494,6 +3501,10 @@ function renderAuditoriaFisica() {
         <span style="font-size:12px; color:var(--muted);">${conferidos}/${itens.length} conferido(s)</span>
         <button class="btn btn-primary audit-tudo-confere" data-local="${escapeHtml(local)}" style="margin-left:auto;">
           ✓ Tudo confere neste endereço
+        </button>
+        <button class="btn audit-tudo-doca" data-local="${escapeHtml(local)}"
+                title="Todo mundo saiu deste endereço pra área de carregamento">
+          🚚 Tudo pra DOCA
         </button>
       </div>
       <div class="scroll-area">
@@ -3520,6 +3531,8 @@ function renderAuditoriaFisica() {
                   ${statusHtml}
                   <button class="acao-btn audit-confere" data-id="${escapeHtml(l.id)}" title="Confirma que o item está neste endereço">✓</button>
                   <button class="acao-btn audit-nao-achei" data-id="${escapeHtml(l.id)}" title="Avisa que não achou o item neste endereço">⚠</button>
+                  <button class="acao-btn audit-doca" data-id="${escapeHtml(l.id)}"
+                          title="Saiu deste endereço pra área de carregamento (DOCA)">🚚 DOCA</button>
                 </td>
               </tr>`;
             }).join('')}
@@ -3557,6 +3570,8 @@ document.getElementById('auditBody').addEventListener('click', async (e) => {
   const btnConfere = e.target.closest('.audit-confere');
   const btnNaoAchei = e.target.closest('.audit-nao-achei');
   const btnTudo = e.target.closest('.audit-tudo-confere');
+  const btnDoca = e.target.closest('.audit-doca');
+  const btnTudoDoca = e.target.closest('.audit-tudo-doca');
 
   if (btnConfere) { await gravarStatusAuditoria(btnConfere.dataset.id, 'confere'); return; }
   if (btnNaoAchei) { await gravarStatusAuditoria(btnNaoAchei.dataset.id, 'nao_achei'); return; }
@@ -3582,6 +3597,36 @@ document.getElementById('auditBody').addEventListener('click', async (e) => {
       return;
     }
     (data || linhas).forEach(r => confFisicaMap.set(String(r.exp_controle_id), r));
+    renderAuditoriaFisica();
+    return;
+  }
+
+  // Robson, 11/09/2026: "esses itens do EXP saem do endereço e vai para
+  // area de carregamento, a ideia é ter um botao para quando a gente
+  // tirar o item do endereço e ir para area de carregamento, pode
+  // colocar o nome de DOCA" -- mesma ação de sempre (marcarSaidaExpControle,
+  // já usada no 🚚 da aba Entrada e no "Confirmar retirada" da Saída/
+  // Conferência), só que direto daqui, no meio da caminhada -- sem
+  // precisar trocar de aba pra registrar que o item já saiu.
+  if (btnDoca) {
+    btnDoca.disabled = true;
+    const ok = await marcarSaidaExpControle(btnDoca.dataset.id, nomeUsuarioAtual);
+    if (ok) await carregarProgramacao();
+    else btnDoca.disabled = false;
+    renderAuditoriaFisica();
+    return;
+  }
+
+  if (btnTudoDoca) {
+    const local = btnTudoDoca.dataset.local;
+    const itens = linhasDoSetorAtual().filter(l =>
+      l.status !== 'retirado' && (l.localizacao || '(sem localização)') === local);
+    if (!itens.length) return;
+    if (!confirm(`Confirmar que ${itens.length} item(ns) de "${local}" saíram pra área de carregamento (DOCA)?`)) return;
+
+    btnTudoDoca.disabled = true;
+    for (const item of itens) await marcarSaidaExpControle(item.id, nomeUsuarioAtual);
+    await carregarProgramacao();
     renderAuditoriaFisica();
   }
 });

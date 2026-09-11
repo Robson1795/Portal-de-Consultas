@@ -3080,6 +3080,38 @@ de item funcionam; erro de tabela inexistente aponta pro arquivo SQL
 certo, sem travar a aba. Zero erro de console (fora erros de mocks de
 outras chamadas, não desta feature).
 
+### Botão DOCA + ordem A-Z dos endereços (11/09/2026)
+
+Dois ajustes na mesma aba, ainda no mesmo dia:
+
+- **"🚚 DOCA"**: *"esses itens do EXP saem do endereço e vai para area
+  de carregamento, a ideia é ter um botao para quando a gente tirar o
+  item do endereço e ir para area de carregamento, pode colocar o nome
+  de DOCA"*. Não é ação nova — reaproveita `marcarSaidaExpControle()`,
+  a MESMA função por trás do 🚚 da aba Entrada e do "Confirmar retirada"
+  da Saída/Conferência (marca `status: 'retirado'`, `retirado_por`,
+  `retirado_em`, e loga em `log_movimentacao` quando acha o pedido). A
+  diferença é só estar disponível AQUI, no meio da caminhada da
+  Auditoria, sem precisar trocar de aba pra registrar que o item já
+  saiu. Item marcado DOCA some da lista (mesmo filtro `status !==
+  'retirado'` que já existia). Tem versão por item (🚚 DOCA) e por
+  endereço inteiro (🚚 Tudo pra DOCA, com `confirm()` — mesmo padrão do
+  "Confirmar tudo" da Saída/Conferência).
+- **Ordem A-Z**: *"na auditoria quero filtrar de a-z"*, confirmado com
+  *"daí vou conferindo por sequência"* — os endereços apareciam na
+  ordem solta em que os itens foram registrados (ex.: "EXP CX-10" antes
+  de "EXP C-02"), e o Robson anda pelo depósito em ordem alfabética de
+  endereço. `gruposOrdenados` ordena os grupos por localização
+  (`localeCompare` com `'pt-BR'`) antes de desenhar — só a Auditoria,
+  não mexe na Saída/Conferência (que tem a própria ordem, não foi
+  pedido lá).
+
+Conferido no navegador: endereços aparecem em ordem alfabética (EXP
+A-01, EXP C-02, EXP CX-10); 🚚 DOCA por item grava o update certo
+(status retirado) e o item some da lista depois de recarregar; 🚚 Tudo
+pra DOCA por endereço grava um update por item e o grupo inteiro some.
+Zero erro de console.
+
 ## 21. Notificação de cadastro pendente, no canto da tela (11/09/2026)
 
 O Victor: *"o Robson implementou uma notificação que avisa quando alguém se
