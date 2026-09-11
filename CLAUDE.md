@@ -2894,6 +2894,75 @@ mais no físico" (junto do aviso de pedido) e "a mais no sistema" (sem
 tentar apontar pedido); "só no físico" e "confere" abrem a telinha sem
 nenhum aviso de negócio. Zero erro de console.
 
+## Investigado: "não estou conseguindo colar a planilha" (11/09/2026)
+
+O Robson relatou não conseguir colar no campo de "Atualizar estoques em
+lote" (aba Catálogo EXP, tela Configurações). Investiguei o código
+inteiro e **não achei nenhum bloqueio**: não existe handler de `paste`
+em lugar nenhum do portal (`grep` por `'paste'`/`onpaste` no projeto
+inteiro não bate em nada), o campo (`#loteTexto`) não fica `disabled`
+nem `readonly` em nenhum caminho, e digitar direto nele funciona
+normalmente (testado no navegador). Um `<textarea>` comum não precisa de
+nenhuma permissão de JavaScript pra aceitar Ctrl+V — é o navegador que
+faz isso sozinho, e não tem como o código do portal interferir sem um
+`addEventListener('paste', ...)` que simplesmente não existe.
+
+Prováveis causas, todas FORA do código do portal:
+- O navegador pediu permissão de área de transferência e ela foi negada
+  (acontece na primeira vez que uma aba tenta ler o clipboard).
+- Alguma extensão do Chrome bloqueando colar em campos de formulário.
+- O clique não "pegou" o campo antes do Ctrl+V (foco em outro elemento).
+
+Sugestão pro Robson: tentar um Ctrl+Shift+R (recarrega ignorando cache)
+antes de colar de novo, e se persistir, usar o botão **"Escolher arquivo
+CSV"** ao lado — ele lê o arquivo direto do disco, sem depender da área
+de transferência do navegador.
+
+## Aviso de pedido misturado na mesma localização (11/09/2026)
+
+O Robson, no Controle EXP Acessórios (Entrada): *"esses endereços EXP
+A-02 EXP CX 02 por exemplo não deixe colocar número de pedido no mesmo
+endereço, envie um aviso que já tem pedido no mesmo endereço, às vezes
+esqueço de tirar da localização quando expedição leva para
+carregamento"*.
+
+O esquecimento: marcar a **saída** (retirado) do pedido anterior antes
+de guardar um pedido novo na mesma prateleira — sem isso, os dois
+pedidos ficam fisicamente misturados na mesma localização até alguém
+notar na aba Conferir.
+
+`pedidoConflitanteNaLocalizacao(localizacao, pedidoAtual)` (nova, perto
+de `itemExisteNoCatalogoExp`) procura, em `linhasDoSetorAtual()`, uma
+linha AINDA na expedição (não `retirado`) na mesma localização com um
+`numero_pedido` diferente do que está sendo digitado. Ignora pedido
+igual (reabastecer o mesmo pedido não é o erro) e pedido já retirado
+(esse não ocupa mais o endereço de verdade).
+
+**Aviso, não trava absoluta** — diferente da trava de código do
+catálogo (essa sempre foi certa/errada), aqui pode ser legítimo (ex.:
+pedido antigo já carregou fisicamente, só não foi marcado ainda). Por
+isso é `confirm()`, não bloqueio sem saída:
+
+- **Formulário completo**: aviso inline (`#expManualLocalAviso`) no
+  `blur` da Localização OU do Nº Pedido (a pessoa pode preencher em
+  qualquer ordem), e `confirm()` obrigatório no clique de Registrar se
+  ainda houver conflito.
+- **Passo-a-passo**: mesmo `confirm()` no avançar do passo Localização
+  — sem ele, o wizard passaria pro próximo passo sem dar chance de
+  notar.
+- Nenhum dos dois entra quando o Tipo de Movimentação é **Saída**: um
+  registro de saída já nasce `retirado`, não ocupa a localização de
+  forma contínua, então não é o conflito que este aviso procura (mesmo
+  recorte que `atualizarPedidoProntoAoRegistrar()` já usava).
+
+Conferido no navegador: pedido igual não avisa; pedido diferente avisa
+(com o número certo do pedido conflitante); pedido já retirado não
+conta; comparação ignora maiúscula/minúscula e espaços; cancelar o
+`confirm()` no formulário completo e no wizard bloqueia o
+salvamento/avanço; confirmar prossegue normalmente; Tipo "Saída" pula o
+aviso inteiro mesmo com conflito real. Zero erro de console (fora um
+erro do próprio mock de teste, não do código).
+
 ## 21. Notificação de cadastro pendente, no canto da tela (11/09/2026)
 
 O Victor: *"o Robson implementou uma notificação que avisa quando alguém se

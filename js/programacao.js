@@ -2275,6 +2275,24 @@ document.getElementById('expManualAdicionarBtn').addEventListener('click', async
   const btn = document.getElementById('expManualAdicionarBtn');
   const campoItem = document.getElementById('expManualItem');
 
+  // Robson, 11/09/2026: "nao deixe colocar numero de pedido no mesmo
+  // endereço, envie um avis que ja tem pedido no mesmo endereço" -- aviso
+  // que exige confirmação, não trava sozinha: às vezes o pedido anterior
+  // já carregou e só não foi marcado como retirado ainda, então bloquear
+  // de vez impediria um registro válido. O confirm() é o "avisa e deixa a
+  // pessoa decidir".
+  if (document.getElementById('expManualTipo').value !== 'saida') {
+    const conflito = pedidoConflitanteNaLocalizacao(
+      document.getElementById('expManualLocal').value,
+      document.getElementById('expManualPedido').value
+    );
+    if (conflito) {
+      const confirmado = confirm(`Já existe o pedido ${conflito} nesta localização (ainda na expedição, não retirado).\n\n`
+        + 'Confirma mesmo assim? Se ele já carregou, lembre de marcar a saída na aba Saída/Conferência.');
+      if (!confirmado) return;
+    }
+  }
+
   btn.disabled = true;
   msg.textContent = 'Salvando...';
   msg.className = 'status-msg';
@@ -2391,6 +2409,19 @@ function salvarPassoAtual() {
       'Este código não está no Catálogo EXP desta unidade — confira o código.';
     document.getElementById('expWizMsg').className = 'status-msg status-err';
     return false;
+  }
+
+  // Mesmo aviso do formulário completo (pedidoConflitanteNaLocalizacao) --
+  // Robson, 11/09/2026: "as vezes esqueço de tirar da localização quando
+  // expediçao leva para carregamento". Confirm() aqui porque o passo já
+  // avançaria sozinho sem dar chance de a pessoa notar o pedido misturado.
+  if (passo.campo === 'localizacao' && valor && document.getElementById('expManualTipo').value !== 'saida') {
+    const conflito = pedidoConflitanteNaLocalizacao(valor, expWizDados.numero_pedido);
+    if (conflito) {
+      const confirmado = confirm(`Já existe o pedido ${conflito} nesta localização (ainda na expedição, não retirado).\n\n`
+        + 'Confirma mesmo assim? Se ele já carregou, lembre de marcar a saída na aba Saída/Conferência.');
+      if (!confirmado) return false;
+    }
   }
 
   expWizDados[passo.campo] = valor;
@@ -3498,6 +3529,32 @@ function itemExisteNoCatalogoExp(codigo) {
   return catalogoExpItens.some(l => normalizaCodigoItem(l.codigo_item) === chave);
 }
 
+// Robson, 11/09/2026: "esses enderecos EXP A-02 EXP CX 02 por exemplo nao
+// deixe colocar numero de pedido no mesmo endereço, envie um avis que ja
+// tem pedido no mesmo endereço, as vezes esqueço de tirar da localização
+// quando expediçao leva para carregamento" -- o esquecimento é marcar a
+// SAÍDA (retirado) do pedido anterior antes de guardar um pedido novo na
+// mesma prateleira; sem avisar, os dois pedidos ficam misturados na mesma
+// localização até alguém notar na conferência.
+//
+// Só olha linha AINDA na expedição (não retirado) -- pedido que já saiu
+// não ocupa mais o endereço de verdade, mesmo que o registro continue no
+// histórico. Ignora comparação vazia dos dois lados (não é conflito
+// nenhum sem pedido pra comparar) e o PRÓPRIO pedido (reabastecer o mesmo
+// pedido na mesma localização não é o erro que este aviso procura).
+function pedidoConflitanteNaLocalizacao(localizacao, pedidoAtual) {
+  const local = (localizacao || '').trim().toLowerCase();
+  const pedido = (pedidoAtual || '').trim();
+  if (!local) return null;
+  const linha = linhasDoSetorAtual().find(l => {
+    if (l.status === 'retirado') return false;
+    if ((l.localizacao || '').trim().toLowerCase() !== local) return false;
+    const outroPedido = (l.numero_pedido || '').trim();
+    return !!outroPedido && outroPedido !== pedido;
+  });
+  return linha ? (linha.numero_pedido || '').trim() : null;
+}
+
 // Trava/destrava os campos que vêm DEPOIS do Item no formulário completo,
 // conforme o código bater ou não com o Catálogo EXP desta unidade. Chamada
 // no blur do Item (ver mais abaixo) -- então a pessoa só digita o resto
@@ -3597,3 +3654,19 @@ document.getElementById('expManualRef').addEventListener('blur', () => {
   dica.textContent = `Lote ${lote} encontrado no Catálogo EXP pra essa referência.`;
   dica.className = 'status-msg status-ok';
 });
+
+// Aviso (não trava) de pedido misturado na mesma localização -- Robson,
+// 11/09/2026: "as vezes esqueço de tirar da localização quando expediçao
+// leva para carregamento". Confere nos dois campos (Localização e Nº
+// Pedido), porque a pessoa pode preencher em qualquer ordem.
+function atualizarAvisoLocalizacaoManual() {
+  const local = document.getElementById('expManualLocal').value;
+  const pedido = document.getElementById('expManualPedido').value;
+  const aviso = document.getElementById('expManualLocalAviso');
+  const conflito = pedidoConflitanteNaLocalizacao(local, pedido);
+  aviso.textContent = conflito
+    ? `⚠ Já existe o pedido ${conflito} nesta localização (ainda na expedição) — confira se ele já não carregou antes de guardar um pedido diferente aqui.`
+    : '';
+}
+document.getElementById('expManualLocal').addEventListener('blur', atualizarAvisoLocalizacaoManual);
+document.getElementById('expManualPedido').addEventListener('blur', atualizarAvisoLocalizacaoManual);
