@@ -3141,13 +3141,27 @@ document.getElementById('confSaidaBusca').addEventListener('input', (e) => {
   renderConferencia();
 });
 
+// Tira espaço, hífen e afins -- Robson digitou "EXP-A-02" pra achar "EXP
+// A-02" e não achou nada, porque a busca comparava caractere a caractere.
+// O endereço físico não tem uma grafia única (com espaço, com hífen, sem
+// nada), então a busca ignora esses separadores dos dois lados.
+function normalizaBuscaLocal(texto) {
+  return String(texto || '').toLowerCase().replace(/[\s\-_.]+/g, '');
+}
+
 function renderConferencia() {
-  const busca = buscaSaida.trim().toLowerCase();
+  // Robson, 11/09/2026: "quero que localize só o que esta no exp no
+  // fisico, o que ja carregou nao é para aparecer, pois ja existe a mesma
+  // aba de historico" -- confirma o recorte que já existia (`status ===
+  // 'retirado'` sai da lista): esta busca é só do que ainda está
+  // fisicamente na expedição; o que já carregou tem a própria busca em
+  // "Histórico de retiradas", mais abaixo.
+  const busca = normalizaBuscaLocal(buscaSaida);
   const pendentes = linhasDoSetorAtual().filter(l => {
     if (l.status === 'retirado') return false;
     if (!busca) return true;
-    return String(l.localizacao || '').toLowerCase().includes(busca)
-        || String(l.numero_pedido || '').toLowerCase().includes(busca);
+    return normalizaBuscaLocal(l.localizacao).includes(busca)
+        || normalizaBuscaLocal(l.numero_pedido).includes(busca);
   });
   const corpo = document.getElementById('confBody');
   const vazio = document.getElementById('confVazio');

@@ -2984,6 +2984,28 @@ sem digitar a localização; busca sem resultado mostra o aviso certo;
 limpar a busca devolve todos os grupos; item já retirado nunca aparece,
 com ou sem busca. Zero erro de console.
 
+### Correção: busca ignora espaço/hífen do endereço (11/09/2026)
+
+Testando, o Robson digitou "EXP-A-02" (hífen depois do EXP) pra achar
+"EXP A-02" (espaço) e não achou nada — a busca comparava caractere a
+caractere, e o endereço físico não tem uma grafia única (com espaço, com
+hífen, sem nada — a planilha e a digitação manual variam). No mesmo
+recado, confirmou o recorte que já existia: *"quero que localize só o
+que esta no exp no fisico, o que ja carregou nao é para aparecer, pois
+ja existe a mesma aba de historico"* — que já era o comportamento
+(`status === 'retirado'` sai da lista; quem já carregou tem a própria
+busca em "Histórico de retiradas", mais abaixo).
+
+`normalizaBuscaLocal()` tira espaço/hífen/underscore/ponto dos dois
+lados (busca e dado) antes de comparar — "EXP-A-02", "EXP A-02" e
+"EXPA02" viram a mesma coisa. Só entra na comparação, não muda o que é
+mostrado na tela (o chip continua com a grafia original do banco).
+
+Conferido no navegador: "EXP-A-02", "EXP A-02" e "EXPA02" acham o mesmo
+grupo; busca por pedido continua funcionando; item retirado na mesma
+localização continua fora, mesmo buscando por ela. Zero erro de
+console.
+
 ## 21. Notificação de cadastro pendente, no canto da tela (11/09/2026)
 
 O Victor: *"o Robson implementou uma notificação que avisa quando alguém se
