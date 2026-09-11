@@ -452,32 +452,26 @@ Hoje ele cria só estrutura, e o RLS é assunto dos scripts da Fase 1.
 
 **De painel — destrava o resto, e não é código:**
 
-1. **Rodar `sql/fase32-sugestoes-melhoria.sql`** no Supabase. Sondado pela API em
-   10/09/2026: a tabela `sugestoes_melhoria` **não existe** ainda, então clicar em
-   Enviar na caixa de sugestões falha (a tela já diz que o script falta). Ficou
-   mais urgente depois de 10/09: o tour agora mostra esse botão para **todos** os
-   perfis, então é a primeira coisa que um usuário novo vai tentar usar.
-
-2. **Rodar `sql/fase11-limpar-contagem-restrito.sql`** no Supabase. Sem ele, "Limpar tudo" está
+1. **Rodar `sql/fase11-limpar-contagem-restrito.sql`** no Supabase. Sem ele, "Limpar tudo" está
    travado só na tela, e um inspetor de navegador contorna. O script **substitui** a política
    `for all` de `contagem_fisica` por três (insert, update, delete) — tem de ser substituição,
    porque política permissiva se soma e a aberta anularia a restrita.
 
-3. **Criar o balde `fotos-bobinas`** (Storage → New bucket). Enquanto não existir, toda foto de
+2. **Criar o balde `fotos-bobinas`** (Storage → New bucket). Enquanto não existir, toda foto de
    etiqueta do módulo de OCR é descartada — hoje com aviso na tela, mas descartada.
 
-4. **Cadastrar os e-mails do ALM das oito unidades** na aba
+3. **Cadastrar os e-mails do ALM das oito unidades** na aba
    Configurações. Unidade sem e-mail tem o envio da Requisição ALM desabilitado.
    *(A senha de contagem, que também vivia aqui e travou a apresentação na 104, deixou
    de existir em 11/09/2026 — ver seção 22.)*
 
 **De código:**
 
-5. **Veredito do OCR com vários lotes** (O3) — hoje é suprimido em vez de errado; corrigir de
+4. **Veredito do OCR com vários lotes** (O3) — hoje é suprimido em vez de errado; corrigir de
    verdade pede campo de lote no modal e em `contagem_bobinas_ocr`. E **o alerta de bobina não
    tem recorte por unidade** (O7): um consultor de Anápolis recebe o banner de Araquari.
 
-6. **Pessoas com nome fixo no código** (M2): `ADMIN_EMAIL` em `js/config.js` e
+5. **Pessoas com nome fixo no código** (M2): `ADMIN_EMAIL` em `js/config.js` e
    `j.lisboa@kingspanisoeste.com.br` em `js/estoque.js`. Já existe o padrão certo no projeto —
    tabelas como `gerentes_unidade` e `editores_bobinas`.
    *(Os três logos em base64 dentro do `index.html` — o antigo M3 — saíram em
@@ -485,19 +479,19 @@ Hoje ele cria só estrutura, e o RLS é assunto dos scripts da Fase 1.
 
 **De operação:**
 
-7. **Hospedagem com ponto único de falha.** O repositório está numa conta pessoal do GitHub e o
+6. **Hospedagem com ponto único de falha.** O repositório está numa conta pessoal do GitHub e o
    banco num projeto Supabase de conta pessoal, ambos com um único dono. Se aquela conta se
    perder, o acesso ao banco vai com ela e ninguém mais consegue recuperar. Duas melhorias
    baratas: adicionar um segundo membro ao projeto no Supabase (`Settings → Members`) e manter o
    export das tabelas em dia. Vale reavaliar a hospedagem antes de o sistema entrar em uso real.
 
-8. **Dados de produto:** cadastrar mais itens com foto e embalagem em `fichas_tecnicas`; fotos das
+7. **Dados de produto:** cadastrar mais itens com foto e embalagem em `fichas_tecnicas`; fotos das
    massas vedantes (Chemiseal); aguardando a Multi-Fix sobre catálogo de parafusos com códigos
    internos.
 
-9. **Unidades 101 e 105 sem dados reais** — só a estrutura está pronta.
+8. **Unidades 101 e 105 sem dados reais** — só a estrutura está pronta.
 
-10. **Confirmar as UF de 103, 104, 107 e 110 e a cidade da 109.** Até então `rotuloUnidade()`
+9. **Confirmar as UF de 103, 104, 107 e 110 e a cidade da 109.** Até então `rotuloUnidade()`
     imprime só o que sabe, em vez de `Unidade 107 — Loja ()`.
 
 ---
