@@ -3034,6 +3034,52 @@ que os outros dois casos não regrediram: só um pedido bate (comportamento
 de antes, sem menção a empate) e nenhum pedido bate (mensagem neutra
 igual). Zero erro de console.
 
+## Aba Auditoria: caminhada física pela expedição (11/09/2026)
+
+O Robson: *"vou lá na expedição, vou ver cada endereço pra ver se os
+itens estão lá, monte uma aba aonde eu possa conferir se está tudo
+certo"*. Perguntado o formato exato:
+
+- **"Só confirmar presença (mais rápido)"**, não quantidade — isso já é
+  o Modo Contagem do Almoxarifado (`js/estoque.js`), fluxo diferente:
+  aqui é "está aqui ou não", não "quanto tem aqui".
+- **"Salvar (recomendado)"** — pra retomar se for interrompido no meio
+  da caminhada, e mostrar "conferido há quanto tempo".
+- E, à parte: *"daí confirmo se está ok, daí a próxima etapa eu passar
+  os itens para o Datasul no sistema"* — ou seja, lançar no Datasul é
+  passo MANUAL do Robson, fora do portal; esta aba só registra a
+  conferência em si, não integra com nada externo.
+
+Nova aba "🚶 Auditoria" no Controle EXP Acessórios, entre "Conferir" e
+"Catálogo". Mesmo agrupamento por localização já usado em Saída/
+Conferência (é como a caminhada acontece: chega no endereço, confere
+tudo que tem ali), com busca por localização, item ou nº do pedido
+(`normalizaBuscaLocal()`, reaproveitado). Por item: botão ✓ Confere ou
+⚠ Não achei; por endereço inteiro: "✓ Tudo confere neste endereço" (um
+upsert em lote). Cada endereço mostra "X/Y conferido(s)" (só ✓ Confere
+conta — ⚠ Não achei não).
+
+Tabela nova (`sql/fase35-exp-conferencia-fisica.sql`), **uma linha por
+linha física** (`exp_controle_itens.id`), não por código de item: o
+mesmo item pode estar em duas localizações ao mesmo tempo (dois pedidos
+diferentes), e confirmar uma não pode confirmar a outra sozinha.
+`exp_controle_id` guardado como TEXT (mesmo motivo do `estoque_id` na
+fase34: o tipo real da coluna não está definido em nenhum arquivo deste
+repositório). RLS espelha `conferir_exp_notas` (fase33) — mesma família
+de telas: leitura/escrita por `esta_aprovado() + (eh_admin() ou dono da
+unidade)`. `unique (unidade, setor, exp_controle_id)` com `upsert`: a
+conferência de agora substitui a de antes pro mesmo item — não é
+histórico de todo clique, é "qual o estado atual da conferência".
+
+Conferido no navegador (mock de `sb.from(...).upsert()`): agrupamento
+por localização exclui item já retirado; ✓ Confere e ⚠ Não achei
+gravam e atualizam o badge na hora; contador "X/Y conferido(s)" conta
+só os ✓; "Tudo confere neste endereço" grava um upsert em lote pra
+todos os itens daquele endereço; busca por localização, pedido e código
+de item funcionam; erro de tabela inexistente aponta pro arquivo SQL
+certo, sem travar a aba. Zero erro de console (fora erros de mocks de
+outras chamadas, não desta feature).
+
 ## 21. Notificação de cadastro pendente, no canto da tela (11/09/2026)
 
 O Victor: *"o Robson implementou uma notificação que avisa quando alguém se

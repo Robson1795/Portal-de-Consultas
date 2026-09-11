@@ -204,15 +204,20 @@ function trocarAbaExpAcessorios(aba) {
   // a outra é o confronto entre as duas pontas. Registrar movimentação a partir
   // de uma tela de conferência seria mexer no que se está medindo.
   document.getElementById('expRegistroContainer').style.display =
-    (aba === 'catalogo' || aba === 'conferir') ? 'none' : 'block';
+    (aba === 'catalogo' || aba === 'conferir' || aba === 'auditoria') ? 'none' : 'block';
   document.getElementById('expEntradaAba').style.display = aba === 'entrada' ? 'block' : 'none';
   document.getElementById('progConferencia').style.display = aba === 'saida' ? 'block' : 'none';
   document.getElementById('expCatalogoAba').style.display = aba === 'catalogo' ? 'block' : 'none';
   document.getElementById('expConferirAba').style.display = aba === 'conferir' ? 'block' : 'none';
+  document.getElementById('expAuditoriaAba').style.display = aba === 'auditoria' ? 'block' : 'none';
   if (aba === 'saida') renderConferencia();
   if (aba === 'conferir') {
     renderConferirExp(); // mostra rápido com o que já tem em memória (a 1ª vez, sem observação/exclusão ainda)
     carregarConferirExpNotas().then(renderConferirExp);
+  }
+  if (aba === 'auditoria') {
+    renderAuditoriaFisica();
+    carregarConfFisica().then(renderAuditoriaFisica);
   }
 }
 
@@ -3415,6 +3420,170 @@ document.getElementById('relPcpGerarBtn').addEventListener('click', async () => 
   if (!resultado.ok) return;
 
   window.location.href = resultado.href;
+});
+
+// ---- Aba Auditoria: caminhada física pela expedição --------------------
+// Robson, 11/09/2026: "vou lá na expedição, vou ver cada endereço pra ver
+// se os itens estão lá, monte uma aba aonde eu possa conferir se está
+// tudo certo". Perguntado o formato: só confirma PRESENÇA (sem
+// quantidade -- isso já é o Modo Contagem do Almoxarifado, fluxo
+// diferente) e fica SALVO (retomar se interrompido, e mostrar "conferido
+// há quanto tempo"). O próximo passo -- lançar no Datasul -- é manual do
+// Robson, fora do portal; esta aba só registra a conferência em si.
+//
+// Uma linha por linha FÍSICA (exp_controle_itens.id), não por item: o
+// mesmo código pode estar em duas localizações ao mesmo tempo (dois
+// pedidos diferentes), e cada uma precisa da própria conferência.
+let confFisicaMap = new Map(); // exp_controle_id (string) -> { status, conferido_por, conferido_em }
+let buscaAuditoria = '';
+
+async function carregarConfFisica() {
+  const { data, error } = await sb.from('exp_conferencia_fisica')
+    .select('*').eq('unidade', unidadeAtual).eq('setor', setorExpAtual);
+  confFisicaMap = new Map();
+  if (error) {
+    // Silencioso de propósito (mesmo padrão de carregarConferirExpNotas):
+    // se o fase35 ainda não rodou, a aba continua funcionando sem os
+    // status salvos em vez de travar.
+    console.warn('Não foi possível carregar a auditoria física:', error.message);
+    return;
+  }
+  (data || []).forEach(r => confFisicaMap.set(String(r.exp_controle_id), r));
+}
+
+function statusAuditoriaDoItem(id) {
+  return confFisicaMap.get(String(id)) || null;
+}
+
+function renderAuditoriaFisica() {
+  const busca = normalizaBuscaLocal(buscaAuditoria);
+  const pendentes = linhasDoSetorAtual().filter(l => {
+    if (l.status === 'retirado') return false;
+    if (!busca) return true;
+    return normalizaBuscaLocal(l.localizacao).includes(busca)
+        || normalizaBuscaLocal(l.numero_pedido).includes(busca)
+        || normalizaBuscaLocal(l.codigo_item).includes(busca);
+  });
+  const corpo = document.getElementById('auditBody');
+  const vazio = document.getElementById('auditVazio');
+
+  vazio.style.display = pendentes.length ? 'none' : 'block';
+  if (!pendentes.length) {
+    corpo.innerHTML = '';
+    vazio.textContent = busca
+      ? 'Nenhum item na expedição bate com a busca.'
+      : 'Nada na expedição pra conferir.';
+    return;
+  }
+
+  // Mesmo agrupamento por localização da aba Saída/Conferência -- é assim
+  // que a caminhada acontece: chega no endereço, confere tudo que tem ali.
+  const porLocal = new Map();
+  pendentes.forEach(l => {
+    const chave = l.localizacao || '(sem localização)';
+    if (!porLocal.has(chave)) porLocal.set(chave, []);
+    porLocal.get(chave).push(l);
+  });
+
+  corpo.innerHTML = [...porLocal.entries()].map(([local, itens]) => {
+    const conferidos = itens.filter(l => statusAuditoriaDoItem(l.id)?.status === 'confere').length;
+    return `
+    <div style="border:1px solid var(--border); border-radius:10px; margin-top:12px; overflow:hidden;">
+      <div class="cfg-barra">
+        <span class="loc-chip">${escapeHtml(local)}</span>
+        <span style="font-size:12px; color:var(--muted);">${conferidos}/${itens.length} conferido(s)</span>
+        <button class="btn btn-primary audit-tudo-confere" data-local="${escapeHtml(local)}" style="margin-left:auto;">
+          ✓ Tudo confere neste endereço
+        </button>
+      </div>
+      <div class="scroll-area">
+        <table>
+          <thead><tr><th>Item</th><th>Descrição</th><th>Qtd</th><th>Nº Pedido</th><th>Situação</th></tr></thead>
+          <tbody>
+            ${itens.map(l => {
+              const desc = expCtrlDescMap.get(normalizaCodigoItem(l.codigo_item));
+              const st = statusAuditoriaDoItem(l.id);
+              const quando = st ? formatarDataHoraBR(st.conferido_em) : '';
+              const quem = st?.conferido_por ? escapeHtml(st.conferido_por) + ' — ' : '';
+              const statusHtml = !st
+                ? '<span style="color:var(--muted); font-size:12px;">Ainda não conferido</span>'
+                : st.status === 'confere'
+                  ? `<span class="cfg-status st-ativo" title="${quem}${escapeHtml(quando)}">✓ Confere</span>`
+                  : `<span class="cfg-status st-atrasado" title="${quem}${escapeHtml(quando)}">⚠ Não achei</span>`;
+              return `
+              <tr>
+                <td class="item">${escapeHtml(l.codigo_item)}</td>
+                <td>${desc && desc.descricao ? escapeHtml(desc.descricao) : '—'}</td>
+                <td class="num">${l.quantidade != null ? escapeHtml(l.quantidade) : '—'}</td>
+                <td class="loc">${escapeHtml(l.numero_pedido || '—')}</td>
+                <td class="col-acoes">
+                  ${statusHtml}
+                  <button class="acao-btn audit-confere" data-id="${escapeHtml(l.id)}" title="Confirma que o item está neste endereço">✓</button>
+                  <button class="acao-btn audit-nao-achei" data-id="${escapeHtml(l.id)}" title="Avisa que não achou o item neste endereço">⚠</button>
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('auditBusca').addEventListener('input', (e) => {
+  buscaAuditoria = e.target.value;
+  renderAuditoriaFisica();
+});
+
+// Upsert por (unidade, setor, exp_controle_id) -- a conferência de agora
+// substitui a de antes pro mesmo item, não acumula histórico de clique.
+async function gravarStatusAuditoria(id, status) {
+  const { data, error } = await sb.from('exp_conferencia_fisica').upsert({
+    exp_controle_id: String(id), unidade: unidadeAtual, setor: setorExpAtual,
+    status, conferido_por: nomeUsuarioAtual, conferido_em: new Date().toISOString()
+  }, { onConflict: 'unidade,setor,exp_controle_id' }).select();
+
+  if (error) {
+    alert('Não foi possível salvar a conferência: ' + error.message
+      + ' — se a mensagem falar em tabela inexistente, sql/fase35-exp-conferencia-fisica.sql ainda não foi rodado no Supabase.');
+    return;
+  }
+  const linha = (data && data[0]) || { exp_controle_id: String(id), status, conferido_por: nomeUsuarioAtual, conferido_em: new Date().toISOString() };
+  confFisicaMap.set(String(id), linha);
+  renderAuditoriaFisica();
+}
+
+document.getElementById('auditBody').addEventListener('click', async (e) => {
+  const btnConfere = e.target.closest('.audit-confere');
+  const btnNaoAchei = e.target.closest('.audit-nao-achei');
+  const btnTudo = e.target.closest('.audit-tudo-confere');
+
+  if (btnConfere) { await gravarStatusAuditoria(btnConfere.dataset.id, 'confere'); return; }
+  if (btnNaoAchei) { await gravarStatusAuditoria(btnNaoAchei.dataset.id, 'nao_achei'); return; }
+
+  if (btnTudo) {
+    const local = btnTudo.dataset.local;
+    const itens = linhasDoSetorAtual().filter(l =>
+      l.status !== 'retirado' && (l.localizacao || '(sem localização)') === local);
+    if (!itens.length) return;
+
+    btnTudo.disabled = true;
+    const agora = new Date().toISOString();
+    const linhas = itens.map(l => ({
+      exp_controle_id: String(l.id), unidade: unidadeAtual, setor: setorExpAtual,
+      status: 'confere', conferido_por: nomeUsuarioAtual, conferido_em: agora
+    }));
+    const { data, error } = await sb.from('exp_conferencia_fisica')
+      .upsert(linhas, { onConflict: 'unidade,setor,exp_controle_id' }).select();
+    btnTudo.disabled = false;
+
+    if (error) {
+      alert('Não foi possível salvar a conferência deste endereço: ' + error.message);
+      return;
+    }
+    (data || linhas).forEach(r => confFisicaMap.set(String(r.exp_controle_id), r));
+    renderAuditoriaFisica();
+  }
 });
 
 // ---- Catálogo EXP: a planilha que sai do sistema (Item, Descrição, UM, -----

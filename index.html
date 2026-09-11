@@ -626,6 +626,12 @@
                SISTEMA (Catálogo EXP) com o FÍSICO (o que está registrado na
                expedição) e aponta as diferenças. -->
           <button class="btn" data-exp-aba="conferir" title="Confronta o Catálogo EXP (sistema) com o que está registrado na expedição (físico)">⚖️ Conferir</button>
+          <!-- Robson, 11/09/2026: "vou lá na expedição, vou ver cada
+               endereço pra ver se os itens estão lá, monte uma aba aonde
+               eu possa conferir se está tudo certo" -- diferente do
+               "Conferir" (sistema x físico por ITEM): aqui é caminhada
+               física, endereço por endereço, só confirmando presença. -->
+          <button class="btn" data-exp-aba="auditoria" title="Caminhada física pela expedição: confirma endereço por endereço se os itens estão lá">🚶 Auditoria</button>
           <button class="btn" data-exp-aba="catalogo">Catálogo</button>
         </div>
         <button class="btn" id="expAtualizarBtn" style="margin-left:auto;">Atualizar</button>
@@ -828,6 +834,29 @@
           <div class="empty-msg" id="confHistVazio" style="display:none;">
             Nenhuma retirada registrada ainda.
           </div>
+        </div>
+      </div>
+
+      <!-- ---- Auditoria física: caminhada pela expedição, endereço por
+           endereço (Robson, 11/09/2026: "vou lá na expedição, vou ver cada
+           endereço pra ver se os itens estão lá"). Só confirma PRESENÇA
+           (sem quantidade -- isso já é o Modo Contagem do Almoxarifado, um
+           fluxo diferente); o próximo passo (lançar no Datasul) é manual
+           do Robson, fora do portal -- esta aba só registra a
+           conferência em si, nada além. -->
+      <div id="expAuditoriaAba" class="prog-aba" style="display:none;">
+        <div class="cfg-barra">
+          <input type="text" id="auditBusca" placeholder="Buscar por localização, item ou nº do pedido..."
+                 style="flex:1; min-width:220px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+        </div>
+        <div class="modal-text" style="padding:0 16px 12px;">
+          Só o que ainda está na expedição, agrupado por localização. Confirme item a item que
+          está lá (✓ Confere) ou avise que não achou (⚠ Não achei) -- ou tudo do endereço de uma
+          vez, se bateu tudo.
+        </div>
+        <div id="auditBody" style="padding:0 16px 16px;"></div>
+        <div class="empty-msg" id="auditVazio" style="display:none;">
+          Nada na expedição pra conferir.
         </div>
       </div>
 
