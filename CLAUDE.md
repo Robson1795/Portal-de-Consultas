@@ -2521,3 +2521,50 @@ tabela, atualiza o card de itens encontrados e não mexe na outra linha;
 simulei o RLS recusando (delete sem erro, mas sem linha apagada) e o
 alerta correto apareceu, com a linha permanecendo na tela. Zero erro de
 console.
+
+## Seleção em lote: Conferir (Controle EXP) e Consulta de Itens (11/09/2026)
+
+Continuação do mesmo pedido, agora em lote. O Robson: *"coloque uma caixa
+de seleção, para que eu selecione os itens que eu quero tirar da planilha
+do exp, pode fazer para o almoxarifado também"*.
+
+Importante: em cada tela a caixa de seleção aciona a AÇÃO QUE JÁ EXISTIA
+ali, só que em várias linhas de uma vez — não é uma ação nova nem muda o
+que "excluir" significa em cada lugar:
+
+- **Conferir (Controle EXP)**: continua sendo a exclusão reversível de
+  sempre (`conferir_exp_notas`) — o 🗑️ por linha continua existindo do
+  jeito que estava. O checkbox só evita ter que clicar item por item
+  quando há muitos "Só no físico"/"Diferença" pra tratar de uma vez.
+  Botão `#confAcaoLoteBtn` muda de rótulo sozinho conforme o modo:
+  "🗑️ Excluir selecionados" na conferência normal, "↺ Restaurar
+  selecionados" dentro de "Ver excluídos" — mesma lógica de
+  `confVerExcluidosBtn`. Um `.upsert(array, ...)` só grava todos de uma
+  vez (não um loop de upserts).
+- **Consulta de Itens (almoxarifado)**: continua sendo o delete real de
+  `estoque` (linha 11/09/2026 anterior, "já dei baixa ou transferi") —
+  mesma permissão (`podeVerEstoqueMinimo()`), mesmo aviso de "não tem
+  volta". `.delete().in('id', bloco)` em blocos de 100 (mesmo motivo de
+  `gravarEtiquetaEmLote()`: o `in` do PostgREST viaja na URL).
+
+Detalhes que valem pras duas telas:
+- "Selecionar todos" no cabeçalho marca o que está **filtrado/na tela**,
+  não a unidade inteira sem filtro — mesmo comportamento já usado em
+  "Etiqueta" (Trading) e no `data-key`/ordenação: útil pra estreitar pela
+  busca antes de marcar tudo.
+- Trocar de unidade, trocar de modo (Ver excluídos ↔ normal) ou recarregar
+  os dados limpa a seleção -- o significado do que estava marcado deixou
+  de valer (são outros itens, ou o botão virou outra ação).
+- O confirm() sempre mostra a CONTAGEM antes de agitar qualquer coisa
+  (`Excluir 7 item(ns)...`), então quem clicou vê o tamanho do lote antes
+  de confirmar -- reaproveita o mesmo hábito de `limparTodasAsContagens()`.
+
+Conferido no navegador (mock de `sb.from(...).upsert()`/`.delete()`): no
+Conferir, marcar 2 de 4 itens e excluir em lote grava um `upsert` só com
+as 2 linhas certas; "Ver excluídos" mostra os 2 e o botão vira "Restaurar
+selecionados"; restaurar em lote devolve os 2 pra conferência normal;
+"selecionar todos" marca e desmarca corretamente; cancelar no `confirm()`
+não chama o banco. Na Consulta de Itens, marcar 2 de 3 itens e excluir em
+lote chama um `delete().in('id', [...])` só, com as duas linhas certas
+saindo de `currentData` e da tela; "selecionar todos" e "cancelar" também
+corretos. Zero erro de console.
