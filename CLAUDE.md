@@ -2840,6 +2840,60 @@ disponíveis da caixa — sem barra de rolagem. Testado também no preset
 mobile (375px): a caixa se ajusta à tela, a tabela ainda rola (esperado).
 Zero erro de console.
 
+## Explicação de negócio por trás da divergência (11/09/2026)
+
+O Robson: *"aqui pode dar uma informação que o pedido pode ter sido
+faturado e não carregou, esses tipos de informações, pode ser ao
+contrário também, quando esta no sistema e nao no fisico, pode ser que
+carregou e nao faturou"*.
+
+A pista: `linhasDoSetorAtual()` **ignora** linha com `status ===
+'retirado'` — assim que um item é marcado como retirado (aba Saída/
+Conferência), ele some do lado físico da conferência. Então "sistema
+espera mais do que o físico tem" e "o pedido já carregou de verdade" são
+a MESMA história contada de dois jeitos: carregar é exatamente o que tira
+o item da conta do físico. Faturar é o que deveria (mas ainda não)
+atualizar a conta do sistema.
+
+`explicacaoDivergenciaConf(situacao, diferenca)` (nova, perto de
+`SITUACOES_CONF`) resume isso em texto, só palpite — nunca afirma:
+
+- **"A mais no físico"** (diferença positiva): *"o pedido pode já ter
+  sido faturado no sistema, mas ainda não chegou a carregar de
+  verdade"*.
+- **"A mais no sistema"** (diferença negativa) **e "Só no sistema"**
+  (mesma causa, o item sumiu de vez do físico): *"o pedido pode já ter
+  carregado de verdade... mas o faturamento ainda não foi lançado"*.
+- "Só no físico" e "Confere" não têm explicação nenhuma — não é
+  divergência de faturamento/carregamento, é outra coisa (item fora do
+  catálogo, ou tudo certo).
+
+Aparece em dois lugares, porque nem toda situação abre a telinha "Onde
+está" (só abre quando há alguma localização física; "Só no sistema" não
+tem nenhuma, então nunca é clicável):
+
+- **Badge da coluna Situação**: `title` (tooltip ao passar o mouse) —
+  cobre também "Só no sistema", que não tem outro jeito de mostrar isso.
+- **Telinha "Onde está"**: texto por extenso, junto do aviso de pedido
+  suspeito (quando há) ou sozinho (quando a diferença é negativa, que não
+  tem pedido específico pra apontar).
+
+⚠️ **Corrigido no caminho**: o aviso de pedido suspeito (`pedidoSuspeito`)
+estava condicionado só a `diferenca > 0`, não a `situacao === 'diferenca'`
+— e "Só no físico" (sistema = 0) TAMBÉM tem diferença positiva (é o
+próprio total do físico, sem "quantidade esperada" nenhuma pra comparar).
+Sem essa correção, um item fora do catálogo ganharia um aviso de "pedido
+suspeito" sem sentido nenhum, comparando contra uma diferença que não é
+de verdade uma divergência de quantidade.
+
+Conferido no navegador, 5 itens (a mais no físico c/ pedido batendo, a
+mais no sistema, só no físico, só no sistema, confere): os `title` dos
+badges saem certos nos 5 (vazio pra "só no físico"/"confere", com
+explicação nos outros três); a telinha mostra a explicação certa pra "a
+mais no físico" (junto do aviso de pedido) e "a mais no sistema" (sem
+tentar apontar pedido); "só no físico" e "confere" abrem a telinha sem
+nenhum aviso de negócio. Zero erro de console.
+
 ## 21. Notificação de cadastro pendente, no canto da tela (11/09/2026)
 
 O Victor: *"o Robson implementou uma notificação que avisa quando alguém se

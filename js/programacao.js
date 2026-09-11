@@ -1593,6 +1593,30 @@ const SITUACOES_CONF = {
   ok:         { rotulo: 'Confere',       classe: 'st-ativo'    }
 };
 
+// Motivo de negócio mais comum por trás de cada tipo de divergência --
+// Robson, 11/09/2026: "pode dar uma informação que o pedido pode ter sido
+// faturado e não carregou... pode ser ao contrário também, quando está no
+// sistema e não no físico, pode ser que carregou e não faturou".
+//
+// "Só no sistema" e "a mais no sistema" são o MESMO motivo: um item
+// marcado `retirado` sai da conta do físico (linhasDoSetorAtual() ignora
+// status 'retirado'), então "carregou de verdade mas o sistema ainda não
+// sabe" e "sumiu do físico" são a mesma história vista de dois jeitos.
+//
+// É só um PALPITE pelo padrão mais comum, não um fato -- por isso o texto
+// nunca afirma, só sugere.
+function explicacaoDivergenciaConf(situacao, diferenca) {
+  if (situacao === 'so_sistema' || (situacao === 'diferenca' && diferenca < 0)) {
+    return 'Motivo comum: o pedido pode já ter carregado de verdade (some do físico assim que é retirado) -- '
+      + 'mas o faturamento ainda não foi lançado no sistema.';
+  }
+  if (situacao === 'diferenca' && diferenca > 0) {
+    return 'Motivo comum: o pedido pode já ter sido faturado no sistema, mas ainda não chegou a carregar de verdade '
+      + '-- continua fisicamente aqui.';
+  }
+  return '';
+}
+
 // A ordem da lista é a ordem do risco, não a alfabética:
 //
 //   1. SÓ NO FÍSICO primeiro. Material guardado que o sistema não conhece é o
@@ -1703,7 +1727,7 @@ function renderConferirExp() {
       <td class="num">${l.situacao === 'so_sistema' ? '—' : numeroBR(l.qtdFisico)}</td>
       <td class="num" style="font-weight:800; color:${l.situacao === 'ok' ? 'var(--muted)' : 'var(--erro-texto)'};">
         ${l.situacao === 'ok' ? '0' : sinal + numeroBR(l.diferenca)}</td>
-      <td><span class="cfg-status ${s.classe}">${s.rotulo}</span></td>
+      <td><span class="cfg-status ${s.classe}" title="${escapeHtml(explicacaoDivergenciaConf(l.situacao, l.diferenca))}">${s.rotulo}</span></td>
       <td class="loc${l.locais.length ? ' onde-esta-cell' : ''}" data-chave="${escapeHtml(l.chave)}"
           title="${l.locais.length ? 'Clique para ver localização e pedido de cada um' : ''}">
         ${l.locais.length ? escapeHtml(l.locais.join(', ')) : '—'}</td>
@@ -2028,26 +2052,44 @@ document.getElementById('confCorpo').addEventListener('click', (e) => {
   // a diferença "a mais no físico", esse pedido é candidato forte -- avisa
   // qual é, sem apagar os outros da lista.
   //
-  // Só entra quando diferenca > 0 (a mais no físico): se fosse a mais no
-  // SISTEMA, a falta não tem pedido físico nenhum pra apontar -- é
-  // exatamente o oposto, física ainda não registrada.
+  // ⚠️ Só entra quando a SITUAÇÃO é 'diferenca' -- não basta checar
+  // `diferenca > 0`: "Só no físico" (sistema = 0) também tem diferença
+  // positiva (é o próprio total do físico), e comparar pedido contra ela
+  // não tem o mesmo significado -- não existe "quantidade esperada" pra
+  // sobrar. Aqui a modal só abre pra 'ok'/'diferenca'/'so_fisico' (item sem
+  // localização nenhuma nem abre a modal), então o filtro explícito
+  // importa de verdade.
   const EPSILON_QTD = 0.005; // tolera arredondamento de casa decimal
+  let aviso = '';
+  // Declarado fora do `if` de propósito: a tabela mais abaixo usa
+  // `pedidoSuspeito` pra destacar a linha, mesmo depois deste bloco acabar.
   let pedidoSuspeito = null;
-  if (linha.diferenca > 0) {
-    pedidoSuspeito = linha.pedidosTotais.find(p => Math.abs(p.quantidade - linha.diferenca) < EPSILON_QTD) || null;
-  }
-  const aviso = pedidoSuspeito
-    ? `<div class="modal-text" style="margin-bottom:10px; padding:8px 10px; background:var(--aviso-fundo); color:var(--aviso-texto); border-radius:8px; font-weight:600;">
-         ⚠ Pedido <b>${escapeHtml(pedidoSuspeito.pedido)}</b> tem exatamente ${numeroBR(pedidoSuspeito.quantidade)}${linha.um ? ' ' + escapeHtml(linha.um) : ''}
-         — bate com a diferença "a mais no físico". Pode ser o que ainda não foi lançado no sistema
-         (não é certeza, é só a pista mais provável pela quantidade).
-       </div>`
-    : (linha.diferenca > 0
-        ? `<div class="modal-text" style="margin-bottom:10px; color:var(--muted);">
-             Nenhum pedido bate sozinho com a diferença de ${numeroBR(linha.diferenca)}${linha.um ? ' ' + escapeHtml(linha.um) : ''}
-             — pode ser soma de mais de um pedido, ou a diferença não vem de pedido nenhum.
+  if (linha.situacao === 'diferenca') {
+    // Robson, 11/09/2026: "pode dar uma informação que o pedido pode ter
+    // sido faturado e não carregou... pode ser ao contrário também, quando
+    // está no sistema e não no físico, pode ser que carregou e não
+    // faturou" -- mesmo texto do title do badge da coluna Situação, aqui
+    // por extenso porque a telinha tem espaço.
+    const explicacao = explicacaoDivergenciaConf(linha.situacao, linha.diferenca);
+    if (linha.diferenca > 0) {
+      pedidoSuspeito = linha.pedidosTotais.find(p => Math.abs(p.quantidade - linha.diferenca) < EPSILON_QTD) || null;
+      aviso = pedidoSuspeito
+        ? `<div class="modal-text" style="margin-bottom:10px; padding:8px 10px; background:var(--aviso-fundo); color:var(--aviso-texto); border-radius:8px; font-weight:600;">
+             ⚠ Pedido <b>${escapeHtml(pedidoSuspeito.pedido)}</b> tem exatamente ${numeroBR(pedidoSuspeito.quantidade)}${linha.um ? ' ' + escapeHtml(linha.um) : ''}
+             — bate com a diferença "a mais no físico". Pode ser o que ainda não foi lançado no sistema
+             (não é certeza, é só a pista mais provável pela quantidade). ${escapeHtml(explicacao)}
            </div>`
-        : '');
+        : `<div class="modal-text" style="margin-bottom:10px; color:var(--muted);">
+             Nenhum pedido bate sozinho com a diferença de ${numeroBR(linha.diferenca)}${linha.um ? ' ' + escapeHtml(linha.um) : ''}
+             — pode ser soma de mais de um pedido, ou a diferença não vem de pedido nenhum. ${escapeHtml(explicacao)}
+           </div>`;
+    } else {
+      aviso = `<div class="modal-text" style="margin-bottom:10px; color:var(--muted);">
+          O sistema espera ${numeroBR(Math.abs(linha.diferenca))}${linha.um ? ' ' + escapeHtml(linha.um) : ''} a mais do que está
+          registrado fisicamente aqui. ${escapeHtml(explicacao)}
+        </div>`;
+    }
+  }
 
   ondeEstaModalBox.innerHTML = `
     <button class="modal-close" id="ondeEstaCloseBtn">✕</button>
