@@ -157,7 +157,15 @@ async function carregarProgramacao() {
   renderExp();
   renderCarregamento();
   renderExpControle(expCtrl.error ? expCtrl.error.message : null);
-  if (!expCtrl.error) renderConferencia(); // barato (so filtra em memoria); sem isso a Conferencia so atualizava ao trocar de sub-aba
+  if (!expCtrl.error) {
+    renderConferencia(); // barato (so filtra em memoria); sem isso a Conferencia so atualizava ao trocar de sub-aba
+    // Robson, 11/09/2026: "pega o historico do que coloquei na doca e ja
+    // coloca la" -- mesmo motivo da linha acima: sem isso, item ja marcado
+    // DOCA (nesta sessao ou em outra) só aparecia na aba DOCA se essa aba
+    // já estivesse aberta na hora da chamada, não ao simplesmente carregar
+    // os dados de novo (Atualizar, ou reabrir a página).
+    renderDoca();
+  }
 }
 
 function falhaProgramacao(mensagem) {
@@ -220,7 +228,15 @@ function trocarAbaExpAcessorios(aba) {
     renderAuditoriaFisica();
     carregarConfFisica().then(renderAuditoriaFisica);
   }
-  if (aba === 'doca') renderDoca();
+  if (aba === 'doca') {
+    renderDoca(); // mostra rápido com o que já tem em memória
+    // Robson, 11/09/2026: "pega o historico do que coloquei na doca e ja
+    // coloca la" -- busca de novo no banco ao abrir a aba, em vez de
+    // confiar só no que já estava carregado: item marcado DOCA antes de
+    // abrir esta aba (ou por outra pessoa, em outra sessão) aparece na
+    // hora, sem precisar de nenhuma ação a mais.
+    carregarProgramacao();
+  }
 }
 
 // Catálogo antes da Programação, mesmo motivo do carregamento inicial em
@@ -3549,6 +3565,28 @@ document.getElementById('relPcpGerarBtn').addEventListener('click', async () => 
 // de referência na coluna "Veio de").
 let buscaDoca = '';
 
+// Conferente da DOCA -- Robson, 11/09/2026: "de lá na doca coloca o
+// conferente que retirou". Pessoa diferente de quem LEVOU o item até a
+// doca (isso é `na_doca_por`, já capturado no clique do botão DOCA lá na
+// Saída/Conferência ou na Entrada) -- aqui é quem confirma o carregamento
+// de verdade, na ponta final. Mesmo padrão de `nomeConferenteAtual()`
+// (Saída/Conferência), campo e chave de localStorage próprios.
+const CHAVE_CONFERENTE_DOCA_LS = 'docaNomeConferente';
+
+function nomeConferenteDoca() {
+  return document.getElementById('docaConferenteInput').value.trim();
+}
+
+document.getElementById('docaConferenteInput').addEventListener('input', (e) => {
+  try { localStorage.setItem(CHAVE_CONFERENTE_DOCA_LS, e.target.value); } catch (err) { /* localStorage bloqueado -- so nao lembra, nao quebra a tela */ }
+});
+(function restaurarNomeConferenteDoca() {
+  try {
+    const salvo = localStorage.getItem(CHAVE_CONFERENTE_DOCA_LS);
+    if (salvo) document.getElementById('docaConferenteInput').value = salvo;
+  } catch (err) { /* idem */ }
+})();
+
 function linhasNaDoca() {
   const busca = normalizaBuscaLocal(buscaDoca);
   return linhasDoSetorAtual().filter(l => {
@@ -3598,19 +3636,22 @@ function renderDoca() {
       </div>
       <div class="scroll-area">
         <table>
-          <thead><tr><th>Item</th><th>Descrição</th><th>Qtd</th><th>Veio de</th><th>Na doca desde</th><th>Ação</th></tr></thead>
+          <thead><tr><th>Item</th><th>Descrição</th><th>Qtd</th><th>Veio de</th><th>Levou pra doca</th><th>Ação</th></tr></thead>
           <tbody>
             ${linhas.map(l => {
               const desc = expCtrlDescMap.get(normalizaCodigoItem(l.codigo_item));
+              // Robson, 11/09/2026: "coloca os dados de quem levou pra lá,
+              // no caso está sendo a Jessica" -- visível na própria célula,
+              // não escondido num tooltip (era só no `title` antes).
               const desde = l.na_doca_em ? formatarDataHoraBR(l.na_doca_em) : '—';
-              const quem = l.na_doca_por ? `${escapeHtml(l.na_doca_por)} — ` : '';
+              const quemLevou = l.na_doca_por ? escapeHtml(l.na_doca_por) : '—';
               return `
               <tr>
                 <td class="item">${escapeHtml(l.codigo_item)}</td>
                 <td>${desc && desc.descricao ? escapeHtml(desc.descricao) : '—'}</td>
                 <td class="num">${l.quantidade != null ? escapeHtml(l.quantidade) : '—'}</td>
                 <td class="loc">${escapeHtml(l.localizacao || '—')}</td>
-                <td class="loc" title="${quem}${escapeHtml(desde)}">${escapeHtml(desde)}</td>
+                <td class="loc">${quemLevou}<div style="font-size:11px; color:var(--muted);">${escapeHtml(desde)}</div></td>
                 <td class="col-acoes">
                   <button class="btn doca-carregou" data-id="${escapeHtml(l.id)}">✓ Carregou</button>
                   <button class="acao-btn doca-desfazer" data-id="${escapeHtml(l.id)}" title="Desfazer -- volta pro endereço de origem">↺</button>
@@ -3634,11 +3675,19 @@ document.getElementById('docaBody').addEventListener('click', async (e) => {
   const btnDesfazer = e.target.closest('.doca-desfazer');
   const btnTudo = e.target.closest('.doca-tudo-carregou');
 
+  // Robson, 11/09/2026: "de lá na doca coloca o conferente que retirou" --
+  // mesma trava da Saída/Conferência (nomeConferenteAtual()): sem nome,
+  // nem tenta gravar. Só vale pra Carregou/Tudo carregou -- Desfazer não é
+  // uma retirada de verdade, é "cancela o que eu marquei".
+  if (btnCarregou || btnTudo) {
+    if (!nomeConferenteDoca()) { alert('Informe o conferente da doca antes de confirmar o carregamento.'); return; }
+  }
+
   if (btnCarregou) {
     btnCarregou.disabled = true;
     // 'retirado' aqui é o default de marcarSaidaExpControle() (mesmo botão
     // que sempre existiu no Histórico) -- é o passo FINAL, fim de linha.
-    const ok = await marcarSaidaExpControle(btnCarregou.dataset.id, nomeUsuarioAtual, 'retirado');
+    const ok = await marcarSaidaExpControle(btnCarregou.dataset.id, nomeConferenteDoca(), 'retirado');
     if (ok) await carregarProgramacao();
     else btnCarregou.disabled = false;
     renderDoca();
@@ -3662,7 +3711,7 @@ document.getElementById('docaBody').addEventListener('click', async (e) => {
     if (!confirm(`Confirmar que ${itens.length} item(ns) do pedido "${pedido}" carregaram de verdade?`)) return;
 
     btnTudo.disabled = true;
-    for (const item of itens) await marcarSaidaExpControle(item.id, nomeUsuarioAtual, 'retirado');
+    for (const item of itens) await marcarSaidaExpControle(item.id, nomeConferenteDoca(), 'retirado');
     await carregarProgramacao();
     renderDoca();
   }

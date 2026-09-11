@@ -3246,6 +3246,53 @@ busca funciona nos três campos; Conferir continua contando item na doca
 como físico presente (testado com `montarConferirExp()`); botão da
 Entrada vai pra doca com o título novo. Zero erro de console.
 
+### Correção: aba não buscava de novo no banco + conferente da doca (11/09/2026)
+
+O Robson clicou em DOCA em alguns itens e eles não apareciam na aba nova:
+*"itens que estou apertando pra item para doca não estão aparecendo
+aqui"*. Junto, dois pedidos de dado: *"coloca os dados de quem levou pra
+lá, no caso está sendo a Jessica, aí de lá na doca coloca o conferente
+que retirou"* e, depois: *"pega o histórico do que coloquei na doca e já
+coloca lá"*.
+
+Causa: `trocarAbaExpAcessorios('doca')` só chamava `renderDoca()` — que
+desenha o que já estava em MEMÓRIA (`progExpControle`), sem buscar de
+novo no banco. Um item marcado DOCA antes de abrir a aba (ou marcado numa
+sessão/dispositivo diferente) só apareceria se alguma outra ação
+acontecesse a buscar os dados de novo nesse meio tempo. Corrigido em
+dois lugares:
+- `trocarAbaExpAcessorios('doca')` agora chama `carregarProgramacao()`
+  ao abrir a aba (busca fresca no banco), além do `renderDoca()` rápido
+  com o que já tinha em memória.
+- `carregarProgramacao()` ganhou `renderDoca()` na lista de redesenhos
+  incondicionais, ao lado de `renderConferencia()` — mesmo motivo que já
+  valia pra ela ("sem isso só atualizava ao trocar de sub-aba"): agora
+  QUALQUER ação que recarregue a programação (registrar item, marcar
+  saída, clicar Atualizar) também atualiza a DOCA, esteja ela aberta ou
+  não.
+
+Também dois ajustes de dados:
+- **"Levou pra doca" virou coluna visível** (era só `title`, escondido
+  num tooltip) — é o `na_doca_por`, já capturado desde sempre no clique
+  do botão DOCA, só não aparecia na tela.
+- **Conferente da doca** (`#docaConferenteInput`, mesmo padrão de
+  `nomeConferenteAtual()` da Saída/Conferência, com a própria chave de
+  localStorage): campo obrigatório antes de "✓ Carregou"/"Todo pedido
+  carregou" — é uma PESSOA DIFERENTE de quem levou o item até a doca, e
+  vira o `retirado_por` no carregamento final. "Levou pra doca" (Jessica)
+  e "conferente que retirou" (quem confirma o carregamento) ficam em
+  colunas/carimbos diferentes de propósito, a mesma separação de
+  `na_doca_por` × `retirado_por` já explicada acima.
+
+Conferido no navegador: simulei um item já `na_doca` no banco (como se
+tivesse sido marcado antes) e, ao trocar pra aba DOCA, ele aparece na
+hora, com "Jessica" (quem levou) visível na célula, não num tooltip;
+sem preencher o Conferente da doca, "✓ Carregou" mostra o alerta e não
+grava nada; preenchendo com outro nome ("Marcos"), o `retirado_por`
+grava esse nome (diferente do `na_doca_por`, que continua "Jessica").
+Zero erro de console (fora erros de mocks de chamadas não relacionadas
+a esta correção).
+
 ## 21. Notificação de cadastro pendente, no canto da tela (11/09/2026)
 
 O Victor: *"o Robson implementou uma notificação que avisa quando alguém se

@@ -851,6 +851,16 @@
            histórico). Agrupado por Nº Pedido, igual à folha impressa -- é
            assim que o carregamento de verdade acontece, pedido por pedido. -->
       <div id="expDocaAba" class="prog-aba" style="display:none;">
+        <!-- Robson, 11/09/2026: "de lá na doca coloca o conferente que
+             retirou" -- pessoa diferente de quem levou pro endereço até a
+             doca (isso já fica em "Levou pra doca", por item). Mesmo
+             padrão do Conferente da Saída/Conferência (#confNomeInput):
+             campo próprio, obrigatório antes de marcar Carregou. -->
+        <div class="cfg-barra">
+          <span class="modal-label" style="margin:0;">Conferente da doca</span>
+          <input type="text" id="docaConferenteInput" placeholder="Nome de quem confirma o carregamento"
+                 style="flex:1; min-width:180px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+        </div>
         <div class="cfg-barra">
           <input type="text" id="docaBusca" placeholder="Buscar por nº do pedido, item ou localização de origem..."
                  style="flex:1; min-width:220px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
