@@ -223,6 +223,7 @@ function trocarAbaExpAcessorios(aba) {
   if (aba === 'conferir') {
     renderConferirExp(); // mostra rápido com o que já tem em memória (a 1ª vez, sem observação/exclusão ainda)
     carregarConferirExpNotas().then(renderConferirExp);
+    carregarPedidoFaturamentoConfirmado();
   }
   if (aba === 'auditoria') {
     renderAuditoriaFisica();
@@ -1538,6 +1539,26 @@ function notaConferirDoItem(chave) {
   return conferirExpNotas.get(chave) || { observacao: '', excluido_em: null, excluido_por: '' };
 }
 
+// Robson, 11/09/2026, na telinha "Onde está": "coloca um botao que vou
+// colocar que o pedido esta certo no sistema esperando faturamento".
+// Confirmado que o botão só marca (não muda a conta sistema x físico):
+// fica registrado quem/quando, e o pedido some do destaque de "suspeito"
+// dali em diante (ver sql/fase37-pedido-aguardando-faturamento.sql).
+let pedidoFaturamentoConfirmadoMap = new Map(); // numero_pedido -> {confirmado_por, confirmado_em}
+
+async function carregarPedidoFaturamentoConfirmado() {
+  const { data, error } = await sb.from('exp_pedido_faturamento_confirmado').select('*').eq('unidade', unidadeAtual);
+  pedidoFaturamentoConfirmadoMap = new Map();
+  if (error) {
+    // Silencioso de propósito (mesmo padrão de carregarConferirExpNotas):
+    // se o fase37 ainda não rodou, a telinha continua funcionando sem a
+    // marcação em vez de travar a aba inteira.
+    console.warn('Não foi possível carregar as confirmações de faturamento:', error.message);
+    return;
+  }
+  (data || []).forEach(r => pedidoFaturamentoConfirmadoMap.set(r.numero_pedido, r));
+}
+
 function montarConferirExp() {
   const somar = (mapa, chave, valor) => mapa.set(chave, (mapa.get(chave) || 0) + valor);
 
@@ -2099,7 +2120,16 @@ function fecharOndeEstaModal() { ondeEstaModal.classList.remove('open'); }
 document.getElementById('confCorpo').addEventListener('click', (e) => {
   const celula = e.target.closest('.onde-esta-cell');
   if (!celula) return;
-  const linha = montarConferirExp().find(l => l.chave === celula.dataset.chave);
+  renderOndeEstaModal(celula.dataset.chave);
+  ondeEstaModal.classList.add('open');
+  aplicarPosicaoOndeEsta();   // reabre no lugar onde foi deixada
+});
+
+// Extraído do handler de clique pra poder ser chamado de novo depois de
+// confirmar um pedido (redesenha a MESMA telinha com o estado atualizado,
+// sem fechar e sem perder a posição arrastada).
+function renderOndeEstaModal(chave) {
+  const linha = montarConferirExp().find(l => l.chave === chave);
   if (!linha || !linha.locaisDetalhe.length) return;
 
   // Robson, 11/09/2026: "coloque as quantidades por pedido também" -- uma
@@ -2180,21 +2210,47 @@ document.getElementById('confCorpo').addEventListener('click', (e) => {
     }
   }
 
+  // Robson, 11/09/2026: "ali aonde está a flecha laranja coloca um botao
+  // que vou colocar que o pedido esta certo no sistema esperando
+  // faturamento" -- só faz sentido no lado "a mais no sistema" (o pedido já
+  // carregou, físico sumiu, só falta o Datasul processar). No lado "a mais
+  // no físico" o motivo é o oposto (já faturado, ainda não carregou) --
+  // "esperando faturamento" não se aplica lá, por isso o botão só aparece
+  // aqui. Confirmado que o clique SÓ MARCA (não muda a conta sistema x
+  // físico nem a situação do item) -- ver sql/fase37.
+  const mostraColunaFaturamento = linha.situacao === 'diferenca' && linha.diferenca < 0;
+
   ondeEstaModalBox.innerHTML = `
     <button class="modal-close" id="ondeEstaCloseBtn">✕</button>
     <h3 style="margin-top:0;">📍 ${escapeHtml(linha.codigo)}</h3>
     <div class="modal-text" style="margin-bottom:10px;">${escapeHtml(linha.descricao || '—')}</div>
     ${aviso}
+    <div style="overflow-x:auto; max-width:100%;">
     <table style="width:100%; border-collapse:collapse;">
       <thead><tr>
         <th style="text-align:left; padding:4px 8px; border-bottom:1px solid var(--border);">Localização</th>
         <th style="text-align:left; padding:4px 8px; border-bottom:1px solid var(--border);">Nº Pedido</th>
         <th style="text-align:right; padding:4px 8px; border-bottom:1px solid var(--border);">Quantidade</th>
+        ${mostraColunaFaturamento ? '<th style="text-align:left; padding:4px 8px; border-bottom:1px solid var(--border);">Faturamento</th>' : ''}
       </tr></thead>
       <tbody>
         ${linhasTabela.map(r => {
-          const suspeito = pedidosSuspeitos.some(p => p.pedido === r.pedido);
+          const confirmado = pedidoFaturamentoConfirmadoMap.get(r.pedido);
+          // Pedido já confirmado não é mais "suspeito" -- já foi revisado,
+          // manter o amarelo/⚠ depois de confirmado só ignoraria o clique.
+          const suspeito = !confirmado && pedidosSuspeitos.some(p => p.pedido === r.pedido);
           const estilo = suspeito ? ' style="background:var(--aviso-fundo);"' : '';
+          const acaoFaturamento = !mostraColunaFaturamento ? '' : confirmado
+            ? `<td style="padding:4px 8px; border-bottom:1px solid var(--border); color:var(--ok-texto); font-size:12px;"
+                   title="${confirmado.confirmado_por ? escapeHtml(confirmado.confirmado_por) + ' — ' : ''}${escapeHtml(formatarDataHoraBR(confirmado.confirmado_em))}">
+                 ✓ Aguardando faturamento
+               </td>`
+            : `<td style="padding:4px 8px; border-bottom:1px solid var(--border);">
+                 <button class="acao-btn onde-esta-confirmar-faturamento" data-pedido="${escapeHtml(r.pedido)}"
+                         title="Marca que este pedido está certo no sistema, só esperando o faturamento">
+                   Está certo, aguardando faturamento
+                 </button>
+               </td>`;
           return `
           <tr${estilo}>
             ${r.localizacao !== null
@@ -2202,14 +2258,31 @@ document.getElementById('confCorpo').addEventListener('click', (e) => {
               : ''}
             <td style="padding:4px 8px; border-bottom:1px solid var(--border);">${suspeito ? '⚠ ' : ''}${escapeHtml(r.pedido)}</td>
             <td style="padding:4px 8px; border-bottom:1px solid var(--border); text-align:right;">${numeroBR(r.quantidade)}${linha.um ? ' ' + escapeHtml(linha.um) : ''}</td>
+            ${acaoFaturamento}
           </tr>`;
         }).join('')}
       </tbody>
-    </table>`;
+    </table>
+    </div>`;
   document.getElementById('ondeEstaCloseBtn').addEventListener('click', fecharOndeEstaModal);
-  ondeEstaModal.classList.add('open');
-  aplicarPosicaoOndeEsta();   // reabre no lugar onde foi deixada
-});
+  document.querySelectorAll('.onde-esta-confirmar-faturamento').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      const { error } = await sb.from('exp_pedido_faturamento_confirmado').upsert({
+        unidade: unidadeAtual, numero_pedido: btn.dataset.pedido,
+        confirmado_por: nomeUsuarioAtual, confirmado_em: new Date().toISOString()
+      }, { onConflict: 'unidade,numero_pedido' });
+      if (error) {
+        alert('Não foi possível confirmar: ' + error.message
+          + ' — se a mensagem falar em tabela inexistente, sql/fase37-pedido-aguardando-faturamento.sql ainda não foi rodado no Supabase.');
+        btn.disabled = false;
+        return;
+      }
+      await carregarPedidoFaturamentoConfirmado();
+      renderOndeEstaModal(chave); // redesenha a mesma telinha já com a marca
+    });
+  });
+}
 ondeEstaModal.addEventListener('click', (e) => {
   // Soltar o arrasto fora da caixa não pode contar como "clicou fora, fecha".
   if (ondeEstaArrastou) return;
@@ -2231,17 +2304,28 @@ let ondeEstaDeslocX = 0;
 let ondeEstaDeslocY = 0;
 let ondeEstaArrastou = false;   // houve arrasto de verdade desde o último clique
 
-// Segura a caixa dentro da tela: arrastada inteira pra fora, não haveria como
-// trazer de volta nem fechar (o ✕ vai junto).
+// Segura a caixa DENTRO da tela inteira -- Robson, 11/09/2026, mostrando a
+// coluna Quantidade cortada na borda direita: a régua antiga só evitava a
+// caixa sumir quase inteira (só entrava em ação com a caixa quase toda fora
+// da tela), e deixava passar um arrasto "só um pouco demais" que empurra a
+// borda DIREITA (onde mora a Quantidade, a última coluna) pra fora da
+// janela -- o resto da página então precisava rolar pro lado pra completar
+// a visão, e a posição fica GUARDADA, então o corte se repetia toda vez
+// que a telinha abria de novo.
+//
+// Agora trava a caixa INTEIRA dentro da tela (nenhuma borda passa), com
+// prioridade pro canto esquerdo/superior quando a caixa é maior que a
+// tela disponível -- é onde ficam o título e o ✕, o mínimo pra continuar
+// usável mesmo nesse caso extremo.
 function aplicarPosicaoOndeEsta() {
   ondeEstaModalBox.style.transform = `translate(${ondeEstaDeslocX}px, ${ondeEstaDeslocY}px)`;
   const r = ondeEstaModalBox.getBoundingClientRect();
-  const margem = 60;   // quanto da caixa sempre continua visível
+  const margem = 16;
   let corrigeX = 0, corrigeY = 0;
-  if (r.right  < margem)                     corrigeX = margem - r.right;
-  if (r.left   > window.innerWidth - margem)  corrigeX = (window.innerWidth - margem) - r.left;
-  if (r.bottom < margem)                     corrigeY = margem - r.bottom;
-  if (r.top    > window.innerHeight - margem) corrigeY = (window.innerHeight - margem) - r.top;
+  if (r.right > window.innerWidth - margem) corrigeX = (window.innerWidth - margem) - r.right;
+  else if (r.left < margem) corrigeX = margem - r.left;
+  if (r.bottom > window.innerHeight - margem) corrigeY = (window.innerHeight - margem) - r.bottom;
+  else if (r.top < margem) corrigeY = margem - r.top;
   if (corrigeX || corrigeY) {
     ondeEstaDeslocX += corrigeX;
     ondeEstaDeslocY += corrigeY;

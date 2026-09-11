@@ -3006,6 +3006,70 @@ grupo; busca por pedido continua funcionando; item retirado na mesma
 localização continua fora, mesmo buscando por ela. Zero erro de
 console.
 
+## Correção: telinha "Onde está" vazando pra fora da tela (11/09/2026)
+
+O Robson mostrou a telinha com a coluna Quantidade cortada na borda
+direita, com o fundo da página aparecendo atrás (a página inteira
+precisando rolar pro lado pra completar a visão) -- *"puxe a quantidade
+aonde indiquei a flecha verde"*.
+
+Causa: a régua que mantém a telinha arrastável dentro da tela
+(`aplicarPosicaoOndeEsta()`) só agia quando a caixa ficava **quase
+inteira** fora da tela — um arrasto "só um pouco longe demais" empurrava
+a borda DIREITA (onde mora a Quantidade, a última coluna) pra fora da
+janela sem disparar a correção. Como a posição arrastada fica **guardada**
+enquanto a página está aberta, o corte se repetia toda vez que a telinha
+abria de novo.
+
+Reescrita pra travar a caixa **inteira** dentro da tela (nenhuma borda
+passa), com prioridade pro canto esquerdo/superior (onde ficam o título
+e o ✕) no caso extremo de a caixa ser maior que a tela disponível. A
+tabela também ganhou uma `<div style="overflow-x:auto;">` própria, como
+segurança a mais — se algum dia tiver conteúdo mais largo que a caixa,
+rola só a tabela, não a página inteira.
+
+Conferido no navegador: arrasto exagerado (5000px) pra qualquer direção
+deixa a caixa sempre com as quatro bordas dentro da tela. Zero erro de
+console.
+
+## Botão "Pedido certo no sistema, aguardando faturamento" (11/09/2026)
+
+Mesma telinha, pedido diferente: *"ali aonde está a flecha laranja
+coloca um botao que vou colocar que o pedido esta certo no sistema
+esperando faturamento"*. Perguntado o que o clique deveria fazer,
+confirmado: só marca (não muda a conta sistema × físico nem a situação
+do item) — fica registrado quem/quando, e o pedido some do destaque de
+"suspeito" dali em diante.
+
+Nova coluna **"Faturamento"** na telinha, só quando a situação é "A mais
+no sistema" (`linha.diferenca < 0`) — no lado oposto ("a mais no
+físico") o motivo é o contrário (já faturado, ainda não carregou), e
+"esperando faturamento" não se aplica lá. Por pedido: sem confirmação,
+um botão "Está certo, aguardando faturamento"; confirmado, um "✓
+Aguardando faturamento" (com quem/quando no tooltip), e o pedido perde o
+destaque amarelo/⚠ de "suspeito" mesmo que a quantidade bata com a
+diferença — já foi revisado, manter o alarme ali só ignoraria o clique.
+
+Tabela nova (`sql/fase37-pedido-aguardando-faturamento.sql`), chave
+`(unidade, numero_pedido)` — **não** reaproveita `exp_pedido_status`
+(fase17, que marca "pedido pronto pra etiqueta", detectado sozinho pela
+troca de Nº Pedido na Entrada): são momentos e perguntas diferentes
+(terminou de digitar × confirmado na conferência dias depois), mesmo
+motivo que já separou `conferir_exp_notas` de `analise_item_notas`.
+RLS espelha o mesmo padrão (`esta_aprovado()` + admin/dono da unidade).
+
+`renderOndeEstaModal(chave)` -- a lógica de montar a telinha foi
+extraída do handler de clique pra uma função nomeada, porque agora
+precisa ser chamada de NOVO depois de confirmar um pedido (redesenha a
+mesma telinha com o estado atualizado, sem fechar nem perder a posição
+arrastada).
+
+Conferido no navegador com o caso real (4 pedidos, item "a mais no
+sistema"): coluna Faturamento aparece com um botão por pedido; clicar
+grava o upsert certo e troca pra "✓ Aguardando faturamento" só naquele
+pedido, os outros três continuam com botão; coluna NÃO aparece no caso
+"a mais no físico" (testado com item separado). Zero erro de console.
+
 ## Correção: aviso de pedido suspeito escondia empate (11/09/2026)
 
 O Robson conferiu na mão o pedido que o aviso apontava (item 804386,
