@@ -3006,6 +3006,32 @@ grupo; busca por pedido continua funcionando; item retirado na mesma
 localização continua fora, mesmo buscando por ela. Zero erro de
 console.
 
+## Campo de localização da Entrada cortando o endereço + maiúscula (12/09/2026)
+
+Screenshot da aba Entrada (Controle EXP): a coluna Localização, com
+largura fixa de 90px, cortava endereços mais compridos ("EXP CANT B-"
+sem o número final) -- *"deixe maleável para caber toda a escrita"*.
+Junto, endereços digitados ou colados com caixa diferente ("exp cant
+b-01") apareciam misturados com os em maiúscula -- *"os endereços deixe
+só em letra maiuscula para mantermos o padrao"*.
+
+Largura fixa trocada por `size` calculado a partir do próprio texto de
+cada linha (`Math.max(8, texto.length + 2)`) -- cada campo cresce
+sozinho até caber o que tem dentro, em vez de um número fixo que serve
+pra uns e corta outros. Maiúscula aplicada em três pontos, não só na
+exibição: a colagem da planilha (`parseExpControleTexto`), o cadastro
+manual/passo-a-passo (`gravarMovimentacaoManual`) e a edição direto na
+lista (`focusout` do campo) -- todo caminho que grava `localizacao`
+salva em maiúscula, senão o mesmo endereço digitado em caixas diferentes
+por pessoas diferentes viraria dois endereços distintos pra busca.
+Editar sem mudar nada (só a caixa) não dispara gravação -- só ajusta o
+que aparece no campo.
+
+Testado: campo cresce por linha (13 caracteres vs 9 caracteres, larguras
+diferentes); editar "exp cant b-02" grava "EXP CANT B-02" no banco e no
+campo; reeditar em minúscula sem mudar o endereço não grava de novo;
+colagem da planilha já entra em maiúscula. Zero erro de console.
+
 ## Correção: telinha "Onde está" vazando pra fora da tela (11/09/2026)
 
 O Robson mostrou a telinha com a coluna Quantidade cortada na borda

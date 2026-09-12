@@ -1045,7 +1045,10 @@ function parseExpControleTexto(texto) {
       codigo_item: cols[0],
       numero_pedido: cols[1] || null,
       quantidade: cols[2] ? parseQtd(cols[2]) : null,
-      localizacao: cols[3] || null,
+      // Robson, 12/09/2026: "os endereços deixe só em letra maiuscula para
+      // mantermos o padrao" -- a planilha colada vem como o Datasul escreveu
+      // (às vezes minúscula/mista), então padroniza já na entrada.
+      localizacao: cols[3] ? cols[3].toUpperCase() : null,
       numero_os_op: cols[4] || null,
       lote: cols[5] || null,
       referencia: cols[6] || null
@@ -1464,7 +1467,8 @@ function renderExpControle(erroCarregamento) {
                    aria-label="Marcar este item para imprimir"></td>
       <td class="loc"><input type="text" class="expctrl-loc-input" data-id="${escapeHtml(l.id)}"
              value="${escapeHtml(l.localizacao || '')}" placeholder="—"
-             style="width:90px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px;"></td>
+             size="${Math.max(8, String(l.localizacao || '').length + 2)}"
+             style="min-width:70px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px; text-transform:uppercase;"></td>
       <td class="item">${escapeHtml(l.codigo_item)}</td>
       <td>${desc && desc.descricao ? escapeHtml(desc.descricao) : '—'}</td>
       <td class="loc">${desc && desc.um ? escapeHtml(desc.um) : '—'}</td>
@@ -2405,7 +2409,7 @@ async function gravarMovimentacaoManual({ codigo, pedido, quantidadeTexto, local
     numero_pedido: (pedido || '').trim() || null,
     codigo_item: codigo,
     quantidade: (quantidadeTexto || '').trim() ? parseQtd(quantidadeTexto.trim()) : null,
-    localizacao: (local || '').trim() || null,
+    localizacao: (local || '').trim() ? local.trim().toUpperCase() : null,
     numero_os_op: (op || '').trim() || null,
     lote: (lote || '').trim() || null,
     referencia: (ref || '').trim() || null,
@@ -2763,8 +2767,12 @@ document.getElementById('expCtrlBody').addEventListener('focusout', async (e) =>
   const item = progExpControle.find(l => l.id === input.dataset.id);
   if (!item) return;
 
-  const novaLocalizacao = input.value.trim() || null;
-  if (novaLocalizacao === (item.localizacao || null)) return; // nada mudou
+  // Robson, 12/09/2026: "os endereços deixe só em letra maiuscula para
+  // mantermos o padrao" -- maiúscula direto no que é salvo, não só na
+  // exibição, senão a mesma localização digitada em caixas diferentes por
+  // pessoas diferentes contaria como dois endereços distintos na busca.
+  const novaLocalizacao = input.value.trim() ? input.value.trim().toUpperCase() : null;
+  if (novaLocalizacao === (item.localizacao || null)) { input.value = novaLocalizacao || ''; return; }
 
   input.disabled = true;
   const { error } = await sb.from('exp_controle_itens').update({ localizacao: novaLocalizacao }).eq('id', item.id);
@@ -2776,6 +2784,8 @@ document.getElementById('expCtrlBody').addEventListener('focusout', async (e) =>
     return;
   }
   item.localizacao = novaLocalizacao;
+  input.value = novaLocalizacao || '';
+  input.size = Math.max(8, (novaLocalizacao || '').length + 2);
   input.style.borderColor = 'var(--blue)';
   setTimeout(() => { input.style.borderColor = ''; }, 1200);
 });
