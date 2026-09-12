@@ -3006,6 +3006,39 @@ grupo; busca por pedido continua funcionando; item retirado na mesma
 localização continua fora, mesmo buscando por ela. Zero erro de
 console.
 
+## Folha impressa do CANT agrupa por endereço, não por pedido (12/09/2026)
+
+Mesmo screenshot de antes: 3 itens na mesma localização (EXP CANT A-01),
+cada um de um pedido diferente (KV855935, KV775998, KV876960) -- *"preciso
+que os itens do CANT saia na mesma folha"*.
+
+A folha impressa (a que vai colada no pallet) agrupa por Nº Pedido desde o
+pedido do Victor, 10/09/2026: *"não separar por item, separar por pedido.
+Se for do mesmo pedido, pode por na mesma pagina. Pedidos diferentes,
+separar por paginas"* -- ali o pallet É o pedido. Perguntado se essa
+mudança seria geral (agrupar tudo por endereço) ou só pro CANT, a resposta
+foi só o CANT: no CANT um endereço só guarda vários pedidos pequenos ao
+mesmo tempo, e quem vai lá pegar o material precisa de UMA folha por
+endereço, não uma por pedido -- fora do CANT o pallet continua sendo por
+pedido, sem mudança.
+
+Nova função `chaveFolhaExpControle(localizacao, numeroPedido)`: quando a
+localização bate com `/CANT/i`, agrupa pelo endereço inteiro (`EXP CANT
+A-01` vira uma folha só, mesmo com pedidos diferentes dentro); fora do
+CANT, continua exatamente a regra antiga (`chavePedidoFolha`, por nº de
+pedido). Usada nos dois lugares que já usavam a regra por pedido: a
+montagem da folha (`montarHtmlExpControle`) e a contagem de "quantas
+folhas vão sair" antes de imprimir (aviso de confirmação com
+`LIMITE_FOLHAS_IMPRESSAO`). O Exportar (Excel/CSV/HTML em tabela) não tem
+agrupamento nenhum, então não muda. A aba DOCA também agrupa por pedido
+só nela, sem relação com a folha impressa -- não mexida.
+
+Testado: 3 pedidos diferentes na mesma EXP CANT A-01 saem numa folha só
+com os 3 itens; um segundo endereço CANT (EXP CANT B-01) fica em folha
+própria, separada da A-01; endereços fora do CANT continuam uma folha por
+pedido, como antes. Contagem de folhas bate (3 grupos pros 6 itens do
+teste). Zero erro de console.
+
 ## Campo de localização da Entrada cortando o endereço + maiúscula (12/09/2026)
 
 Screenshot da aba Entrada (Controle EXP): a coluna Localização, com

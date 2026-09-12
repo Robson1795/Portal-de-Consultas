@@ -2899,6 +2899,20 @@ function chavePedidoFolha(numeroPedido) {
   return n || '(sem pedido)';
 }
 
+// Robson, 12/09/2026, mostrando 3 pedidos diferentes no mesmo endereço EXP
+// CANT A-01: "precisa que os itens do CANT saia na mesma folha". No CANT um
+// endereço só guarda vários pedidos pequenos ao mesmo tempo -- agrupar por
+// pedido botaria pedaço do MESMO endereço físico em folhas separadas, e
+// quem for lá só precisa de UMA folha, não uma por pedido. Fora do CANT
+// continua a regra do Victor (folha = pedido, porque o pallet é o pedido).
+// Prefixo (`loc::`/`ped::`) evita que um nº de pedido bata por acaso com um
+// texto de localização e misture os dois grupos na mesma chave.
+function chaveFolhaExpControle(localizacao, numeroPedido) {
+  const loc = String(localizacao == null ? '' : localizacao).trim();
+  if (/CANT/i.test(loc)) return 'loc::' + loc;
+  return 'ped::' + chavePedidoFolha(numeroPedido);
+}
+
 function linhasParaImprimirExpControle() {
   const linhas = linhasImprimiveisExpControle();
   if (!expCtrlSelecionadas.size) return linhas;
@@ -2985,7 +2999,8 @@ function montarHtmlExpControle(scriptAutoImprimir) {
   // AGRUPADO POR PEDIDO (pedido do Victor, 10/09/2026: "não separar por item,
   // separar por pedido. Se for do mesmo pedido, pode por na mesma pagina.
   // Pedidos diferentes, separar por paginas"). A folha vai colada no pallet, e
-  // o pallet é o pedido -- não o item.
+  // o pallet é o pedido -- não o item. EXCETO no CANT, onde a folha é o
+  // endereço (ver chaveFolhaExpControle(), 12/09/2026).
   //
   // ⚠️ Agrupar é obrigatório, não é enfeite: a consulta traz as linhas ordenadas
   // por LOCALIZAÇÃO (ver o .order() da carga), então dois itens do mesmo pedido
@@ -2993,18 +3008,22 @@ function montarHtmlExpControle(scriptAutoImprimir) {
   // mesmo pedido sairia em duas folhas e uma folha misturaria pedidos.
   const grupos = new Map();
   linhasExportacaoExpControle().forEach(linha => {
-    const chave = chavePedidoFolha(linha[4]);   // [4] = Nº Pedido
+    const chave = chaveFolhaExpControle(linha[0], linha[4]);   // [0] = Localização, [4] = Nº Pedido
     if (!grupos.has(chave)) grupos.set(chave, []);
     grupos.get(chave).push(linha);
   });
   // Ordem de aparição (o Map preserva), com o grupo sem pedido no fim: ele não
   // é um pedido, e deixá-lo no meio empurraria pedido de verdade para trás.
   const ordemGrupos = [...grupos.keys()]
-    .sort((a, b) => (a === '(sem pedido)' ? 1 : 0) - (b === '(sem pedido)' ? 1 : 0));
+    .sort((a, b) => (a === 'ped::(sem pedido)' ? 1 : 0) - (b === 'ped::(sem pedido)' ? 1 : 0));
 
-  const gruposHtml = ordemGrupos.map(chave => `<section class="grupo">
+  const gruposHtml = ordemGrupos.map(chave => {
+    const rotuloGrupo = chave.startsWith('loc::')
+      ? escapeHtml(chave.slice(5))
+      : (chave === 'ped::(sem pedido)' ? 'Sem nº de pedido' : 'Pedido ' + escapeHtml(chave.slice(5)));
+    return `<section class="grupo">
       <div class="grupo-topo">
-        <span class="grupo-pedido">${chave === '(sem pedido)' ? 'Sem nº de pedido' : 'Pedido ' + escapeHtml(chave)}</span>
+        <span class="grupo-pedido">${rotuloGrupo}</span>
         <span class="grupo-itens">${grupos.get(chave).length} item(ns)</span>
       </div>
       <div class="grupo-quem">${escapeHtml(rotuloUnidade(unidadeAtual))} &middot; Impresso por ${escapeHtml(nomeUsuarioAtual || emailUsuarioAtual || '—')} &mdash; ${impressoEm}</div>
@@ -3036,7 +3055,8 @@ function montarHtmlExpControle(scriptAutoImprimir) {
           <div class="ficha-detalhes">${detalhe('Local', localizacao)}${detalhe('Pedido', pedido)}${detalhe('Status', status)}${detalhe('Entrada', entrada)}${detalhe('Saída', saida)}</div>
         </article>`;
         }).join('')}
-    </section>`).join('');
+    </section>`;
+  }).join('');
   const busca = document.getElementById('expCtrlBusca').value.trim();
   // Diz no papel DE ONDE veio este recorte -- a folha vai colada no pallet
   // (o Robson: "essa folha coloco no pallet"), e uma folha parcial sem dizer
@@ -3253,10 +3273,11 @@ document.getElementById('expCtrlImprimirBtn').addEventListener('click', async ()
     return;
   }
 
-  // Sai uma folha por PEDIDO, então o que conta são os pedidos distintos, não
+  // Sai uma folha por PEDIDO (ou por endereço, no CANT -- ver
+  // chaveFolhaExpControle()), então o que conta são os grupos distintos, não
   // as linhas: marcar 30 itens de um pedido só é UMA folha, e avisar "30 folhas"
   // ali seria mentira que treina a pessoa a ignorar o aviso.
-  const folhas = new Set(linhas.map(l => chavePedidoFolha(l.numero_pedido))).size;
+  const folhas = new Set(linhas.map(l => chaveFolhaExpControle(l.localizacao, l.numero_pedido))).size;
   if (folhas > LIMITE_FOLHAS_IMPRESSAO && !expImprimirConfirmar) {
     expImprimirConfirmar = true;
     document.getElementById('expCtrlImprimirBtn').textContent =
