@@ -165,6 +165,10 @@ async function carregarProgramacao() {
     // já estivesse aberta na hora da chamada, não ao simplesmente carregar
     // os dados de novo (Atualizar, ou reabrir a página).
     renderDoca();
+    // Mesmo motivo: "dias parado" muda todo dia mesmo sem ninguém clicar em
+    // nada, então recalcula sempre que os dados forem recarregados, não só
+    // ao trocar pra esta sub-aba.
+    renderParadosExp();
   }
 }
 
@@ -212,13 +216,14 @@ function trocarAbaExpAcessorios(aba) {
   // a outra é o confronto entre as duas pontas. Registrar movimentação a partir
   // de uma tela de conferência seria mexer no que se está medindo.
   document.getElementById('expRegistroContainer').style.display =
-    (aba === 'catalogo' || aba === 'conferir' || aba === 'auditoria' || aba === 'doca') ? 'none' : 'block';
+    (aba === 'catalogo' || aba === 'conferir' || aba === 'auditoria' || aba === 'doca' || aba === 'parados') ? 'none' : 'block';
   document.getElementById('expEntradaAba').style.display = aba === 'entrada' ? 'block' : 'none';
   document.getElementById('progConferencia').style.display = aba === 'saida' ? 'block' : 'none';
   document.getElementById('expCatalogoAba').style.display = aba === 'catalogo' ? 'block' : 'none';
   document.getElementById('expConferirAba').style.display = aba === 'conferir' ? 'block' : 'none';
   document.getElementById('expAuditoriaAba').style.display = aba === 'auditoria' ? 'block' : 'none';
   document.getElementById('expDocaAba').style.display = aba === 'doca' ? 'block' : 'none';
+  document.getElementById('expParadosAba').style.display = aba === 'parados' ? 'block' : 'none';
   if (aba === 'saida') renderConferencia();
   if (aba === 'conferir') {
     renderConferirExp(); // mostra rápido com o que já tem em memória (a 1ª vez, sem observação/exclusão ainda)
@@ -237,6 +242,10 @@ function trocarAbaExpAcessorios(aba) {
     // abrir esta aba (ou por outra pessoa, em outra sessão) aparece na
     // hora, sem precisar de nenhuma ação a mais.
     carregarProgramacao();
+  }
+  if (aba === 'parados') {
+    renderParadosExp(); // mostra rápido com o que já tem em memória
+    carregarProgramacao(); // mesma lógica do DOCA: busca de novo ao abrir
   }
 }
 
@@ -3867,6 +3876,175 @@ document.getElementById('docaBody').addEventListener('click', async (e) => {
     await carregarProgramacao();
     renderDoca();
   }
+});
+
+// ---- Aba Parados: pedido esquecido na expedição -------------------------
+// Robson, 14/09/2026: "quero também uma aba de pedidos que estao a mais de
+// 05 dias parados no EXP, dai monte um esquema para um aviso ao PCP, faz de
+// uma forma profissional". "Parado" é bem mais amplo que "aindaNoEndereco":
+// um item na_doca também não carregou ainda (só mudou de endereço dentro do
+// prédio), então continua contando aqui -- só 'retirado' de verdade resolve.
+const LIMITE_DIAS_PARADO_EXP = 5;
+
+// Dias INTEIROS desde a entrada, arredondado pra baixo -- "5 dias parado"
+// só depois de 5 dias completos, não no mesmo dia por causa da hora exata.
+function diasParadoExp(criadoEm) {
+  if (!criadoEm) return 0;
+  const ms = Date.now() - new Date(criadoEm).getTime();
+  return Math.floor(ms / 86400000);
+}
+
+function linhasParadasExpControle() {
+  return linhasDoSetorAtual().filter(l =>
+    l.status !== 'retirado' && diasParadoExp(l.criado_em) > LIMITE_DIAS_PARADO_EXP);
+}
+
+function renderParadosExp() {
+  const paradas = linhasParadasExpControle();
+  const corpo = document.getElementById('paradosBody');
+  const vazio = document.getElementById('paradosVazio');
+
+  vazio.style.display = paradas.length ? 'none' : 'block';
+  if (!paradas.length) { corpo.innerHTML = ''; return; }
+
+  const porPedido = new Map();
+  paradas.forEach(l => {
+    const chave = chavePedidoFolha(l.numero_pedido);
+    if (!porPedido.has(chave)) porPedido.set(chave, []);
+    porPedido.get(chave).push(l);
+  });
+
+  // Pedido mais velho primeiro -- é o que precisa de resposta há mais tempo.
+  // Dentro do grupo, o item mais velho é quem decide "há quantos dias esse
+  // PEDIDO está parado" (o pedido só está resolvido quando o último item sair).
+  const gruposOrdenados = [...porPedido.entries()]
+    .map(([chave, itens]) => [chave, itens, Math.max(...itens.map(l => diasParadoExp(l.criado_em)))])
+    .sort((a, b) => b[2] - a[2]);
+
+  corpo.innerHTML = gruposOrdenados.map(([chave, itens, diasMax]) => `
+    <div style="border:1px solid var(--erro-borda); border-radius:10px; margin-top:12px; overflow:hidden;">
+      <div class="cfg-barra" style="background:var(--erro-fundo);">
+        <span class="loc-chip">${chave === '(sem pedido)' ? 'Sem nº de pedido' : 'Pedido ' + escapeHtml(chave)}</span>
+        <span style="font-weight:700; color:var(--erro-texto);">⏰ ${diasMax} dia(s) parado</span>
+        <span style="font-size:12px; color:var(--muted); margin-left:auto;">${itens.length} item(ns)</span>
+      </div>
+      <div class="scroll-area">
+        <table>
+          <thead><tr><th>Item</th><th>Descrição</th><th>Qtd</th><th>Localização</th><th>Status</th><th>Entrada em</th><th>Dias parado</th></tr></thead>
+          <tbody>
+            ${itens.map(l => {
+              const desc = expCtrlDescMap.get(normalizaCodigoItem(l.codigo_item));
+              const dias = diasParadoExp(l.criado_em);
+              return `
+              <tr>
+                <td class="item">${escapeHtml(l.codigo_item)}</td>
+                <td>${desc && desc.descricao ? escapeHtml(desc.descricao) : '—'}</td>
+                <td class="num">${l.quantidade != null ? escapeHtml(l.quantidade) : '—'}</td>
+                <td class="loc"><span class="loc-chip">${escapeHtml(l.localizacao || '—')}</span></td>
+                <td>${rotuloStatusExp(l.status).rotulo}</td>
+                <td class="loc">${formatarDataHoraBR(l.criado_em)}</td>
+                <td class="num" style="font-weight:700; color:var(--erro-texto);">${dias}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`).join('');
+}
+
+// Mesmo padrão de mailto do Relatório pro PCP (não manda e-mail sozinho, só
+// abre pronto no Outlook) -- mas em tom formal de aviso, não de relatório
+// informativo: aqui é pra alguém agir, não só arquivar.
+function montarAvisoParadosPcp(emailPcp) {
+  const paradas = linhasParadasExpControle();
+  if (!paradas.length) {
+    return { ok: false, mensagem: `Nenhum pedido parado há mais de ${LIMITE_DIAS_PARADO_EXP} dias no momento.` };
+  }
+
+  const porPedido = new Map();
+  paradas.forEach(l => {
+    const chave = chavePedidoFolha(l.numero_pedido);
+    if (!porPedido.has(chave)) porPedido.set(chave, []);
+    porPedido.get(chave).push(l);
+  });
+  const gruposOrdenados = [...porPedido.entries()]
+    .map(([chave, itens]) => [chave, itens, Math.max(...itens.map(l => diasParadoExp(l.criado_em)))])
+    .sort((a, b) => b[2] - a[2]);
+
+  const rotuloSetor = setorExpAtual === 'benchmark' ? 'Benchmark' : 'EXP';
+  const dataFormatada = new Date().toLocaleDateString('pt-BR');
+  const assunto = `[Ação necessária] Pedidos parados há mais de ${LIMITE_DIAS_PARADO_EXP} dias na expedição — `
+    + `${rotuloSetor} ${rotuloUnidade(unidadeAtual)} — ${dataFormatada}`;
+
+  const blocosPedidos = gruposOrdenados.map(([chave, itens, diasMax]) => {
+    const cabecalho = (chave === '(sem pedido)' ? 'Sem nº de pedido' : `Pedido ${chave}`) + ` — ${diasMax} dia(s) parado`;
+    const linhasItens = itens.map(l => {
+      const desc = expCtrlDescMap.get(normalizaCodigoItem(l.codigo_item));
+      return `    - Item ${l.codigo_item} - ${desc && desc.descricao ? desc.descricao : 'sem descrição'}`
+        + `  |  Qtd ${l.quantidade != null ? l.quantidade : '—'}  |  Local ${l.localizacao || '—'}`
+        + `  |  ${rotuloStatusExp(l.status).rotulo}  |  Entrada em ${formatarDataHoraBR(l.criado_em)}`;
+    });
+    return [cabecalho, ...linhasItens].join('\n');
+  });
+
+  const corpo = [
+    'Prezados,',
+    '',
+    `Identificamos ${gruposOrdenados.length} pedido(s) parado(s) na expedição do Controle EXP Acessórios `
+      + `(${rotuloSetor} — ${rotuloUnidade(unidadeAtual)}) há mais de ${LIMITE_DIAS_PARADO_EXP} dias, `
+      + 'sem confirmação de carregamento. Segue o detalhamento para verificação:',
+    '',
+    ...blocosPedidos.flatMap(b => [b, '']),
+    'Solicitamos a gentileza de verificar a situação de faturamento/carregamento desses pedidos e retornar '
+      + 'com um posicionamento, para que possamos regularizar o quanto antes.',
+    '',
+    'Atenciosamente,',
+    `${nomeUsuarioAtual || emailUsuarioAtual || '—'} — ${rotuloUnidade(unidadeAtual)}`,
+    '--',
+    'Aviso gerado pelo Portal de Estoque (Controle EXP Acessórios).'
+  ].join('\n');
+
+  const href = 'mailto:' + encodeURIComponent(emailPcp)
+             + '?subject=' + encodeURIComponent(assunto)
+             + '&body=' + encodeURIComponent(corpo);
+
+  const cortado = href.length > 1900;
+  return {
+    ok: true,
+    href,
+    cortado,
+    quantidade: gruposOrdenados.length,
+    mensagem: cortado
+      ? `${gruposOrdenados.length} pedido(s) parado(s). ATENÇÃO: são muitos itens e o e-mail pode sair cortado `
+        + '— confira antes de enviar.'
+      : `${gruposOrdenados.length} pedido(s) parado(s) encontrado(s). Abrindo o e-mail — confira e clique em enviar.`
+  };
+}
+
+document.getElementById('avisoParadosGerarBtn').addEventListener('click', async () => {
+  const msg = document.getElementById('avisoParadosMsg');
+  const btn = document.getElementById('avisoParadosGerarBtn');
+
+  btn.disabled = true;
+  msg.textContent = 'Buscando e-mail do PCP...';
+  msg.className = 'status-msg';
+
+  const { data: emailPcp, error: erroConfig } = await sb.rpc('email_pcp_da_unidade', { uni: unidadeAtual });
+
+  btn.disabled = false;
+
+  if (erroConfig || !emailPcp) {
+    msg.textContent = 'Esta unidade não tem e-mail do PCP cadastrado. Peça pro admin cadastrar em Configurações.';
+    msg.className = 'status-msg status-err';
+    return;
+  }
+
+  const resultado = montarAvisoParadosPcp(emailPcp);
+  msg.textContent = resultado.mensagem;
+  msg.className = resultado.ok ? (resultado.cortado ? 'status-msg status-err' : 'status-msg status-ok') : 'status-msg status-err';
+  if (!resultado.ok) return;
+
+  window.location.href = resultado.href;
 });
 
 // ---- Aba Auditoria: caminhada física pela expedição --------------------

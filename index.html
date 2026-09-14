@@ -627,6 +627,11 @@
                sair do endereço e carregar de verdade (ver sql/fase36-doca.sql
                e aindaNoEndereco() em js/programacao.js). -->
           <button class="btn" data-exp-aba="doca" title="Itens que já saíram do endereço e estão esperando o caminhão na doca">📦 DOCA</button>
+          <!-- Robson, 14/09/2026: "quero também uma aba de pedidos que estao
+               a mais de 05 dias parados no EXP" -- pedido que entrou na
+               expedição (endereço ou doca) e não carregou ainda depois de
+               vários dias, provável esquecido/parado no faturamento. -->
+          <button class="btn" data-exp-aba="parados" title="Pedidos ainda não carregados há mais dias do que o esperado, parados na expedição ou na doca">⏰ Parados</button>
           <!-- "Conferir" e "Saída / Conferência" são coisas diferentes, e os nomes se
                parecem: a Saída registra a retirada item por item; esta confronta o
                SISTEMA (Catálogo EXP) com o FÍSICO (o que está registrado na
@@ -909,6 +914,28 @@
           <div class="empty-msg" id="docaHistVazio" style="display:none;">
             Nenhuma retirada registrada ainda.
           </div>
+        </div>
+      </div>
+
+      <!-- ---- Parados: pedido que entrou na expedição (endereço ou doca) e
+           não carregou ainda depois de vários dias -- Robson, 14/09/2026:
+           "quero também uma aba de pedidos que estao a mais de 05 dias
+           parados no EXP, dai monte um esquema para um aviso ao PCP". Só
+           leitura + o aviso por e-mail -- ver linhasParadasExpControle(),
+           renderParadosExp() e montarAvisoParadosPcp() em js/programacao.js. -->
+      <div id="expParadosAba" class="prog-aba" style="display:none;">
+        <div class="modal-text" style="padding:0 16px 12px;">
+          Pedidos com item ainda não carregado (na expedição ou já na doca) há mais de
+          <b id="paradosLimiteDias">5</b> dias desde a entrada. Provável esquecido no faturamento --
+          confirme com o PCP antes de cobrar de novo.
+        </div>
+        <div class="cfg-barra">
+          <button class="btn btn-primary" id="avisoParadosGerarBtn">✉️ Gerar aviso pro PCP</button>
+        </div>
+        <div class="status-msg" id="avisoParadosMsg" style="padding:0 16px 8px;"></div>
+        <div id="paradosBody" style="padding:0 16px 16px;"></div>
+        <div class="empty-msg" id="paradosVazio" style="display:none;">
+          Nenhum pedido parado há mais de 5 dias. 🎉
         </div>
       </div>
 

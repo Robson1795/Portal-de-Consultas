@@ -3006,6 +3006,50 @@ grupo; busca por pedido continua funcionando; item retirado na mesma
 localização continua fora, mesmo buscando por ela. Zero erro de
 console.
 
+## Nova aba "⏰ Parados" + aviso formal pro PCP (14/09/2026)
+
+O Robson: *"quero também uma aba de pedidos que estao a mais de 05 dias
+parados no EXP, dai monte um esquema para um aviso ao PCP, faz de uma
+forma profissional"*, e depois: *"do lado de cada pedido pode colocar a
+quantidade de dias que esta no EXP"*.
+
+Nova sub-aba dentro de Controle EXP Acessórios (só leitura, sem formulário
+de registro — mesmo grupo de Catálogo/Conferir/Auditoria/DOCA). "Parado"
+é mais amplo que `aindaNoEndereco()`: um item já na doca (`na_doca`)
+também não carregou de verdade ainda, só mudou de endereço dentro do
+prédio -- então continua contando como parado. Só `status === 'retirado'`
+resolve. Limite fixo em `LIMITE_DIAS_PARADO_EXP = 5` (constante, fácil de
+ajustar depois se o Robson pedir outro número); "mais de 5 dias" é
+`diasParadoExp(criado_em) > 5`, não `>= 5` -- pedido com exatamente 5 dias
+ainda não entra na lista.
+
+Agrupado por Nº Pedido (mesmo padrão da folha impressa e da DOCA), com o
+pedido mais velho primeiro -- é o que precisa de resposta há mais tempo.
+Um pedido pode ter itens de idades diferentes (um each entrou há 8 dias,
+outro há 3); só o item realmente parado (>5 dias) entra na conta, e o
+"dias parado" mostrado ao lado do pedido é o MÁXIMO entre eles -- o
+pedido só está resolvido quando o item mais antigo sair, não quando a
+média cair.
+
+`montarAvisoParadosPcp()`: mesmo padrão de mailto de todo o portal (não
+manda e-mail sozinho, só abre pronto no Outlook pra pessoa conferir e
+enviar) e reaproveita a mesma `email_pcp_da_unidade()` (config_unidade,
+fase8) do Relatório de saídas -- não é um e-mail fixo no código. Tom
+deliberadamente mais formal que o relatório informativo de saídas: aqui é
+"Prezados, ... Solicitamos a gentileza de verificar ... e retornar com um
+posicionamento", assunto com prefixo "[Ação necessária]" -- é pra alguém
+agir, não só arquivar. Corpo lista cada pedido parado com os dias, e
+dentro dele cada item com código, descrição, quantidade, localização,
+status (na expedição/na doca) e data de entrada.
+
+Testado: item com 5 dias exatos fica de fora, com 6 entra; pedido com um
+item de 8 dias e outro de 3 mostra só o de 8 dias, com "8 dia(s) parado"
+no cabeçalho do grupo; grupos ordenados do mais parado pro menos parado;
+item sem nº de pedido cai no grupo "Sem nº de pedido"; e-mail sem PCP
+cadastrado avisa em vez de tentar abrir; lista vazia avisa "nenhum pedido
+parado" em vez de abrir e-mail vazio; assinatura usa o nome de quem está
+logado. Zero erro de console.
+
 ## Histórico de retiradas + Relatório pro PCP também na DOCA (12/09/2026)
 
 O Robson: *"preciso que coloque a aba de relatorio de saida nessa aba doca
