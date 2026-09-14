@@ -3016,6 +3016,30 @@ grupo; busca por pedido continua funcionando; item retirado na mesma
 localização continua fora, mesmo buscando por ela. Zero erro de
 console.
 
+## Botão Imprimir na prévia do pedido (14/09/2026)
+
+O Robson, na sequência: *"pode colocar o botao de imprimir também"*.
+
+`montarHtmlTabelaGenerica()` ganhou um parâmetro `imprimir` (opcional,
+`false` por padrão -- os outros três usos dela, Entrada/Auditoria/
+Carregados-hoje, continuam exportando sem nenhum script a mais): quando
+`true`, anexa o mesmo `<script>window.onload = () => window.print()`
+que já existe em `montarHtmlExpControle()`.
+
+O botão **🖨️ Imprimir**, ao lado do "Gerar relatório HTML", segue o MESMO
+padrão do Imprimir da aba Entrada: abre a aba em branco **primeiro** e só
+depois escreve o conteúdo (`window.open('', '_blank')` → `aba.document.write(...)`)
+-- escrever antes de abrir arrisca o navegador bloquear como pop-up.
+`montarHtmlPedidosDigitados()` extraído pra função pura, reaproveitada
+pelos dois botões (baixar e imprimir), que só diferem em "salva num
+arquivo" x "abre numa aba que imprime sozinha".
+
+Conferido no navegador: Imprimir grava o script de auto-print e o
+conteúdo certo; pop-up bloqueado avisa em vez de travar; sem pedido
+informado avisa nos dois botões; o download do "Gerar relatório HTML"
+continua SEM o script de impressão (só a aba de Imprimir tem). Zero erro
+de console.
+
 ## Prévia + relatório HTML do pedido, no passo 2 do Painel de Docas (14/09/2026)
 
 O Robson, apontando o campo de pedidos do passo 2 (Expedição): *"quando o

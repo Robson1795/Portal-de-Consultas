@@ -712,23 +712,53 @@ document.getElementById('docaPedidos').addEventListener('input', renderPedidosPr
 // do portal, reaproveitando montarHtmlTabelaGenerica() (Entrada,
 // Auditoria, "Carregados hoje"). É o papel que sai da mão do encarregado
 // pra mão de quem separa o material, não uma tela só de olhar.
-document.getElementById('docaPedidosExportarBtn').addEventListener('click', () => {
+// Monta o HTML da prévia -- função pura, reaproveitada pelo download
+// (Gerar relatório) e pelo Imprimir, que só diferem em "salva num arquivo"
+// x "abre numa aba com window.print() disparando sozinho".
+function montarHtmlPedidosDigitados() {
   const pedidos = pedidosDigitados();
   const itens = itensDosPedidosDigitados();
-  if (!itens.length) { alert('Informe o(s) pedido(s) antes de gerar o relatório.'); return; }
+  if (!itens.length) return null;
 
   const linhas = itens.map(l => {
     const desc = expCtrlDescMap.get(normalizaCodigoItem(l.codigo_item));
     return [l.codigo_item, desc && desc.descricao ? desc.descricao : '',
              l.quantidade != null ? l.quantidade : '', l.localizacao || '', rotuloStatusExp(l.status).rotulo];
   });
+  return { pedidos, linhas };
+}
+
+document.getElementById('docaPedidosExportarBtn').addEventListener('click', () => {
+  const dados = montarHtmlPedidosDigitados();
+  if (!dados) { alert('Informe o(s) pedido(s) antes de gerar o relatório.'); return; }
+
   const html = montarHtmlTabelaGenerica({
-    titulo: `Separar material — Pedido(s) ${pedidos.join(', ')} — ${rotuloUnidade(unidadeAtual)}`,
+    titulo: `Separar material — Pedido(s) ${dados.pedidos.join(', ')} — ${rotuloUnidade(unidadeAtual)}`,
     cabecalho: ['Item', 'Descrição', 'Qtd', 'Localização', 'Status'],
-    linhas
+    linhas: dados.linhas
   });
-  const nomeBase = `pedidos-${pedidos.join('-')}-exp-controle-${new Date().toISOString().slice(0, 10)}`;
+  const nomeBase = `pedidos-${dados.pedidos.join('-')}-exp-controle-${new Date().toISOString().slice(0, 10)}`;
   baixarArquivo(new Blob([html], { type: 'text/html;charset=utf-8;' }), nomeBase + '.html');
+});
+
+// Robson, 14/09/2026: "pode colocar o botao de imprimir também" -- mesmo
+// padrão do resto do portal (Imprimir da Entrada): abre uma aba em branco
+// primeiro e SÓ DEPOIS escreve o conteúdo, porque abrir já com HTML pronto
+// pode disparar o bloqueador de pop-up do navegador antes da aba existir.
+document.getElementById('docaPedidosImprimirBtn').addEventListener('click', () => {
+  const dados = montarHtmlPedidosDigitados();
+  if (!dados) { alert('Informe o(s) pedido(s) antes de imprimir.'); return; }
+
+  const aba = window.open('', '_blank');
+  if (!aba) { alert('O navegador bloqueou a nova aba. Libere pop-ups pra este site e tente de novo.'); return; }
+  const html = montarHtmlTabelaGenerica({
+    titulo: `Separar material — Pedido(s) ${dados.pedidos.join(', ')} — ${rotuloUnidade(unidadeAtual)}`,
+    cabecalho: ['Item', 'Descrição', 'Qtd', 'Localização', 'Status'],
+    linhas: dados.linhas,
+    imprimir: true
+  });
+  aba.document.write(html);
+  aba.document.close();
 });
 
 document.getElementById('docaEncostarBtn').addEventListener('click', async () => {

@@ -3423,7 +3423,7 @@ ${scriptAutoImprimir ? '<script>window.onload = () => window.print();<' + '/scri
 // e `subtitulo` já chegam prontos pra ir direto no HTML (o subtítulo em
 // especial já vem com o que precisar de escapeHtml feito por quem chamou,
 // porque mistura texto fixo com `—` e afins).
-function montarHtmlTabelaGenerica({ titulo, cabecalho, linhas, subtitulo }) {
+function montarHtmlTabelaGenerica({ titulo, cabecalho, linhas, subtitulo, imprimir }) {
   const impressoEm = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
   const linhasHtml = linhas.map(linha => `<tr>${
     linha.map(v => `<td>${escapeHtml(v != null && v !== '' ? v : '—')}</td>`).join('')
@@ -3447,6 +3447,7 @@ function montarHtmlTabelaGenerica({ titulo, cabecalho, linhas, subtitulo }) {
   <thead><tr>${cabecalho.map(c => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead>
   <tbody>${linhasHtml}</tbody>
 </table>
+${imprimir ? '<script>window.onload = () => window.print();<' + '/script>' : ''}
 </body></html>`;
 }
 
