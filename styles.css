@@ -1244,3 +1244,38 @@ td.col-acoes { white-space: nowrap; text-align: center; }
   text-decoration: none; white-space: nowrap; width: fit-content;
 }
 .doca-telefone:hover { text-decoration: underline; }
+
+
+/* ============ Painel do Dia (14/09/2026) ============ */
+
+.painel-grade {
+  display: grid; gap: 12px; margin-bottom: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+}
+
+.painel-card {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  padding: 14px 16px; display: flex; flex-direction: column; gap: 6px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+.painel-card-topo { display: flex; align-items: center; gap: 10px; }
+.painel-icone { font-size: 22px; line-height: 1; }
+/* O número é o que a pessoa lê de relance -- é ele que decide se ela para
+   nesta tela ou seguir pro trabalho dela. */
+.painel-valor { font-size: 30px; font-weight: 800; color: var(--muted); line-height: 1; margin-left: auto; }
+.painel-titulo { font-size: 13.5px; font-weight: 700; color: var(--ink); }
+.painel-nota { font-size: 11.5px; color: var(--muted); line-height: 1.45; flex: 1; }
+.painel-card .painel-acao { align-self: flex-start; margin-top: 4px; }
+
+/* Card com problema acende; card zerado fica apagado mas continua na tela
+   (ver atualizarResumoPainel em js/painel.js). */
+.painel-card-alerta { border-color: var(--aviso-borda); background: var(--aviso-fundo); }
+.painel-card-alerta .painel-valor { color: var(--aviso-texto); }
+.painel-card-alerta .painel-titulo { color: var(--aviso-texto); }
+.painel-card-carregando .painel-valor { opacity: 0.4; }
+
+.painel-ok { color: var(--ok-texto); font-weight: 700; }
+
+@media (max-width: 560px) {
+  .painel-grade { grid-template-columns: 1fr; }
+}

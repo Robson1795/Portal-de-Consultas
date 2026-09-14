@@ -299,6 +299,41 @@
   </div>
   <!-- fim de #estoqueContent -->
 
+  <!-- ================= PAINEL DO DIA (14/09/2026) =================
+       Primeira tela depois do login. Quase todo pedido registrado neste
+       projeto é a mesma frase dita de outro jeito -- "o PCP esquece daquele
+       material", "esqueço de tirar da localização", "a fila fica parada sem
+       ninguém saber". O portal já sabia todas essas coisas; só esperava
+       alguém abrir a tela certa e reparar.
+
+       ⚠️ Nenhum cálculo novo mora aqui: cada aviso é uma pergunta que alguma
+       tela já sabia fazer (ver AVISOS_PAINEL em js/painel.js). -->
+  <div id="painelContent" style="display:none;">
+    <div class="panel" style="padding:18px 16px;">
+      <div style="display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;">
+        <h2 id="painelSaudacao" style="margin:0; font-size:20px; color:var(--ink);">Bom dia</h2>
+        <span id="painelUnidade" style="color:var(--muted); font-size:13px; font-weight:600;"></span>
+        <button class="btn" id="painelRecarregar" style="margin-left:auto;">🔄 Recarregar</button>
+      </div>
+      <div id="painelResumo" style="margin-top:8px; font-size:14px; color:var(--ink);"></div>
+    </div>
+
+    <div class="painel-grade" id="painelGrade"></div>
+
+    <div class="cfg-nota">
+      <b>O painel não guarda nada.</b> Cada número é perguntado ao banco na hora em que esta tela
+      abre, e o clique leva pra tela onde a coisa se resolve — avisar sem dar o caminho só passa
+      pra frente o trabalho de procurar.
+      <br><br>
+      <b>Card zerado fica apagado, mas não some.</b> "Não tem nada atrasado" é exatamente a
+      informação que você veio buscar aqui; um card que desaparece deixaria a dúvida de se o
+      portal chegou a conferir. Some só o que não é do seu setor.
+      <br><br>
+      Os avisos seguem a unidade selecionada no topo — menos a fila de aprovação de cadastros,
+      que é da empresa inteira.
+    </div>
+  </div>
+
   <!-- ================= BOBINAS DE AÇO ================= -->
   <div id="bobinasContent" style="display:none;">
     <!-- ============ ABAS DO ESTOQUE DE AÇO (14/09/2026) ============
@@ -1929,5 +1964,11 @@
 <!-- Depois dos outros: usa escapeHtml, rotuloUnidade e os globais de sessão. -->
 <script src="js/sugestao.js"></script>
 <script src="js/notificacoes.js"></script>
+<!-- ⚠️ O Painel do Dia vai por ÚLTIMO: ele lê constantes de quase todos os
+     outros arquivos (RESERVA_DIAS_CRITICA, PERFIS, DEPOSITOS...). Carregado
+     antes deles, o `const` do topo dele avalia cedo demais e o arquivo inteiro
+     morre na carga -- aconteceu em 14/09/2026. As notas agora são avaliadas
+     tarde (js/painel.js), então isto é cinto e suspensório, não a única trava. -->
+<script src="js/painel.js"></script>
 </body>
 </html>

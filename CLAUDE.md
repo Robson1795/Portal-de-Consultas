@@ -40,6 +40,7 @@ servidos são o próprio código-fonte. Divididos na Fase 2a (03/09/2026):
 | `js/analise.js` | Análise de Compras: demanda dos pedidos x saldo do almoxarifado (seção 14) |
 | `js/notificacoes.js` | Popup de canto: avisa o admin de cadastro pendente, em qualquer tela (seção 21) |
 | `js/reservas.js` | Reserva de bobinas de aço pelo PCP: abas Reservas e Histórico, etiqueta (seção 23) |
+| `js/painel.js` | Painel do Dia: o que está fora do lugar agora, por perfil (seção 25) |
 
 São **scripts clássicos, não módulos**, carregados nessa ordem no fim do `body`. O `let`/`const` de
 nível superior vai para o escopo lexical global, compartilhado entre os arquivos — é por isso que o
@@ -4086,3 +4087,83 @@ nunca-entrou → sumido → usando, os quatro cards batem, e a diferença de cai
 **não** gera um falso "nunca entrou". No backup: as 38 tabelas no arquivo, a que
 falhou anotada com o erro, a vazia no resumo, e os dois avisos na tela.
 **20 de 20 checagens.** Zero erro de console.
+
+## 25. Painel do Dia (14/09/2026)
+
+A primeira tela depois do login deixou de ser a Consulta de Itens.
+
+**Por que isto existe.** Relendo os ~40 pedidos registrados neste arquivo, quase
+todos são a mesma frase dita de outro jeito: *"o PCP esquece daquele material"*,
+*"esqueço de tirar da localização"*, *"a fila fica parada sem ninguém saber"*,
+*"não deixar faltar material"*, *"não preciso ficar tirando relatório várias
+vezes"*. **O portal já sabia todas essas coisas** — ele só esperava a pessoa
+abrir a tela certa e reparar. O painel inverte a direção.
+
+### ⚠️ Ele não calcula nada novo
+
+Cada aviso é uma pergunta que alguma tela já sabia fazer; o painel faz todas de
+uma vez. **A régua de cada um continua na origem** — `RESERVA_DIAS_CRITICA` em
+`js/reservas.js`, `estoque_minimo` no banco, a view `vw_pedidos_prioridade` (que
+calcula atrasado/urgente **no Postgres, no fuso de São Paulo** — repetir essa
+conta em JS daria dois relógios). O "estoque baixo" reusa a própria
+`itensAbaixoDoEstoqueSeguro()` da Consulta de Itens: dois jeitos de contar a
+mesma coisa dariam dois números, e o painel perderia a confiança na primeira vez
+que discordassem.
+
+| Aviso | Quem vê | Como conta |
+|---|---|---|
+| ⏳ Cadastros aguardando aprovação | admin | `usuarios_permitidos`, `aprovado = false` — da empresa, não da unidade |
+| 🔒 Aços reservados e esquecidos | estoque_aco, admin | `reservas_aco` ativas mais velhas que `RESERVA_DIAS_CRITICA` |
+| 📉 Itens abaixo do estoque seguro | estoque_alm, admin | soma do item em todos os endereços × mínimo |
+| 📍 Itens sem endereço ou em REC | estoque_alm, admin | mesma regra do botão "Sem local / REC" |
+| 🚚 Pedidos atrasados ou urgentes | estoque_alm, admin | `vw_pedidos_prioridade` |
+| 📦 Itens parados na doca | estoque_alm, admin | `na_doca` há mais de `PAINEL_DOCA_HORAS` (24h) |
+| 🗓️ Planilha do almoxarifado velha | estoque_alm, admin | dias desde o último `atualizado_em` |
+
+### Decisões que fazem o painel ser barato e honesto
+
+- **`head: true` + `count: 'exact'` em seis dos sete avisos**: o banco devolve só
+  o número, **nenhuma linha trafega**. O painel roda a cada login, então ser
+  barato é requisito, não elegância. Mesmo desenho de `iniciarAvisoCadastro()`.
+- **O sétimo (estoque seguro) não pode ser count** — "abaixo do seguro" é do
+  item somado nos endereços. Traz três colunas, só das linhas que **têm mínimo
+  cadastrado**, e pagina.
+- ⚠️ **Um aviso que falha não derruba os outros.** Cada um é uma pergunta
+  independente: uma tabela sem permissão, ou um script de fase que ainda não
+  rodou, mostra `—` naquele card com o motivo, e os outros seis continuam. Mesmo
+  cuidado da coluna Reserva na lista de aços.
+- ⚠️ **Card zerado fica apagado, mas não some.** "Não tem nada atrasado" é
+  exatamente a informação que a pessoa veio buscar; um card que desaparece
+  deixaria a dúvida de se o portal chegou a conferir. Some só o que não é do
+  perfil dela.
+- **O clique é parte do aviso**, e leva já filtrado (o "sem endereço" liga
+  `filtros.semLocal` antes de abrir a Consulta). Avisar sem dar o caminho só
+  transfere o trabalho de procurar.
+- **A moldura é desenhada antes das respostas chegarem**: esperar os sete para
+  mostrar qualquer coisa deixaria a primeira tela do portal em branco por um
+  segundo — e tela em branco no login parece portal quebrado.
+- **Trocar a unidade recarrega o painel** (`trocarUnidade()`), senão ficariam
+  números de outra fábrica na tela.
+
+### ⚠️ A armadilha de ordem de carga que isto pegou
+
+A primeira versão montava a nota do card de aço com
+`` `há mais de ${RESERVA_DIAS_CRITICA} dias` `` **dentro do `const AVISOS_PAINEL`**,
+no topo do arquivo. Aquela constante mora em `js/reservas.js`, carregado depois:
+o texto era avaliado **na carga**, antes de o outro arquivo existir, e o
+`ReferenceError` **derrubava a avaliação do arquivo inteiro** — nem os outros
+seis avisos nasciam, e o portal abria com o painel vazio.
+
+O projeto já registrava que *função* definida num arquivo posterior pode ser
+chamada por um anterior (seção 13); **o que não vale é ler o `const` dele no topo
+de outro arquivo**. Corrigido nos dois eixos, de propósito: a nota virou
+**função** (avaliada só na hora de desenhar) **e** o `js/painel.js` passou a ser
+o **último** script do `index.html`, que é o lugar dele de qualquer jeito — ele
+lê constantes de quase todos os outros.
+
+Conferido no navegador com `sb.from` mockado: admin vê os 7 avisos com os
+números certos (inclusive o estoque baixo somando os dois endereços do mesmo
+item, e a planilha em dias e não em itens); consultor não vê nenhum e
+`estoque_aco` vê só o do aço; com um aviso quebrado os 7 cards continuam e só o
+quebrado mostra `—` com o motivo; os cards de contagem realmente pedem
+`head: true`; e o clique leva à tela certa já filtrada. **18 de 18 checagens.**

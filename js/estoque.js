@@ -2578,6 +2578,9 @@ async function trocarUnidade(cod) {
   // Trocar a unidade tem de recarregar a tela ABERTA, nao so o estoque geral.
   // Sem isto, quem estava no Estoque de Aco trocava de unidade e continuava
   // vendo as bobinas da anterior (bug de 08/09/2026).
+  // O painel é todo recortado pela unidade (menos a fila de aprovação), então
+  // trocar no topo sem recarregar deixaria números de outra fábrica na tela.
+  if (paginaAtual === 'painel') await carregarPainel();
   if (paginaAtual === 'bobinas') await loadBobinas();
   if (paginaAtual === 'analise') await carregarAnalise();
   if (paginaAtual === 'requisicao') await carregarRequisicao();

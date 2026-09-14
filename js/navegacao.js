@@ -19,13 +19,17 @@
 // ela move separacao, enderecamento e saida de material de verdade, diferente
 // da Requisicao (que e so pedir). Quem faz esse fluxo e o ALM da unidade.
 const PERFIS = {
-  consultor:   { rotulo: 'Consultor',   paginas: ['estoque'] },
-  estoque_alm: { rotulo: 'Estoque ALM', paginas: ['estoque', 'sesmt', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'analise'] },
-  estoque_aco: { rotulo: 'Estoque Aço', paginas: ['bobinas', 'requisicao'] },
-  admin:       { rotulo: 'Admin',       paginas: ['estoque', 'sesmt', 'bobinas', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'analise', 'config'] }
+  consultor:   { rotulo: 'Consultor',   paginas: ['painel', 'estoque'] },
+  estoque_alm: { rotulo: 'Estoque ALM', paginas: ['painel', 'estoque', 'sesmt', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'analise'] },
+  estoque_aco: { rotulo: 'Estoque Aço', paginas: ['painel', 'bobinas', 'requisicao'] },
+  admin:       { rotulo: 'Admin',       paginas: ['painel', 'estoque', 'sesmt', 'bobinas', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'analise', 'config'] }
 };
 
 const PAGINAS = {
+  // ⚠️ PRIMEIRO da lista de propósito: `montarMenu()` abre `visiveis[0]`, então
+  // é esta a tela que recebe quem acabou de entrar. O portal deixou de esperar
+  // a pessoa procurar o problema na tela certa (ver js/painel.js).
+  painel: { rotulo: 'Painel do Dia', icone: '🏠', elemento: 'painelContent' },
   estoque: { rotulo: 'Consulta de Itens', icone: '🔎', elemento: 'estoqueContent' },
   // Depósito SESMT usa a MESMA tela de Consulta de Itens (mesmo formato de
   // dado: item, descrição, UM, localização, quantidade), só que recortada
@@ -150,6 +154,7 @@ function mostrarPagina(id) {
 
   // Cada pagina carrega os proprios dados ao ser aberta.
   if (PAGINA_PARA_DEPOSITO[id]) { pararTempoRealBobinas(); loadData(); }
+  if (id === 'painel') { carregarPainel(); }
   if (id === 'bobinas') { abrirTelaBobinas(); }
   if (id === 'requisicao') { carregarRequisicao(); }
   if (id === 'programacao') { carregarProgramacao(); }
