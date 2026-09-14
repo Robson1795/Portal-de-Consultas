@@ -3012,6 +3012,56 @@ grupo; busca por pedido continua funcionando; item retirado na mesma
 localização continua fora, mesmo buscando por ela. Zero erro de
 console.
 
+## Excluir carregamento no Painel de Docas (14/09/2026)
+
+O Robson, com um registro de teste travando a Doca 1 na tela dele:
+*"coloque um botao de excluir caso necessario"*.
+
+O buraco era real: um veículo que já estava **na doca** não tinha como
+sair da tela a não ser sendo FINALIZADO — e aí um registro de teste
+entraria pra sempre na conta de tempo médio de carregamento, estragando
+justamente o indicador que o módulo existe pra medir. Cancelar só
+existia na fila do pátio.
+
+**Excluir e Cancelar são coisas diferentes, e os dois ficam:**
+
+- **Cancelar** (🚫, na fila) — aconteceu de verdade: o veículo veio e foi
+  embora sem carregar. Vira status `cancelado`, fica no histórico, conta
+  como fato.
+- **Excluir** (🗑, agora nos quatro lugares: fila, doca encostada, doca
+  carregando e "Carregados hoje") — o registro **nunca deveria ter
+  existido**: teste, placa digitada errada, chegada em duplicidade.
+  Apaga de vez, justamente pra não virar indicador.
+
+O `confirm` explica essa diferença em vez de só perguntar "tem certeza?"
+— quem está com pressa no pátio não adivinha qual dos dois botões é o
+certo, e o estrago de escolher errado é silencioso (some do relatório, ou
+sujeita o relatório pra sempre).
+
+Detalhes de implementação que valem lembrar:
+
+- **Ordem: apaga primeiro, desvincula os itens depois.** Se desvinculasse
+  antes e o delete falhasse, o carregamento ficaria vivo e sem progresso
+  — pior que um vínculo órfão, que não quebra nada (a coluna
+  `doca_carregamento_id` não tem FK de propósito, ver fase39).
+- **Os itens não são apagados.** A baixa deles aconteceu de verdade
+  (saíram do endereço); só perdem o vínculo com aquele caminhão.
+- Pedidos e eventos do carregamento somem junto, por `on delete cascade`.
+- Nenhum SQL novo: a política `for all` da fase39 já cobre DELETE.
+
+**Colisão de classe corrigida no caminho:** o `<select>` de escolher a
+doca usava `.doca-destino`, mesmo nome que o texto do destino do embarque
+(📍 Joinville) passou a usar na fase40 — o select virou
+`.doca-select-destino`. Duas coisas diferentes com o mesmo nome pegariam
+o elemento errado no `querySelector` do "Chamar" e ainda herdariam o
+estilo errado.
+
+Conferido no navegador: 🗑 aparece nos quatro lugares; excluir manda
+`delete` no carregamento e depois limpa `doca_carregamento_id` dos itens;
+cancelar continua sendo `update status='cancelado'`, não delete; recusar
+o aviso não grava nada; o "Chamar" continua lendo a doca certa do select
+depois da renomeação. Zero erro de console.
+
 ## Destino e telefone do motorista no Painel de Docas (14/09/2026)
 
 Com o painel já rodando em produção, o Robson: *"preciso que coloque

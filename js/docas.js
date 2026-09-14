@@ -214,6 +214,8 @@ function renderQuadroDocas() {
         </div>
         <div class="doca-acoes">
           <button class="btn btn-primary doca-finalizar" data-id="${escapeHtml(c.id)}">✓ Finalizar carregamento</button>
+          <button class="acao-btn doca-excluir" data-id="${escapeHtml(c.id)}" data-placa="${escapeHtml(c.placa)}"
+                  title="Excluir o registro — criado por engano, não entra em relatório">🗑</button>
         </div>
       ` : `
         <div class="doca-livre">
@@ -222,6 +224,8 @@ function renderQuadroDocas() {
         <div class="doca-acoes">
           <button class="btn btn-primary doca-iniciar" data-id="${escapeHtml(c.id)}">▶ Iniciar carregamento</button>
           <button class="acao-btn doca-voltar-fila" data-id="${escapeHtml(c.id)}" title="Tirar da doca e devolver pra fila do pátio">↺</button>
+          <button class="acao-btn doca-excluir" data-id="${escapeHtml(c.id)}" data-placa="${escapeHtml(c.placa)}"
+                  title="Excluir o registro — criado por engano, não entra em relatório">🗑</button>
         </div>
       `}
     </div>`;
@@ -255,11 +259,14 @@ function renderFilaDocas() {
       <span class="doca-sub">esperando ${espera}</span>
       ${opcoesDocas
         ? `<span class="doca-fila-acao">
-             <select class="doca-destino" data-id="${escapeHtml(c.id)}">${opcoesDocas}</select>
+             <select class="doca-select-destino" data-id="${escapeHtml(c.id)}">${opcoesDocas}</select>
              <button class="btn btn-primary doca-chamar" data-id="${escapeHtml(c.id)}">Chamar</button>
            </span>`
         : `<span class="doca-sub" style="color:var(--aviso-texto);">todas as docas ocupadas</span>`}
-      <button class="acao-btn doca-cancelar" data-id="${escapeHtml(c.id)}" title="Cancelar — o veículo foi embora sem carregar">🗑</button>
+      <button class="acao-btn doca-cancelar" data-id="${escapeHtml(c.id)}"
+              title="Cancelar — o veículo existiu e foi embora sem carregar (fica no histórico)">🚫</button>
+      <button class="acao-btn doca-excluir" data-id="${escapeHtml(c.id)}" data-placa="${escapeHtml(c.placa)}"
+              title="Excluir o registro — criado por engano, não entra em relatório">🗑</button>
     </div>`;
   }).join('');
 }
@@ -294,6 +301,8 @@ function renderCarregadosHoje() {
       <td class="col-acoes">
         <button class="acao-btn doca-reabrir" data-id="${escapeHtml(c.id)}"
                 title="Reabrir — fechou por engano, volta a carregar">↺</button>
+        <button class="acao-btn doca-excluir" data-id="${escapeHtml(c.id)}" data-placa="${escapeHtml(c.placa)}"
+                title="Excluir o registro — criado por engano, não entra em relatório">🗑</button>
       </td>
     </tr>`).join('');
 }
@@ -343,6 +352,49 @@ function pararTempoRealDocas() {
 }
 
 // ---- Ações -----------------------------------------------------------------
+
+// Excluir de vez -- Robson, 14/09/2026: "coloque um botao de excluir caso
+// necessario", com um registro de teste travando a Doca 1 na tela dele.
+//
+// É DIFERENTE de "Cancelar", e os dois continuam existindo:
+//   Cancelar  = aconteceu de verdade (o veículo foi embora sem carregar).
+//               Vira status, fica no histórico, conta como fato.
+//   Excluir   = o registro nunca deveria ter existido (teste, placa
+//               digitada errada, chegada registrada em duplicidade).
+//               Apagar é justamente pra isso não virar indicador.
+//
+// Sem esta ação, um registro errado só saía da tela sendo FINALIZADO --
+// e aí entrava pra sempre na conta de tempo médio de carregamento,
+// estragando o indicador que o módulo existe pra medir.
+//
+// Os pedidos e os eventos do carregamento somem junto (on delete cascade,
+// ver fase39). Os ITENS não: a baixa deles aconteceu de verdade (saíram do
+// endereço), então continuam baixados -- só perdem o vínculo com este
+// caminhão. Por isso a ordem é apagar primeiro e desvincular depois: se
+// desvinculasse antes e o delete falhasse, o carregamento ficaria vivo e
+// sem progresso, que é pior que um vínculo órfão (a coluna não tem FK
+// justamente pra isso não quebrar nada).
+async function excluirCarregamento(id, placa) {
+  const confirmado = confirm(
+    `Excluir o registro do veículo ${placa}?\n\n`
+    + 'Some de vez: não entra em relatório nem em tempo médio. Use quando o registro '
+    + 'foi criado por engano (teste, placa errada, chegada duplicada).\n\n'
+    + 'Se o veículo existiu de verdade e foi embora sem carregar, cancele em vez de excluir.\n\n'
+    + 'Esta ação não pode ser desfeita.');
+  if (!confirmado) return false;
+
+  const { error } = await sb.from('doca_carregamentos').delete().eq('id', id);
+  if (error) { alert('Não foi possível excluir: ' + error.message); return false; }
+
+  // Itens que já tinham sido carregados neste caminhão voltam a ficar sem
+  // caminhão -- a baixa continua valendo, só o vínculo sai.
+  const { error: erroItens } = await sb.from('exp_controle_itens')
+    .update({ doca_carregamento_id: null }).eq('doca_carregamento_id', id);
+  if (erroItens) console.warn('Não foi possível desvincular os itens do carregamento:', erroItens.message);
+
+  await carregarPainelDocas();
+  return true;
+}
 async function registrarEventoDoca(carregamentoId, evento, dados) {
   // Log é rastreabilidade: se falhar, a ação principal (que já
   // aconteceu) não é desfeita por causa disso -- mesmo critério de
@@ -432,10 +484,20 @@ document.getElementById('docaChegadaBtn').addEventListener('click', async () => 
 document.getElementById('docasFilaBody').addEventListener('click', async (e) => {
   const btnChamar = e.target.closest('.doca-chamar');
   const btnCancelar = e.target.closest('.doca-cancelar');
+  const btnExcluir = e.target.closest('.doca-excluir');
+
+  if (btnExcluir) {
+    await excluirCarregamento(btnExcluir.dataset.id, btnExcluir.dataset.placa);
+    return;
+  }
 
   if (btnChamar) {
     const id = btnChamar.dataset.id;
-    const select = document.querySelector(`.doca-destino[data-id="${id}"]`);
+    // `.doca-select-destino`, não `.doca-destino`: essa segunda classe é
+    // do TEXTO do destino do embarque (📍 Joinville), que passou a
+    // aparecer no mesmo bloco -- duas coisas diferentes com o mesmo nome
+    // pegariam o elemento errado aqui e ainda herdariam o estilo errado.
+    const select = document.querySelector(`.doca-select-destino[data-id="${id}"]`);
     if (!select) return;
     btnChamar.disabled = true;
     const { error } = await sb.from('doca_carregamentos')
@@ -460,6 +522,12 @@ document.getElementById('docasQuadro').addEventListener('click', async (e) => {
   const btnIniciar = e.target.closest('.doca-iniciar');
   const btnFinalizar = e.target.closest('.doca-finalizar');
   const btnVoltar = e.target.closest('.doca-voltar-fila');
+  const btnExcluir = e.target.closest('.doca-excluir');
+
+  if (btnExcluir) {
+    await excluirCarregamento(btnExcluir.dataset.id, btnExcluir.dataset.placa);
+    return;
+  }
 
   if (btnIniciar) {
     btnIniciar.disabled = true;
@@ -513,6 +581,12 @@ document.getElementById('docasQuadro').addEventListener('click', async (e) => {
 // senão o tempo do carregamento recomeçaria do zero e o indicador
 // mentiria a favor da operação.
 document.getElementById('docasHojeBody').addEventListener('click', async (e) => {
+  const btnExcluir = e.target.closest('.doca-excluir');
+  if (btnExcluir) {
+    await excluirCarregamento(btnExcluir.dataset.id, btnExcluir.dataset.placa);
+    return;
+  }
+
   const btn = e.target.closest('.doca-reabrir');
   if (!btn) return;
   if (!confirm('Reabrir este carregamento? A doca volta a ficar ocupada por ele.')) return;
