@@ -1152,3 +1152,29 @@ td.col-acoes { white-space: nowrap; text-align: center; }
   flex: 0 0 auto;
 }
 .topbar-tema:hover { background: rgba(255,255,255,.14); }
+
+
+/* ============ Estoque de Aço: reserva (14/09/2026) ============ */
+
+/* O `.controls` do portal só desenha input[type=text]; sem isto os dois
+   filtros da aba Reservas sairiam com o visual cru do navegador ao lado de
+   campos arredondados. Escopado à aba para não mexer nas outras telas. */
+#acoReservasAba .controls select {
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px;
+  font-size: 14px; background: var(--panel); color: var(--ink); font-weight: 600;
+}
+
+/* A coluna Reserva da lista de aços. `white-space: nowrap` porque a marca é
+   "🟠 Pedido 12345" e quebrar entre o ícone e o número deixa a tabela ilegível. */
+.reserva-livre { color: var(--muted); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.reserva-marca {
+  display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11px;
+  font-weight: 800; white-space: nowrap; cursor: pointer;
+  background: var(--aviso-fundo); color: var(--aviso-texto); border: 1px solid var(--aviso-borda);
+}
+.reserva-marca:hover { filter: brightness(0.95); }
+/* Reserva atrasada fica vermelha já na lista de aços: é o material esquecido
+   que o PCP precisa ver sem abrir a aba Reservas. */
+.reserva-marca.reserva-atrasada {
+  background: var(--erro-fundo); color: var(--erro-borda); border-color: var(--erro-borda);
+}
