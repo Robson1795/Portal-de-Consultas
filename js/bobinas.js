@@ -47,6 +47,11 @@ async function abrirTelaBobinas() {
 //    planilha nunca chegavam a tela -- o conferente veria "auditei tudo"
 //    sobre um terco do patio. Le por paginas ate acabar.
 async function loadBobinas() {
+  // A reserva mora em `reservas_aco`, e é ela que pinta a coluna Reserva.
+  // Carregar aqui (e não só ao abrir a tela) é o que impede a marca da
+  // unidade ANTERIOR de ficar na tela depois de trocar de unidade no
+  // cabeçalho -- `trocarUnidade()` chama esta função, não `abrirTelaBobinas()`.
+  if (typeof carregarReservasAco === 'function') await carregarReservasAco();
   if (!unidadeAtual) { bobinasData = []; renderBobinas(); return; }
 
   const PAGINA = 1000;
@@ -96,6 +101,31 @@ function calcularDivergenciaBobina(sistema, fisico) {
   if (diff === 0) return { classe: 'diff-ok', texto: '✅ OK', ajustado: f, temValor: true };
   if (diff > 0) return { classe: 'diff-mais', texto: `+${diff}`, ajustado: f, temValor: true };
   return { classe: 'diff-menos', texto: `${diff}`, ajustado: f, temValor: true };
+}
+
+// ---- A coluna Reserva -----------------------------------------------------
+//
+// ⚠️ Nada disto escreve em `bobinas_aco`: `substituir_bobinas()` (fase15) apaga
+// e repõe a planilha inteira da unidade a cada colagem, então uma marca gravada
+// aqui duraria até a próxima planilha do Datasul. A marca é lida de
+// `reservas_aco`, cruzada em memória por unidade+item+lote (js/reservas.js).
+//
+// A checagem de `typeof` não é paranoia: se o sql/fase38-reservas-aco.sql ainda
+// não tiver rodado, ou o js/reservas.js falhar, a tela de CONTAGEM tem de
+// continuar funcionando -- ela é o motivo de esta página existir.
+function celulaReservaBobina(r) {
+  if (typeof reservaDaBobina !== 'function') return '';
+  const reserva = reservaDaBobina(r);
+  if (!reserva) {
+    return '<span class="reserva-livre">\ud83d\udfe2 Disponível</span> '
+      + `<button class="acao-btn bobina-reservar" data-item="${escapeHtml(r.item)}" data-lote="${escapeHtml(r.lote || '')}"`
+      + ' title="Guardar este aço para um pedido">\ud83d\udd12</button>';
+  }
+  const atrasada = nivelReserva(reserva.reservado_em) === 'critica';
+  return `<span class="reserva-marca${atrasada ? ' reserva-atrasada' : ''}" data-pedido="${escapeHtml(reserva.pedido)}"`
+    + ` title="Reservado para o pedido ${escapeHtml(reserva.pedido)} por ${escapeHtml(reserva.reservado_por || '—')},`
+    + ` há ${escapeHtml(tempoReservadoTexto(reserva.reservado_em))}. Clique para ver na aba Reservas.">`
+    + `\ud83d\udfe0 Pedido ${escapeHtml(reserva.pedido)}</span>`;
 }
 
 function renderBobinas() {
@@ -148,6 +178,7 @@ function renderBobinas() {
         </td>
         <td><span class="diff-badge ${d.classe}">${d.texto}</span></td>
         <td class="num">${d.temValor ? escapeHtml(String(d.ajustado)) : '-'}</td>
+        <td class="col-acoes">${celulaReservaBobina(r)}</td>
       </tr>`;
   }).join('');
 

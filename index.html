@@ -301,6 +301,23 @@
 
   <!-- ================= BOBINAS DE AÇO ================= -->
   <div id="bobinasContent" style="display:none;">
+    <!-- ============ ABAS DO ESTOQUE DE AÇO (14/09/2026) ============
+         Reserva é ABA, e não tela separada: quem reserva precisa da lista de
+         aços ao lado para achar a bobina -- uma tela de reserva sozinha é uma
+         tela que ninguém abre. Mesmo padrão do `data-exp-aba` do Controle EXP.
+
+         ⚠️ "Reservas" e "Histórico" são a MESMA tabela (`reservas_aco`),
+         separadas por `liberado_em` estar nulo ou preenchido. Histórico é um
+         filtro, não outra fonte -- ver js/reservas.js. -->
+    <div class="cfg-barra">
+      <div id="acoAbas" style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-primary" data-aco-aba="acos">📦 Aços</button>
+        <button class="btn" data-aco-aba="reservas" title="Aços guardados para um pedido que ainda vai entrar">🔒 Reservas</button>
+        <button class="btn" data-aco-aba="historico" title="Reservas já liberadas — nada é apagado">📜 Histórico</button>
+      </div>
+    </div>
+
+    <div id="acoListaAba">
 
     <div class="stats">
       <div class="stat-pill">Total auditado<strong id="bob-total">-</strong></div>
@@ -353,12 +370,107 @@
               <th style="width:120px;">Saldo Físico</th>
               <th>Divergência</th>
               <th style="text-align:right;">Saldo Ajustado</th>
+              <!-- 11/09/2026: 🟢 disponível / 🟠 reservado. Entra no FIM da
+                   linha de propósito -- salvarContagemBobina() e o tempo real
+                   acham a célula "Saldo Ajustado" por índice (`td[10]`), e uma
+                   coluna no meio mudaria a conta sem erro nenhum aparecer. -->
+              <th style="width:150px;">Reserva</th>
             </tr>
           </thead>
           <tbody id="bobinasTableBody"></tbody>
         </table>
         <div class="loading-msg" id="bobinasLoadingMsg">Carregando dados do banco...</div>
         <div class="empty-msg" id="bobinasEmptyMsg" style="display:none;">Nenhuma bobina encontrada. Peça pro admin colar a planilha.</div>
+      </div>
+    </div>
+    </div>
+    <!-- fim de #acoListaAba -->
+
+    <!-- ============ ABA RESERVAS ============
+         Os quatro indicadores do topo respondem a pergunta que fez esta tela
+         existir: "tem aço parado aqui há quanto tempo?". As faixas (3 e 7
+         dias) são RESERVA_DIAS_ATENCAO / RESERVA_DIAS_CRITICA, no topo do
+         js/reservas.js -- é lá que se mexe se a régua mudar. -->
+    <div id="acoReservasAba" style="display:none;">
+      <div class="stats">
+        <div class="stat-pill">Aços reservados<strong id="res-total">-</strong></div>
+        <div class="stat-pill">Recentes<strong id="res-recentes">-</strong><span style="font-size:11px;">menos de 3 dias</span></div>
+        <div class="stat-pill">Em atenção<strong id="res-atencao">-</strong><span style="font-size:11px;">3 a 7 dias parados</span></div>
+        <div class="stat-pill">Atrasadas<strong id="res-atrasadas">-</strong><span style="font-size:11px;">7 dias ou mais</span></div>
+      </div>
+
+      <div class="panel">
+        <div class="controls">
+          <input type="text" id="resBusca" placeholder="Buscar por pedido, código do aço, lote ou descrição...">
+          <select id="resFiltroNivel">
+            <option value="">Tempo reservado: todos</option>
+            <option value="normal">Só as recentes</option>
+            <option value="atencao">Só as em atenção</option>
+            <option value="critica">Só as atrasadas</option>
+          </select>
+          <select id="resFiltroResponsavel">
+            <option value="">Responsável: todos</option>
+          </select>
+          <!-- ⚠️ Não há tempo real em `reservas_aco`, e isso é decisão: ligar o
+               Realtime numa tabela exige ALTER PUBLICATION no banco (ver o
+               histórico do fase23 sobre como isso dá errado), e uma reserva não
+               muda de segundo em segundo como uma contagem. O botão é a forma
+               honesta de ver o que outra pessoa acabou de reservar. -->
+          <button class="btn" id="resRecarregarBtn" title="Buscar de novo as reservas desta unidade">🔄 Recarregar</button>
+          <span id="resContagem" style="font-size:12px; color:var(--muted); font-weight:600;"></span>
+        </div>
+        <div class="scroll-area">
+          <table id="reservasTable">
+            <thead>
+              <tr>
+                <th>Status</th>
+                <th>Aço</th>
+                <th>Descrição</th>
+                <th>Lote</th>
+                <th style="text-align:right;">Peso / Qtd</th>
+                <th>Local na reserva</th>
+                <th>Pedido</th>
+                <th>Reservado por</th>
+                <th>Reservado em</th>
+                <th>Tempo reservado</th>
+                <th style="width:96px;">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="reservasCorpo"></tbody>
+          </table>
+          <div class="empty-msg" id="reservasVazio" style="display:none;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ ABA HISTÓRICO ============
+         Liberar NUNCA apaga a linha: preenche `liberado_em`/`liberado_por`.
+         É por isso que esta aba existe sem tabela nenhuma nova. -->
+    <div id="acoHistoricoAba" style="display:none;">
+      <div class="panel">
+        <div class="controls">
+          <input type="text" id="histBusca" placeholder="Buscar por pedido, código do aço ou lote...">
+          <span id="histContagem" style="font-size:12px; color:var(--muted); font-weight:600;"></span>
+        </div>
+        <div class="scroll-area">
+          <table id="histReservasTable">
+            <thead>
+              <tr>
+                <th>Aço</th>
+                <th>Lote</th>
+                <th>Pedido</th>
+                <th>Reservado por</th>
+                <th>Reservado em</th>
+                <th>Liberado em</th>
+                <th>Liberado por</th>
+                <th>Ficou reservado</th>
+                <th>Motivo da liberação</th>
+              </tr>
+            </thead>
+            <tbody id="histCorpo"></tbody>
+          </table>
+          <div class="empty-msg" id="histVazio" style="display:none;"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -1510,6 +1622,59 @@
   <div class="modal-overlay" id="ondeEstaModal">
     <div class="modal-box" id="ondeEstaModalBox" style="max-width:640px;"></div>
   </div>
+
+  <!-- ============ RESERVAR UM AÇO (14/09/2026) ============
+       O Pedido é obrigatório, e não por burocracia: uma reserva sem pedido é
+       exatamente o material esquecido que esta tela existe para acabar. -->
+  <div class="modal-overlay" id="reservaModal">
+    <div class="modal-box" style="max-width:520px;">
+      <button class="modal-close" id="reservaCloseBtn">✕</button>
+      <h3 style="margin-top:0;">🔒 Reservar este aço</h3>
+      <div class="modal-text" id="reservaResumo" style="margin-bottom:12px;"></div>
+      <div class="modal-label">Pedido <span style="color:var(--erro-borda);">(obrigatório)</span></div>
+      <input type="text" id="reservaPedido" placeholder="Para qual pedido este aço está sendo guardado"
+             style="width:100%; box-sizing:border-box; padding:10px; border:1px solid var(--border);
+                    border-radius:8px; font-size:14px; background:var(--panel); color:var(--ink);">
+      <div class="modal-label">Observação (opcional)</div>
+      <textarea id="reservaObs" rows="3" placeholder="Ex.: cliente confirmou por telefone, o pedido entra essa semana"
+                style="width:100%; box-sizing:border-box; padding:10px; border:1px solid var(--border);
+                       border-radius:8px; font-size:14px; font-family:inherit; resize:vertical;
+                       background:var(--panel); color:var(--ink);"></textarea>
+      <div class="modal-text" style="font-size:12px; color:var(--muted); margin-top:8px;">
+        Quem está reservando e a data são gravados sozinhos. A etiqueta abre numa aba nova logo depois.
+      </div>
+      <div class="cfg-barra" style="padding:10px 0 0;">
+        <span class="status-msg" id="reservaMsg"></span>
+        <button class="btn" id="reservaCancelarBtn" style="margin-left:auto;">Cancelar</button>
+        <button class="btn btn-primary" id="reservaSalvarBtn">Reservar e imprimir etiqueta</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ LIBERAR UMA RESERVA ============
+       A confirmação é esta tela, e NÃO `confirm()`: marcado "impedir que esta
+       página crie novos diálogos", o confirm() devolve `false` na hora e o
+       clique deixa de fazer efeito sem dizer nada (CLAUDE.md, seção 7). -->
+  <div class="modal-overlay" id="liberarModal">
+    <div class="modal-box" style="max-width:480px;">
+      <button class="modal-close" id="liberarCloseBtn">✕</button>
+      <h3 style="margin-top:0;">🔓 Liberar esta reserva</h3>
+      <div class="modal-text" id="liberarResumo" style="margin-bottom:12px;"></div>
+      <div class="modal-label">Motivo (opcional)</div>
+      <input type="text" id="liberarMotivo" placeholder="Ex.: pedido cancelado, aço foi cortado, troca de bobina"
+             style="width:100%; box-sizing:border-box; padding:10px; border:1px solid var(--border);
+                    border-radius:8px; font-size:14px; background:var(--panel); color:var(--ink);">
+      <div class="modal-text" style="font-size:12px; color:var(--muted); margin-top:8px;">
+        O aço volta a aparecer como disponível na lista. A reserva não é apagada:
+        ela passa para o Histórico, com quem liberou e quando.
+      </div>
+      <div class="cfg-barra" style="padding:10px 0 0;">
+        <span class="status-msg" id="liberarMsg"></span>
+        <button class="btn" id="liberarCancelarBtn" style="margin-left:auto;">Cancelar</button>
+        <button class="btn btn-primary" id="liberarConfirmarBtn">Liberar</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Ordem importa: config define `sb`, auth usa `sb`, e as telas usam os dois. -->
@@ -1546,6 +1711,11 @@
 <script src="js/auth.js"></script>
 <script src="js/estoque.js"></script>
 <script src="js/bobinas.js"></script>
+<!-- Reserva de aço: entra depois do js/bobinas.js porque é ele que desenha a
+     lista onde a marca 🟠 aparece. As duas pontas se chamam em tempo de
+     execução, então a ordem só importa para os `document.getElementById` do
+     topo de cada arquivo. -->
+<script src="js/reservas.js"></script>
 <script src="js/ocr.js"></script>
 <script src="js/configuracoes.js"></script>
 <script src="js/requisicao.js"></script>
