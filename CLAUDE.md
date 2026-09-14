@@ -3016,6 +3016,40 @@ grupo; busca por pedido continua funcionando; item retirado na mesma
 localização continua fora, mesmo buscando por ela. Zero erro de
 console.
 
+## Prévia + relatório HTML do pedido, no passo 2 do Painel de Docas (14/09/2026)
+
+O Robson, apontando o campo de pedidos do passo 2 (Expedição): *"quando o
+encarregado da expedição colocar o numero do pedido aqui abre uma tela
+com todos os pedidos que esta no exp acessorios, ai ele pode criar um
+relatorio em HTML dai ele entrega pra minha responsavel por deixar na
+nossa que deixamos para o pessoal do carregameto levar"*.
+
+Ao digitar o(s) pedido(s) no campo, uma prévia aparece **ao vivo** (sem
+precisar clicar em nada) com **tudo** que está no Controle EXP desta
+unidade pra aquele(s) pedido(s) -- item, descrição, qtd, localização e
+status. "Tudo", não filtrado por status: é "abre uma tela com todos os
+pedidos que esta no exp acessorios", literal -- item já retirado ou já
+na doca aparece igual, com o status deixando claro qual é qual.
+
+Botão **"Gerar relatório HTML"** ao lado, reaproveitando
+`montarHtmlTabelaGenerica()` (mesma função da Entrada, Auditoria e
+"Carregados hoje" -- terceiro uso dela neste módulo). É o papel que o
+encarregado tira da tela e entrega pra responsável do EXP separar o
+material: ela sabe exatamente o que pegar e de onde, sem precisar abrir
+o portal ela mesma.
+
+`pedidosDigitados()` extraído do handler de "Encostar na doca" -- mesma
+regra de separador (vírgula, ponto e vírgula ou espaço) usada nos dois
+lugares agora, pra não desalinhar. Busca case/espaço-insensível dos dois
+lados (`chavePedidoCarregamento()`, já existente).
+
+Conferido no navegador: digitar um pedido mostra os itens dele na hora;
+pedido inexistente avisa "nenhum item"; campo vazio esconde a prévia;
+mais de um pedido junta os itens dos dois; o HTML exportado tem título,
+os itens certos e a descrição certa; exportar sem pedido informado avisa
+em vez de baixar vazio; a prévia some depois de "Encostar na doca" com
+sucesso (junto com o campo, que já limpava). Zero erro de console.
+
 ## Qual das 3 docas físicas recebeu o material (14/09/2026)
 
 O Robson, olhando o botão 🚚 DOCA na aba Entrada: *"nessa aba das docas

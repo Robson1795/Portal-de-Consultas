@@ -653,6 +653,84 @@ function renderEscolhaVeiculo() {
 
 document.getElementById('docaBuscaVeiculo').addEventListener('input', renderEscolhaVeiculo);
 
+// "KV876431, KV855935" ou "KV876431 KV855935" -- o encarregado digita do
+// jeito que está no papel; separador não pode ser regra decorada.
+// Reaproveitado pelo botão Encostar E pela prévia abaixo.
+function pedidosDigitados() {
+  return document.getElementById('docaPedidos').value
+    .split(/[,;\s]+/).map(p => p.trim().toUpperCase()).filter(Boolean);
+}
+
+function itensDosPedidosDigitados() {
+  const pedidos = pedidosDigitados();
+  if (!pedidos.length) return [];
+  const chaves = new Set(pedidos);
+  return linhasDoSetorAtual().filter(l => chaves.has(chavePedidoCarregamento(l.numero_pedido)));
+}
+
+// Robson, 14/09/2026: "quando o encarregado da expedição colocar o
+// numero do pedido aqui abre uma tela com todos os pedidos que esta no
+// exp acessorios, ai ele pode criar um relatorio em HTML dai ele entrega
+// pra minha responsavel" -- prévia ao vivo (sem precisar clicar em nada)
+// de TUDO que está no Controle EXP pra aquele(s) pedido(s), independente
+// do status: é "abre uma tela com todos", não uma lista já filtrada.
+function renderPedidosPreview() {
+  const pedidos = pedidosDigitados();
+  const caixa = document.getElementById('docaPedidosPreview');
+  const corpo = document.getElementById('docaPedidosPreviewBody');
+  const contagem = document.getElementById('docaPedidosPreviewContagem');
+
+  if (!pedidos.length) { caixa.style.display = 'none'; return; }
+  caixa.style.display = 'block';
+
+  const itens = itensDosPedidosDigitados();
+  contagem.textContent = itens.length ? `${itens.length} item(ns)` : '';
+
+  if (!itens.length) {
+    corpo.innerHTML = `<tr><td colspan="5" style="color:var(--muted); text-align:center; padding:10px;">`
+      + `Nenhum item de ${escapeHtml(pedidos.join(', '))} no Controle EXP desta unidade.</td></tr>`;
+    return;
+  }
+
+  corpo.innerHTML = itens.map(l => {
+    const desc = expCtrlDescMap.get(normalizaCodigoItem(l.codigo_item));
+    return `
+    <tr>
+      <td class="item">${escapeHtml(l.codigo_item)}</td>
+      <td>${desc && desc.descricao ? escapeHtml(desc.descricao) : '—'}</td>
+      <td class="num">${l.quantidade != null ? escapeHtml(l.quantidade) : '—'}</td>
+      <td class="loc">${escapeHtml(l.localizacao || '—')}</td>
+      <td>${rotuloStatusExp(l.status).rotulo}</td>
+    </tr>`;
+  }).join('');
+}
+
+document.getElementById('docaPedidos').addEventListener('input', renderPedidosPreview);
+
+// "ai ele pode criar um relatorio em HTML dai ele entrega pra minha
+// responsavel por deixar" -- mesmo padrão de mailto/exportação do resto
+// do portal, reaproveitando montarHtmlTabelaGenerica() (Entrada,
+// Auditoria, "Carregados hoje"). É o papel que sai da mão do encarregado
+// pra mão de quem separa o material, não uma tela só de olhar.
+document.getElementById('docaPedidosExportarBtn').addEventListener('click', () => {
+  const pedidos = pedidosDigitados();
+  const itens = itensDosPedidosDigitados();
+  if (!itens.length) { alert('Informe o(s) pedido(s) antes de gerar o relatório.'); return; }
+
+  const linhas = itens.map(l => {
+    const desc = expCtrlDescMap.get(normalizaCodigoItem(l.codigo_item));
+    return [l.codigo_item, desc && desc.descricao ? desc.descricao : '',
+             l.quantidade != null ? l.quantidade : '', l.localizacao || '', rotuloStatusExp(l.status).rotulo];
+  });
+  const html = montarHtmlTabelaGenerica({
+    titulo: `Separar material — Pedido(s) ${pedidos.join(', ')} — ${rotuloUnidade(unidadeAtual)}`,
+    cabecalho: ['Item', 'Descrição', 'Qtd', 'Localização', 'Status'],
+    linhas
+  });
+  const nomeBase = `pedidos-${pedidos.join('-')}-exp-controle-${new Date().toISOString().slice(0, 10)}`;
+  baixarArquivo(new Blob([html], { type: 'text/html;charset=utf-8;' }), nomeBase + '.html');
+});
+
 document.getElementById('docaEncostarBtn').addEventListener('click', async () => {
   const msg = document.getElementById('docasMsg');
   const btn = document.getElementById('docaEncostarBtn');
@@ -671,10 +749,7 @@ document.getElementById('docaEncostarBtn').addEventListener('click', async () =>
     return;
   }
 
-  // "KV876431, KV855935" ou "KV876431 KV855935" -- o encarregado digita do
-  // jeito que está no papel; separador não pode ser regra decorada.
-  const pedidos = document.getElementById('docaPedidos').value
-    .split(/[,;\s]+/).map(p => p.trim().toUpperCase()).filter(Boolean);
+  const pedidos = pedidosDigitados();
 
   if (!pedidos.length) {
     msg.textContent = 'Informe o(s) pedido(s) que este veículo vai carregar — é o que faz o material ser separado pra doca.';
@@ -715,6 +790,7 @@ document.getElementById('docaEncostarBtn').addEventListener('click', async () =>
   document.getElementById('docaBuscaVeiculo').value = '';
   document.getElementById('docaPedidos').value = '';
   renderEscolhaVeiculo();
+  renderPedidosPreview();
 
   const nomeDoca = (docasCadastro.find(d => d.id === docaId) || {}).nome || 'doca';
   await carregarPainelDocas();

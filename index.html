@@ -1390,6 +1390,27 @@
              (placa parecida é erro fácil de cometer com o caminhão na
              frente e pressa no pátio). -->
         <div id="docaVeiculoEscolhido" class="doca-escolhido" style="display:none;"></div>
+
+        <!-- Robson, 14/09/2026: "quando o encarregado da expedição colocar
+             o numero do pedido aqui abre uma tela com todos os pedidos
+             que esta no exp acessorios, ai ele pode criar um relatorio em
+             HTML dai ele entrega pra minha responsavel por deixar" --
+             prévia de tudo que está no Controle EXP pra esse(s) pedido(s),
+             com botão de gerar o relatório que o encarregado entrega pra
+             quem vai separar o material pro carregamento. -->
+        <div id="docaPedidosPreview" style="display:none; margin-top:8px;">
+          <div class="cfg-barra">
+            <strong>Neste(s) pedido(s), no Controle EXP</strong>
+            <span style="font-size:12px; color:var(--muted);" id="docaPedidosPreviewContagem"></span>
+            <button class="btn" id="docaPedidosExportarBtn" style="margin-left:auto;">Gerar relatório HTML</button>
+          </div>
+          <div class="scroll-area">
+            <table>
+              <thead><tr><th>Item</th><th>Descrição</th><th>Qtd</th><th>Localização</th><th>Status</th></tr></thead>
+              <tbody id="docaPedidosPreviewBody"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <!-- O quadro: uma coluna por doca cadastrada nesta unidade -->
