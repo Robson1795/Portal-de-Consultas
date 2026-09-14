@@ -453,11 +453,9 @@ Hoje ele cria só estrutura, e o RLS é assunto dos scripts da Fase 1.
 
 **De painel — destrava o resto, e não é código:**
 
-1. **Rodar `sql/fase32-sugestoes-melhoria.sql`** no Supabase. Sondado pela API em
-   10/09/2026: a tabela `sugestoes_melhoria` **não existe** ainda, então clicar em
-   Enviar na caixa de sugestões falha (a tela já diz que o script falta). Ficou
-   mais urgente depois de 10/09: o tour agora mostra esse botão para **todos** os
-   perfis, então é a primeira coisa que um usuário novo vai tentar usar.
+1. ~~Rodar `sql/fase32-sugestoes-melhoria.sql`~~ — **feito.** Sondado de novo pela
+   API em 14/09/2026, ao montar a lista de tabelas do backup: `sugestoes_melhoria`
+   responde. O mesmo vale para `reservas_aco`, o `fase38` do item 5.
 
 2. **Rodar `sql/fase11-limpar-contagem-restrito.sql`** no Supabase. Sem ele, "Limpar tudo" está
    travado só na tela, e um inspetor de navegador contorna. O script **substitui** a política
@@ -4012,3 +4010,79 @@ duas encerradas e diz quanto cada uma **durou**; a etiqueta sai com RESERVADO
 antes do pedido, toda em milímetros, com aço, lote e responsável, e sem QR.
 **40 de 41 checagens passaram** — a única falha foi da própria checagem, que
 lia o `<title>` da etiqueta junto com o corpo. Zero erro de console.
+
+## 24. Quem está usando o portal, e backup de um clique (14/09/2026)
+
+Duas telas pequenas em Configurações, das seis ideias que o Victor aprovou ao
+perguntar *"analisando o escopo do projeto como um todo, tem alguma coisa a mais
+que podemos fazer?"*.
+
+### `acessos` era escrita e nunca lida
+
+Varredura de 14/09/2026: **o único uso de `acessos` em todo o `js/` era o
+`insert` de `js/auth.js`.** Um login por linha desde o primeiro dia do projeto,
+nunca consultado por ninguém. (A mesma varredura mostrou que `log_movimentacao`
+continua assim — fica como pendência.)
+
+⚠️ **A pergunta acionável não é "quantos acessos".** É **quem foi aprovado e
+nunca entrou**: alguém foi liberado e não apareceu — ou não sabe que foi
+aprovado, ou não sabe que o portal existe. Essa é a lista que rende um
+telefonema, e a única que some sozinha quando a adoção acontece. Por isso a
+ordem da tabela é a da **ação**: nunca entrou primeiro, depois o sumido há mais
+tempo, e quem está usando por último — mesmo princípio da fila de aprovação e da
+lista de reservas.
+
+- ⚠️ **O e-mail é normalizado dos dois lados.** `acessos.email` vem do
+  `user.email` do Auth e `usuarios_permitidos.email` do cadastro; a mesma pessoa
+  pode estar gravada com caixa diferente nos dois, e aí apareceria como "nunca
+  entrou" tendo entrado hoje. É o `996613I` da seção 14 de novo, num lugar onde
+  o efeito seria um telefonema desnecessário.
+- **Só os aprovados entram na lista.** Conta pendente não entrou porque não
+  pode; misturá-la esconderia quem pode e não entra.
+- **Paginado** (`buscarTudoPaginado`): é a tabela que mais cresce do portal, uma
+  linha por login para sempre. Sem isso pararia de contar na milésima, sem avisar.
+- ⚠️ **A tabela só tem `id, user_id, email, entrou_em`** — descoberto sondando a
+  API coluna a coluna, porque `acessos` é anterior à numeração por fase e **não
+  existe script que a crie neste repositório**. Não há tela nem duração: isto
+  responde "entrou?", nunca "usou o quê?", e a nota na tela diz isso.
+- RLS já era `eh_admin()` para leitura (fase1c) — nenhuma política nova.
+
+### Backup: 38 tabelas num clique
+
+Não dá para automatizar (não existe servidor neste projeto), mas dá para tirar o
+atrito: exportar 38 tabelas à mão pelo painel do Supabase é exatamente a tarefa
+que ninguém faz duas vezes. Um botão lê tudo de mil em mil e baixa um `.json`
+datado, com `gerado_em`, `gerado_por` e um resumo.
+
+- ⚠️ **Tabela que volta vazia é dita em voz alta, na tela e no arquivo.** Uma
+  tabela barrada pelo RLS responde **zero linhas sem erro nenhum** — idêntica a
+  uma que está vazia de verdade, e o portal não tem como distinguir as duas. É o
+  item A1 da `AUDITORIA.md` na forma mais perigosa que ele assume: **um backup
+  que parece completo e não está é pior que backup nenhum.** Por isso a
+  conferência fica com a pessoa, explícita.
+- **Tabela que falha não some**: entra no arquivo com o erro anotado, e aparece
+  em vermelho no progresso.
+- ⚠️ **`TABELAS_BACKUP` é mantida à mão**, e tabela nova que não entrar nela
+  **fica de fora do backup em silêncio**. A lista foi conferida contra o banco em
+  14/09/2026 (as 38 responderam). Ao criar tabela num script de fase novo,
+  acrescente-a ali no mesmo commit.
+- `baixarArquivo()` (js/programacao.js) reaproveitado, não reescrito.
+
+⚠️ **`carregarAcessos()` é encadeado depois de `carregarUsuarios()`** (`.then()`,
+em `js/navegacao.js`), não disparado em paralelo: ele cruza o log com a lista de
+aprovados, e com a lista ainda vazia **todo mundo apareceria como "nunca
+entrou"**. Mesmo motivo do `carregarCatalogoExp().then(carregarProgramacao)`.
+
+### De quebra: duas pendências do painel já estavam resolvidas
+
+Sondando o banco para montar a lista do backup, as 38 tabelas responderam —
+inclusive **`sugestoes_melhoria` e `reservas_aco`**. Ou seja, o `fase32` e o
+`fase38` **já foram rodados**, e a seção 12 os listava como pendentes. Corrigido.
+
+Conferido no navegador com `sb.from` mockado (4 aprovados: um usando, um sumido
+há 60 dias com a caixa do e-mail diferente entre as duas tabelas, dois que nunca
+entraram, mais uma conta pendente): a lista traz só os 4 aprovados, na ordem
+nunca-entrou → sumido → usando, os quatro cards batem, e a diferença de caixa
+**não** gera um falso "nunca entrou". No backup: as 38 tabelas no arquivo, a que
+falhou anotada com o erro, a vazia no resumo, e os dois avisos na tela.
+**20 de 20 checagens.** Zero erro de console.

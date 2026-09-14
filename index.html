@@ -1505,6 +1505,91 @@
       indistinguível de "apagar o estoque da unidade", e apagar tem de ser um pedido explícito.
     </div>
 
+    <!-- ============ QUEM ESTÁ USANDO O PORTAL (14/09/2026) ============
+         `acessos` grava um login por linha desde o primeiro dia e NUNCA foi
+         lida por ninguém -- o único uso em js/*.js era o insert de js/auth.js.
+         É o dado que responde a pergunta nº 1 depois do rollout.
+
+         ⚠️ A pergunta que importa não é "quantos acessos", é **quem foi
+         aprovado e nunca entrou**: essa é a lista que precisa de um
+         telefonema, e a única que some sozinha quando o portal pega. -->
+    <div class="req-secao">Quem está usando o portal</div>
+    <div class="panel">
+      <div class="cfg-barra">
+        <select id="cfgAcessosPeriodo" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px; background:var(--panel); color:var(--ink);">
+          <option value="30">Últimos 30 dias</option>
+          <option value="90">Últimos 90 dias</option>
+          <option value="0">Desde o começo</option>
+        </select>
+        <button class="btn" id="cfgAcessosRecarregar">Recarregar</button>
+        <span class="status-msg" id="cfgAcessosMsg"></span>
+      </div>
+      <div class="stats" style="padding:0 16px;">
+        <div class="stat-pill">Entraram no período<strong id="cfg-ac-ativos">-</strong><span style="font-size:11px;">pessoas distintas</span></div>
+        <div class="stat-pill">Nunca entraram<strong id="cfg-ac-nunca">-</strong><span style="font-size:11px;">aprovados, sem nenhum acesso</span></div>
+        <div class="stat-pill">Sumidos<strong id="cfg-ac-sumidos">-</strong><span style="font-size:11px;">sem entrar há mais de 30 dias</span></div>
+        <div class="stat-pill">Acessos no período<strong id="cfg-ac-total">-</strong><span style="font-size:11px;">logins contados</span></div>
+      </div>
+      <div class="scroll-area">
+        <table id="cfgAcessosTabela">
+          <thead>
+            <tr>
+              <th>Situação</th>
+              <th>Pessoa</th>
+              <th>E-mail</th>
+              <th>Unidade</th>
+              <th>Perfil</th>
+              <th>Último acesso</th>
+              <th style="text-align:right;">Entradas</th>
+            </tr>
+          </thead>
+          <tbody id="cfgAcessosCorpo"></tbody>
+        </table>
+        <div class="empty-msg" id="cfgAcessosVazio" style="display:none;"></div>
+      </div>
+      <div class="cfg-nota">
+        <b>Conta aprovada que nunca entrou aparece primeiro</b>, e é o item de ação desta lista:
+        alguém foi liberado e não está usando — ou não sabe que foi aprovado, ou não sabe que o
+        portal existe. Depois vêm os que estão sumidos há mais tempo.
+        <br><br>
+        ⚠️ <b>Só conta login.</b> Quem deixa o portal aberto a semana inteira aparece com um
+        acesso só — é sinal de uso, não de abandono. E o registro não guarda em qual tela a
+        pessoa esteve: isto responde "entrou?", não "usou o quê?".
+      </div>
+    </div>
+
+    <!-- ============ BACKUP DE UM CLIQUE (14/09/2026) ============
+         O CLAUDE.md lista "sem backup automático" e "hospedagem com ponto
+         único de falha" como riscos abertos, e o sistema está prestes a ter
+         usuários de verdade. Não dá pra automatizar (não existe servidor neste
+         projeto), mas dá pra transformar "exportar 38 tabelas na mão pelo
+         painel do Supabase" em um clique -- o que ninguém faz porque dá
+         trabalho passa a ser feito. -->
+    <div class="req-secao">Backup</div>
+    <div class="panel">
+      <div class="cfg-barra">
+        <button class="btn btn-primary" id="cfgBackupBtn">💾 Baixar backup completo (.json)</button>
+        <span class="status-msg" id="cfgBackupMsg"></span>
+      </div>
+      <div style="padding:0 16px 16px;">
+        <div id="cfgBackupProgresso" style="font-size:12px; color:var(--muted); line-height:1.7;"></div>
+      </div>
+      <div class="cfg-nota">
+        Lê <b>todas as tabelas do portal</b>, de mil em mil linhas, e baixa um único arquivo
+        <code>.json</code> com a data no nome. Guarde fora deste computador — o ponto do backup é
+        justamente sobreviver à máquina, à conta do GitHub e ao projeto do Supabase.
+        <br><br>
+        ⚠️ <b>Tabela que volta vazia é listada no fim, e isso é de propósito.</b> Uma tabela
+        barrada pelo RLS responde <b>zero linhas sem erro nenhum</b> — igualzinho a uma tabela que
+        está vazia de verdade. O portal não tem como distinguir as duas, então mostra quais
+        vieram vazias e deixa a conferência com você. Backup que parece completo e não está é
+        pior que backup nenhum.
+        <br><br>
+        <b>É um retrato, não um histórico.</b> Salva o que está no banco agora; a estrutura das
+        tabelas continua sendo os arquivos em <code>sql/</code>. Os dois juntos refazem o banco.
+      </div>
+    </div>
+
     <!-- ---- Sugestões de melhoria: só o Robson e o Victor leem (RLS por
          eh_super_admin, ver sql/fase32-sugestoes-melhoria.sql). A seção some
          inteira para os outros admins -- ver carregarSugestoes() em

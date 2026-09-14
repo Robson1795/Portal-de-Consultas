@@ -182,7 +182,15 @@ function mostrarPagina(id) {
     pararRelogioDocas();
   }
   if (id === 'analise') { carregarAnalise(); }
-  if (id === 'config')  { carregarUsuarios(); carregarConfigUnidades(); carregarLote(); carregarSugestoes(); }
+  // ⚠️ `carregarAcessos()` vai DEPOIS de `carregarUsuarios()`, encadeado e não
+  // solto: ele cruza o log de login com a lista de aprovados, e disparando os
+  // dois em paralelo o cruzamento cairia numa lista vazia -- todo mundo
+  // apareceria como "nunca entrou". Mesmo motivo do
+  // `carregarCatalogoExp().then(carregarProgramacao)` logo acima.
+  if (id === 'config')  {
+    carregarUsuarios().then(carregarAcessos);
+    carregarConfigUnidades(); carregarLote(); carregarSugestoes();
+  }
 }
 
 document.getElementById('sidebarNav').addEventListener('click', (e) => {
