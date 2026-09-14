@@ -3016,6 +3016,31 @@ grupo; busca por pedido continua funcionando; item retirado na mesma
 localização continua fora, mesmo buscando por ela. Zero erro de
 console.
 
+## Mais duas "docas": Benchmark e Sem doca definida (14/09/2026)
+
+O Robson: *"coloque aqui tambem, SEM DOCA DEFINIDA, BENCHMARK"* -- e, sobre
+o que cada uma significa: *"o BENCHMARK é la em cima em outro galpao, sem
+doca definida é que as vezes nao sabem em qual vao carregar ainda"*.
+Perguntado se as duas deveriam funcionar como as 3 docas de verdade
+(cronômetro, progresso, coluna no quadro) ou só uma marcação sem
+acompanhamento, confirmou que sim, iguais às três.
+
+**Nenhum código mudou.** `docas` já era a fonte única de tudo isso --
+quadro principal, "Em qual doca encostou?", o seletor por pedido na aba
+DOCA do Controle EXP -- então as duas entram como duas linhas a mais
+(`sql/fase44-docas-benchmark-sem-definida.sql`) e aparecem sozinhas em
+todo lugar que já lê essa tabela. O quadro usa grid `auto-fit`
+(`styles.css`), então cresce de 3 pra 5 cartões sem qualquer ajuste.
+
+Ordem: as 3 numeradas primeiro, depois "Sem doca definida" (mais comum --
+qualquer caminhão sem doca decidida passa por ela) e por último
+"Benchmark" (outro galpão, fisicamente longe das 3 de verdade -- não faz
+sentido aparecer misturada entre elas no meio da fileira).
+
+Conferido no navegador: as 5 aparecem como cartão no quadro principal e
+como opção no select de encostar, sem mexer em uma linha de JS/CSS. Zero
+erro de console.
+
 ## Botão Imprimir na prévia do pedido (14/09/2026)
 
 O Robson, na sequência: *"pode colocar o botao de imprimir também"*.
