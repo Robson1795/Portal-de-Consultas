@@ -42,6 +42,7 @@ servidos são o próprio código-fonte. Divididos na Fase 2a (03/09/2026):
 | `js/reservas.js` | Reserva de bobinas de aço pelo PCP: abas Reservas e Histórico, etiqueta (seção 23) |
 | `js/painel.js` | Painel do Dia: o que está fora do lugar agora, por perfil (seção 25) |
 | `js/busca.js` | Busca global: onde o item está em todas as telas, de uma vez (seção 26) |
+| `js/inventario.js` | Fechar inventário: congela a contagem e calcula a acuracidade (seção 27) |
 
 São **scripts clássicos, não módulos**, carregados nessa ordem no fim do `body`. O `let`/`const` de
 nível superior vai para o escopo lexical global, compartilhado entre os arquivos — é por isso que o
@@ -472,10 +473,12 @@ Hoje ele cria só estrutura, e o RLS é assunto dos scripts da Fase 1.
    *(A senha de contagem, que também vivia aqui e travou a apresentação na 104, deixou
    de existir em 11/09/2026 — ver seção 22.)*
 
-5. **Rodar `sql/fase38-reservas-aco.sql`** no Supabase. Sem ele a aba **Reservas**
-   do Estoque de Aço abre, mas nenhuma reserva grava — e o que garante "um aço
-   reservado não pode ser reservado de novo" é o índice parcial que está lá
-   dentro, não a tela (seção 23).
+5. ~~Rodar `sql/fase38-reservas-aco.sql`~~ — **feito** (ver item 1).
+
+6. **Rodar `sql/fase41-inventario-fechado.sql`** no Supabase. Sem ele o botão
+   **Fechar inventário** avisa que a tabela não existe e **não apaga a contagem**
+   (falha do lado certo), mas o histórico de acuracidade não começa a existir —
+   e cada inventário continua virando pó ao ser descartado (seção 27).
 
 **De código:**
 
@@ -4229,3 +4232,84 @@ expedição de doca, traz as duas unidades do almoxarifado, mostra pedido e temp
 na reserva; com uma fonte quebrada, ela é nomeada e as outras 6 continuam; texto
 que não é código vira busca por descrição com candidatos clicáveis; sem
 resultado, diz o que cobre; Ctrl+K abre e Esc fecha. **17 de 17 checagens.**
+
+## 27. Fechar o inventário, em vez de jogar a contagem fora (14/09/2026)
+
+Até aqui o fim de um inventário era o botão **"Limpar tudo"**: um `delete` em
+`contagem_fisica`. Sumia o que foi contado, quem contou, o que divergiu e
+quanto. **Consequência: o portal nunca conseguiu responder "qual é a nossa
+acuracidade de inventário?"** — o número que um gestor de estoque leva para a
+diretoria, e o único que mostra se contar está melhorando ou piorando. Cada
+inventário existia por algumas horas e virava pó.
+
+**"✅ Fechar inventário"** congela a contagem em `inventarios` /
+`inventario_itens` (`sql/fase41-inventario-fechado.sql`) e **só então** limpa.
+O "Limpar tudo" virou **"Descartar"** e continua existindo de propósito:
+contagem de teste ou começada errada não pode virar histórico. Só deixou de ser
+o único caminho.
+
+O botão **📊 Inventários** (ao lado de "Quem já contou") abre o histórico da
+unidade com a acuracidade de cada fechamento, a média dos listados, e o detalhe
+item a item — **com a maior divergência em cima**, que é a ordem do que precisa
+ser investigado.
+
+### ⚠️ O que "acuracidade" quer dizer aqui
+
+    acuracidade = itens que conferem ÷ itens CONTADOS × 100
+
+O denominador é o que foi contado, **não** o que existe na unidade. Item que
+ninguém contou não está errado — está **não contado**, e misturar as duas coisas
+daria uma acuracidade que despenca só porque o inventário não terminou. A tela
+repete isso em letras, para o número não ser lido como outra coisa.
+
+### Decisões
+
+- **Duas tabelas** (cabeçalho + detalhe), mesmo desenho de `requisicoes_alm` /
+  `requisicoes_alm_itens`: a lista de fechamentos só precisa dos totais; o
+  detalhe de um deles pode ter milhares de linhas.
+- ⚠️ **Os totais ficam gravados, não recalculados na leitura.** É o retrato do
+  que foi apurado naquele dia — se a régua da acuracidade mudar um dia, os
+  inventários antigos continuam mostrando o número que foi apresentado na época.
+  Recalcular reescreveria o passado.
+- ⚠️ **O detalhe guarda descrição e endereço** (retrato, como em `reservas_aco`):
+  a planilha do estoque é substituída a cada colagem e o histórico é lido meses
+  depois.
+- ⚠️ **Grava primeiro, confere, e só então apaga.** Não há transação (o portal
+  não tem servidor nem RPC para isso), então **a ordem é a defesa**: falhando no
+  meio, sobra um inventário parcial no histórico e **a contagem continua na
+  tela** — o lado certo de errar. O contrário (apagar e descobrir que não
+  gravou) não teria volta. Testado com a falha simulada nos dois pontos.
+- **O `insert` do cabeçalho pede recibo** (`.select().single()`): sem ele, um
+  insert barrado pelo RLS voltaria com `error null` e a tela apagaria a contagem
+  achando que salvou (item A1).
+- ⚠️ **Confirmação é o segundo clique no próprio botão**, não `confirm()` (seção
+  7) — e o rótulo passa a mostrar **o que vai ser gravado** (quantos itens, qual
+  acuracidade), porque é isso que a pessoa precisa conferir antes de a contagem
+  ser apagada. Mexer na contagem cancela a confirmação: o número que ela leu
+  deixou de valer.
+- **Permissão reusa `pode_atualizar_estoque()`** — é exatamente quem já podia
+  apagar a contagem. A decisão ("este inventário acabou") é a mesma; o que mudou
+  é que agora ela guarda.
+- **Sem política de UPDATE nem DELETE** nas duas tabelas: histórico que pode ser
+  reescrito não serve de histórico. Fechamento errado se corrige fechando outro.
+
+### ⚠️ Um corte silencioso que isto desenterrou: `loadData()` não era paginada
+
+A consulta da Consulta de Itens era um `select` simples — e **o PostgREST corta
+em 1.000 linhas sem avisar** (`error: null`, resposta com cara de completa).
+Como há **uma linha por item POR ENDEREÇO**, uma unidade cheia passa disso com
+folga: a tela mostrava as primeiras mil e ninguém tinha como perceber. É o mesmo
+corte que já havia mordido as bobinas (seção 9) e a aba Conferir (seção 20), e
+que ninguém tinha procurado aqui.
+
+Apareceu porque **o retrato do inventário sai de `currentData`**: o histórico
+nasceria pela metade, numa tela que existe justamente para ser prova do que foi
+contado. Corrigido com `buscarTudoPaginado()`, e conferido com 2.500 linhas
+simuladas — 4 páginas pedidas, 2.500 carregadas.
+
+Conferido no navegador com `sb.from` mockado: só o que foi contado entra (3 de 4
+itens), a acuracidade dá 66,7%, o primeiro clique não grava e mostra o que será
+gravado, o detalhe leva sistema/físico/diferença mais o retrato, a contagem só é
+apagada depois de tudo gravado, **falha no detalhe e falha no cabeçalho não
+apagam nada** e dizem isso, o histórico explica a conta, e o detalhe traz a maior
+divergência em cima. **29 de 29 checagens.**

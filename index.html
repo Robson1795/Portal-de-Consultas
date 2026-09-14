@@ -207,6 +207,12 @@
               title="Imprime uma folha por item marcado, com a localização em letra grande">🖨️ Etiquetas (0)</button>
       <button class="btn" id="contagemBtn" title="Planilha para contagem física de estoque" style="font-size:16px; padding:9px 12px;">📋</button>
       <button class="btn" id="quemContouBtn" style="display:none;">Quem já contou</button>
+      <!-- Acuracidade de inventário ao longo do tempo. Fica aqui, ao lado da
+           contagem, em vez de virar mais um item de menu: é a mesma tarefa,
+           só que olhando pra trás. -->
+      <button class="btn" id="inventarioHistoricoBtn" style="display:none;"
+              title="Inventários já fechados nesta unidade, com a acuracidade de cada um">📊 Inventários</button>
+      <span class="status-msg" id="inventarioMsg"></span>
       <!-- Robson, 11/09/2026: "coloque uma caixa de seleção, para que eu
            selecione os itens que eu quero tirar da planilha" -- exclusão em
            lote, mesma permissão do 🗑️ por linha (ver podeVerEstoqueMinimo()
@@ -278,7 +284,17 @@
             <th class="col-acoes">Ações</th>
             <th class="col-contagem" style="display:none;">
               <div>Estoque Físico</div>
-              <button id="limparContagemBtn" type="button">Limpar tudo</button>
+              <!-- ⚠️ "Fechar inventário" é o caminho principal desde 14/09/2026: ele
+                   CONGELA a contagem em `inventarios`/`inventario_itens` e só então
+                   limpa. Antes, o único jeito de terminar era apagar -- e com a
+                   contagem ia embora a única prova do trabalho, e a resposta pra
+                   "qual é a nossa acuracidade?". Ver js/inventario.js. -->
+              <button id="fecharInventarioBtn" type="button"
+                      title="Guarda esta contagem no histórico (com a acuracidade) e limpa a tela">✅ Fechar inventário</button>
+              <!-- Continua existindo, e de propósito: contagem de teste ou começada
+                   errada não pode virar histórico. Só deixou de ser o único caminho. -->
+              <button id="limparContagemBtn" type="button"
+                      title="Apaga a contagem SEM guardar no histórico">Descartar</button>
             </th>
           </tr>
         </thead>
@@ -1865,6 +1881,10 @@
        Só leitura: responde ONDE o item está, em todas as telas de uma vez, e
        manda pra tela que resolve. Ver FONTES_BUSCA em js/busca.js -- tela nova
        no portal é uma entrada nova ali. -->
+  <!-- Histórico de inventários e acuracidade (ver js/inventario.js). -->
+  <div class="modal-overlay" id="inventarioModal">
+    <div class="modal-box" id="inventarioModalBox" style="max-width:860px;"></div>
+  </div>
   <div class="modal-overlay" id="buscaGlobalModal">
     <div class="modal-box" id="buscaGlobalBox" style="max-width:720px;">
       <button class="modal-close" id="buscaGlobalFechar">✕</button>
@@ -1991,6 +2011,9 @@
 <!-- Depois dos outros: usa escapeHtml, rotuloUnidade e os globais de sessão. -->
 <script src="js/sugestao.js"></script>
 <script src="js/notificacoes.js"></script>
+<!-- Fechar inventário: lê currentData/contagemMap de js/estoque.js, em tempo
+     de execução (só quando alguém clica). -->
+<script src="js/inventario.js"></script>
 <!-- Busca global: usa normalizaCodigoItem/escapeIlike (js/estoque.js) e
      tempoReservadoTexto (js/reservas.js), os dois só em tempo de execução. -->
 <script src="js/busca.js"></script>

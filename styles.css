@@ -1309,3 +1309,15 @@ td.col-acoes { white-space: nowrap; text-align: center; }
    se clica pra repetir a busca certa. */
 .busca-sugestoes { display: flex; flex-direction: column; gap: 6px; }
 .busca-sugestao { text-align: left; font-weight: 400; }
+
+
+/* O "Fechar inventário" é o caminho principal e o "Descartar" é a saída de
+   emergência -- o peso visual diz isso antes de a pessoa ler o rótulo. */
+#fecharInventarioBtn {
+  display: block; width: 100%; margin-top: 4px; padding: 3px 6px;
+  font-size: 11px; font-weight: 700; cursor: pointer;
+  border: 1px solid var(--ok-acao); border-radius: 6px;
+  background: var(--ok-acao); color: var(--sobre-acento);
+}
+#limparContagemBtn { opacity: 0.75; }
+#limparContagemBtn:hover { opacity: 1; }
