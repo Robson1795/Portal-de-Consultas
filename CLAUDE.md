@@ -3,7 +3,7 @@
 Contexto do projeto para qualquer agente de IA ou pessoa que for mexer neste repositório.
 Sempre em **português do Brasil**.
 
-**Atualizado:** 14/09/2026 (reserva de aço pelo PCP)
+**Atualizado:** 14/09/2026 (reserva de aço pelo PCP; gravação inline da aba Entrada)
 **Mantenedores:** Robson (dono do projeto e admin geral) · Victor Dobner (colaborador)
 
 > Este arquivo é lido automaticamente pelo Claude Code ao abrir a pasta do projeto.
@@ -4012,3 +4012,67 @@ duas encerradas e diz quanto cada uma **durou**; a etiqueta sai com RESERVADO
 antes do pedido, toda em milímetros, com aço, lote e responsável, e sem QR.
 **40 de 41 checagens passaram** — a única falha foi da própria checagem, que
 lia o `<title>` da etiqueta junto com o corpo. Zero erro de console.
+
+## ⚠️ "Failed to fetch" ao salvar: rede, e nao recusa do banco (14/09/2026)
+
+O Victor: *"na tela 'conferencia EXP acessorios' aba entrada, ao tentar mudar a
+data de entrada aparece o erro 'Nao foi possivel salvar a data: TypeError:
+failed to fetch'"*.
+
+**A distincao que faltava.** `TypeError: Failed to fetch` **nao vem do banco**:
+e a excecao do `fetch` do navegador, que o supabase-js repassa como texto dentro
+de `error.message` (nao ha `code` nenhum para testar -- so o texto). A
+requisicao nao chegou a ter resposta: rede caiu, VPN dormiu, proxy ou extensao
+bloqueou, a maquina hibernou com a tela aberta. O portal tratava isso como se
+fosse recusa do banco: mostrava o texto em ingles e **apagava o que a pessoa
+tinha digitado**, devolvendo o valor antigo ao campo.
+
+Sondado na API em 14/09/2026, de fora do portal: o projeto esta acordado
+(`/auth/v1/health` responde), o preflight `OPTIONS` de `PATCH` volta 200 com
+`access-control-allow-methods` incluindo PATCH, e um `PATCH` real e aceito com
+`Access-Control-Allow-Origin` do dominio do portal. **Nao e o portal nem o
+Supabase recusando -- e o caminho entre os dois**, na maquina de quem edita.
+
+### O que mudou, nos tres campos editaveis direto na lista (aba Entrada)
+
+`gravarCampoExpControle(id, campos)` passou a ser o unico caminho de gravacao da
+Localizacao, da Quantidade e das duas datas (Entrada e Saida):
+
+1. ⚠️ **Recibo (`.select('id')`), que nao existia em nenhum dos tres.**
+   Conferido na propria API no mesmo dia: um `PATCH` que nao casa linha nenhuma
+   -- **inclusive um barrado pelo RLS** -- responde **204 No Content com
+   `error: null`**. Sem o recibo a tela pintava a borda azul, dizia que salvou, e
+   o F5 desmentia. E o item A1 da `AUDITORIA.md`, que o resto do projeto ja fecha
+   e estes tres editores tinham deixado passar. Agora, zero linha alterada vira
+   aviso ("o registro foi excluido por outra pessoa, ou seu acesso nao permite").
+2. **Uma segunda tentativa, so quando a falha e de rede.** Estes `update` sao
+   idempotentes (gravam um valor fixo numa linha), entao repetir e seguro -- e
+   uma piscada de rede deixa de custar o que a pessoa digitou. Erro de verdade do
+   banco **nao** e repetido: a mensagem dele sai na hora.
+3. **O campo nao perde mais o texto digitado.** Falhou, ele fica **vermelho**,
+   com "NAO SALVOU: ..." no tooltip e o valor digitado intacto -- mesmo principio
+   do `⚠ nao salvou` da contagem (`marcarFalhaContagem()` em
+   `js/estoque.js`). Devolver o valor antigo obrigava a redigitar tudo so para
+   tentar de novo.
+4. **Mensagem em portugues** para o caso de rede, dizendo o que conferir
+   (internet/VPN) -- "TypeError: failed to fetch" nao diz a ninguem o que fazer.
+
+O que ja funcionava continua igual: data invalida e campo em branco sao recusados
+**sem chamar o banco** (e ai devolver o valor anterior faz sentido), e editar sem
+mudar nada nao gera requisicao.
+
+**Nao reproduzi a falha original** -- a API responde normalmente daqui. Se
+voltar a acontecer com frequencia numa maquina so, o proximo passo e olhar a aba
+Rede do navegador (F12) no momento do erro: `ERR_BLOCKED_BY_CLIENT` aponta
+extensao/antivirus, `ERR_INTERNET_DISCONNECTED` ou `ERR_NAME_NOT_RESOLVED`
+apontam rede/VPN.
+
+Conferido no navegador, com a resposta do Supabase simulada nos cinco cenarios:
+sucesso (uma requisicao, sem alerta); **rede caindo uma vez** (tenta de novo e
+salva, sem nenhum alerta na cara da pessoa); **rede caindo sempre** (duas
+tentativas, mensagem em portugues sem "failed to fetch", campo vermelho com o
+texto digitado preservado, memoria nao atualizada a toa); **204 sem linha
+alterada** (avisa em vez de dizer que salvou, e nao pinta a borda azul); e erro
+de verdade do banco (mensagem crua, sem repetir). Mais Localizacao e Quantidade
+pelo listener real de `focusout`, incluindo a maiuscula do endereco. **22 de 22
+checagens na data e 3 de 3 nos outros dois campos.** Zero erro de console.
