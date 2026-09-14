@@ -445,16 +445,32 @@ function tempoReservadoEntre(inicio, fim) {
 // que ninguém escaneia é tinta gasta e uma promessa falsa na etiqueta. Se um
 // dia a câmera do módulo de OCR virar leitor de reserva, o campo natural para
 // codificar é o `id` desta linha.
-function imprimirEtiquetaReserva(id) {
+// ⚠️ O QR é gerado ANTES de abrir a aba, e entra na folha como `data:` URL.
+// A etiqueta é um documento à parte, que vai pra impressora e às vezes pra um
+// computador sem internet -- pendurar um <script> de CDN lá dentro deixaria a
+// folha depender da rede no pior momento possível. Aqui o desenho já vai pronto.
+//
+// Se o gerador não baixar, a etiqueta sai IGUAL, só sem o QR: a folha sempre
+// funcionou sem ele, e deixar de imprimir por causa de um enfeite seria trocar
+// um problema pequeno por um grande.
+async function imprimirEtiquetaReserva(id) {
   const r = reservasAco.find(x => x.id === id);
   if (!r) return;
+
+  let qrSrc = null;
+  try {
+    qrSrc = await qrDataURL(normalizaCodigoItem(r.codigo_item));
+  } catch (e) {
+    console.warn('Etiqueta de reserva: o QR não foi gerado, a folha sai sem ele.', e.message);
+  }
+
   const aba = window.open('', '_blank');
   if (!aba) { alert('O navegador bloqueou a nova aba. Libere pop-ups pra este site e tente de novo.'); return; }
-  aba.document.write(montarHtmlEtiquetaReserva(r));
+  aba.document.write(montarHtmlEtiquetaReserva(r, qrSrc));
   aba.document.close();
 }
 
-function montarHtmlEtiquetaReserva(r) {
+function montarHtmlEtiquetaReserva(r, qrSrc) {
   const linha = (rotulo, valor) => (valor !== null && valor !== undefined && String(valor).trim())
     ? `<div class="et-linha"><span class="et-rot">${rotulo}</span> ${escapeHtml(String(valor))}</div>` : '';
 
@@ -476,7 +492,12 @@ function montarHtmlEtiquetaReserva(r) {
   }
   /* RESERVADO em 26mm: e a unica coisa que precisa ser lida de longe, porque e
      ela que impede alguem de cortar a bobina. */
-  .et-titulo { font-size: 26mm; font-weight: 900; line-height: 1; letter-spacing: 0.04em; text-align: center; }
+  /* O QR fica ao LADO do RESERVADO, não em cima nem embaixo: a palavra continua
+     sendo o que se lê de longe, e o QR só precisa ser alcançável pela câmera de
+     perto. 22mm lê bem num celular a um palmo, e não rouba altura da folha. */
+  .et-cabeca { display: flex; align-items: center; gap: 6mm; }
+  .et-titulo { font-size: 26mm; font-weight: 900; line-height: 1; letter-spacing: 0.04em; text-align: center; flex: 1; }
+  .et-qr { width: 22mm; height: 22mm; flex: none; }
   .et-pedido {
     font-size: 16mm; font-weight: 900; line-height: 1.1; text-align: center;
     margin-top: 4mm; padding-top: 4mm; border-top: 0.6mm solid #000;
@@ -490,7 +511,10 @@ function montarHtmlEtiquetaReserva(r) {
   .et-rodape { margin-top: 6mm; padding-top: 3mm; border-top: 0.4mm solid #666; font-size: 4mm; color: #333; }
 </style></head><body>
 <div class="etiqueta">
-  <div class="et-titulo">RESERVADO</div>
+  <div class="et-cabeca">
+    <div class="et-titulo">RESERVADO</div>
+    ${qrSrc ? `<img class="et-qr" src="${qrSrc}" alt="">` : ''}
+  </div>
   <div class="et-pedido"><small>PEDIDO</small>${escapeHtml(r.pedido)}</div>
   <div class="et-corpo">
     <div class="et-item">${escapeHtml(r.codigo_item)}</div>

@@ -94,6 +94,11 @@
           <button class="topbar-menu" id="menuToggle" title="Abrir/fechar menu" aria-label="Abrir ou fechar o menu">&#9776;</button>
           <div class="topbar-local" id="topbarLocal"></div>
           <div class="topbar-user">
+            <!-- Leitor de código (14/09/2026). Fica ao lado da busca porque é a
+                 mesma pergunta, feita com a câmera em vez do teclado: o código
+                 lido cai direto na busca global. -->
+            <button class="topbar-tema" id="scannerBtn" title="Ler código de barras ou QR com a câmera"
+                    aria-label="Ler código">📷</button>
             <!-- Busca global (14/09/2026): o mesmo código de item vive em seis
                  tabelas diferentes, e não havia como perguntar "onde está?" uma
                  vez só. Fica no cabeçalho porque não pertence a tela nenhuma --
@@ -1882,6 +1887,35 @@
        manda pra tela que resolve. Ver FONTES_BUSCA em js/busca.js -- tela nova
        no portal é uma entrada nova ali. -->
   <!-- Histórico de inventários e acuracidade (ver js/inventario.js). -->
+  <!-- ============ LEITOR DE CÓDIGO (14/09/2026) ============
+       `BarcodeDetector` é API nativa do navegador -- sem biblioteca, sem CDN.
+       Nem todo navegador tem (funciona no Chrome do celular), e por isso o
+       campo de digitar não é enfeite: é o caminho de sempre no computador.
+       Ver js/scanner.js. -->
+  <div class="modal-overlay" id="scannerModal">
+    <div class="modal-box" style="max-width:460px;">
+      <button class="modal-close" id="scannerFechar">✕</button>
+      <h3 style="margin-top:0;">📷 Ler código</h3>
+      <div id="scannerCameraArea" style="display:none;">
+        <div class="scanner-moldura">
+          <video id="scannerVideo" playsinline muted></video>
+          <div class="scanner-mira"></div>
+        </div>
+      </div>
+      <div id="scannerAviso" class="busca-vazio"></div>
+      <div class="modal-label">Ou digite o código</div>
+      <div style="display:flex; gap:8px;">
+        <input type="text" id="scannerManualInput" placeholder="Ex.: 996613I"
+               style="flex:1; padding:10px 12px; border:1px solid var(--border); border-radius:10px;
+                      font-size:15px; background:var(--panel); color:var(--ink);">
+        <button class="btn btn-primary" id="scannerManualBtn">Procurar</button>
+      </div>
+      <div class="modal-text" style="font-size:11.5px; color:var(--muted); margin-top:10px;">
+        O que for lido cai na <b>busca global</b>: o leitor não precisa saber se aquilo é um item,
+        um lote ou um endereço — a busca procura em todas as telas de uma vez.
+      </div>
+    </div>
+  </div>
   <div class="modal-overlay" id="inventarioModal">
     <div class="modal-box" id="inventarioModalBox" style="max-width:860px;"></div>
   </div>
@@ -2011,6 +2045,8 @@
 <!-- Depois dos outros: usa escapeHtml, rotuloUnidade e os globais de sessão. -->
 <script src="js/sugestao.js"></script>
 <script src="js/notificacoes.js"></script>
+<!-- Leitor de código: chama abrirBuscaGlobal() (js/busca.js) em tempo de execução. -->
+<script src="js/scanner.js"></script>
 <!-- Fechar inventário: lê currentData/contagemMap de js/estoque.js, em tempo
      de execução (só quando alguém clica). -->
 <script src="js/inventario.js"></script>

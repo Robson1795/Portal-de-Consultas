@@ -43,6 +43,7 @@ servidos são o próprio código-fonte. Divididos na Fase 2a (03/09/2026):
 | `js/painel.js` | Painel do Dia: o que está fora do lugar agora, por perfil (seção 25) |
 | `js/busca.js` | Busca global: onde o item está em todas as telas, de uma vez (seção 26) |
 | `js/inventario.js` | Fechar inventário: congela a contagem e calcula a acuracidade (seção 27) |
+| `js/scanner.js` | Leitor de código pela câmera (BarcodeDetector) e o QR das etiquetas (seção 28) |
 
 São **scripts clássicos, não módulos**, carregados nessa ordem no fim do `body`. O `let`/`const` de
 nível superior vai para o escopo lexical global, compartilhado entre os arquivos — é por isso que o
@@ -4313,3 +4314,79 @@ gravado, o detalhe leva sistema/físico/diferença mais o retrato, a contagem s�
 apagada depois de tudo gravado, **falha no detalhe e falha no cabeçalho não
 apagam nada** e dizem isso, o histórico explica a conta, e o detalhe traz a maior
 divergência em cima. **29 de 29 checagens.**
+
+## 28. O celular virou leitor — e aí o QR passou a valer (14/09/2026)
+
+Quando a etiqueta de reserva de aço foi feita (seção 23), o QR foi **recusado**,
+com o motivo escrito: *"não existe leitor no portal nem rota de link profundo que
+abra uma reserva a partir de um código. Um QR que ninguém escaneia é tinta gasta
+e uma promessa falsa na etiqueta. Se um dia a câmera do módulo de OCR virar
+leitor de reserva..."*. Este é esse dia — e a ordem importou: **o leitor veio
+primeiro, o QR depois.**
+
+Botão 📷 no cabeçalho, ao lado da busca: é a mesma pergunta, feita com a câmera
+em vez do teclado.
+
+### ⚠️ Sem biblioteca, por uma vez
+
+`BarcodeDetector` é **API nativa do navegador** — zero dependência, zero CDN, o
+que combina com o "sem etapa de build" do projeto. O preço é que **nem todo
+navegador tem** (funciona no Chrome do Android, ChromeOS e macOS; no Windows
+quase nunca), e por isso **o campo de digitar não é enfeite: é o caminho de
+sempre no computador**. A tela diz onde a câmera funciona em vez de só falhar.
+
+### O que ele faz com o código lido: a coisa mais simples possível
+
+**Joga na busca global** (seção 26). O leitor não tem como saber se aquilo é um
+item, um lote ou um endereço — e a busca já procura em todas as telas de uma vez.
+Uma rota especial por tipo de código seria uma segunda regra para manter em
+sincronia com aquela.
+
+### Detalhes que só aparecem no galpão
+
+- **Câmera de trás** (`facingMode: environment`): a frontal é inútil para ler
+  etiqueta colada numa bobina.
+- ⚠️ **A câmera é desligada de verdade** ao ler e ao fechar (`track.stop()`). Um
+  `<video>` escondido com a trilha aberta mantém a luzinha de gravação acesa e
+  come bateria — do celular do conferente, que é justamente a máquina onde esta
+  tela existe para rodar. Testado nos dois caminhos.
+- **Vibra ao ler** (60 ms): com luva e barulho, o retorno tátil é o que diz "leu"
+  sem a pessoa precisar olhar a tela de perto.
+- **250 ms entre tentativas**: instantâneo na mão, sem fritar o processador.
+- ⚠️ **Tudo depois do `getUserMedia` vai dentro de um `try`.** `srcObject` recusa
+  valor que não seja `MediaStream`, `play()` pode ser bloqueado pela política de
+  autoplay e o `BarcodeDetector` recusa formato não suportado — cada um desses
+  estourava como **rejeição não tratada**, deixando a tela parada em "Abrindo a
+  câmera..." **com a câmera ligada por trás**. Agora falhar termina em mensagem e
+  câmera desligada.
+
+### O QR na etiqueta de reserva
+
+- ⚠️ **Carrega só o código do item** — nada de URL nem de id interno. Quem
+  escaneia quer saber "que material é este e onde ele está", que é exatamente o
+  que a busca global responde com o código; e um id interno numa etiqueta
+  impressa vira lixo no dia em que a tabela mudar, enquanto o código do item é a
+  linguagem que o galpão inteiro já fala.
+- ⚠️ **Gerado ANTES de abrir a aba e embutido como `data:` URL.** A etiqueta é
+  outro documento, que vai para a impressora e às vezes para um computador sem
+  internet: pendurar um `<script>` de CDN lá dentro faria a folha depender da
+  rede no pior momento possível.
+- ⚠️ **Se o gerador não baixar, a etiqueta sai igual, só sem o QR.** A folha
+  sempre funcionou sem ele; deixar de imprimir por causa de um enfeite seria
+  trocar um problema pequeno por um grande.
+- **22 mm, ao lado do RESERVADO** (não acima nem abaixo): a palavra continua
+  sendo o que se lê de longe, e o QR só precisa ser alcançável pela câmera de
+  perto. Medido em milímetros, como o resto da folha.
+
+⚠️ **`qrcode-generator`, e não o pacote `qrcode` do npm**: aquele só publica
+build de módulo, que precisaria de bundler — e este projeto não tem etapa de
+build. Este é MIT, sem dependência, e expõe a fábrica global num `<script>`
+comum. Conferido no CDN antes de escrever (o caminho "óbvio" do outro pacote
+responde 404).
+
+Conferido no navegador: sem a API, o leitor se declara indisponível, abre mesmo
+assim e manda digitar; digitar cai na busca global; com a API, pede a câmera de
+trás, procura QR e os lineares, o que é lido vai para a busca, **a câmera é
+desligada ao ler e ao fechar no ✕**; permissão negada vira mensagem com o nome do
+erro; o QR sai como `data:` URL e a etiqueta sai igual sem ele. **20 de 20
+checagens.**

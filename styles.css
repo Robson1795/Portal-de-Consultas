@@ -1321,3 +1321,18 @@ td.col-acoes { white-space: nowrap; text-align: center; }
 }
 #limparContagemBtn { opacity: 0.75; }
 #limparContagemBtn:hover { opacity: 1; }
+
+
+/* ============ Leitor de código (14/09/2026) ============ */
+.scanner-moldura {
+  position: relative; width: 100%; aspect-ratio: 4 / 3; overflow: hidden;
+  border-radius: 12px; background: #000; margin-bottom: 10px;
+}
+.scanner-moldura video { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* A mira não lê nada -- quem lê é o BarcodeDetector, no quadro inteiro. Ela
+   existe para a pessoa saber onde apontar, que é metade do problema de ler
+   etiqueta com luva no galpão. */
+.scanner-mira {
+  position: absolute; inset: 18% 12%; border: 3px solid rgba(255,255,255,0.9);
+  border-radius: 10px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.35);
+}
