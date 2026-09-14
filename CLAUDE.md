@@ -3043,36 +3043,49 @@ ali, e mesmo assim precisa dizer em qual das três está parado. Confundir
 as duas faria a barra de progresso de um caminhão inexistente reagir a um
 material que só está esperando no lugar certo.
 
-Select "Qual doca?" obrigatório em **três pontos**, todos chamando o
-mesmo `marcarSaidaExpControle(id, conferente, 'na_doca', docaId)`
-(recusa com alerta se `docaId` vier vazio):
-- Entrada, por item (`.expctrl-doca-select` + botão 🚚 DOCA);
-- Saída/Conferência, por item (`.conf-doca-select`);
-- Saída/Conferência, **"Tudo pra DOCA"** por localização
-  (`.conf-doca-select-lote`) -- todo mundo daquele endereço vai pra MESMA
-  doca de uma vez, não pergunta item a item (é um endereço só sendo
-  esvaziado).
+**Primeira versão** (revertida no mesmo dia, ver correção logo abaixo):
+select "Qual doca?" obrigatório item a item, tanto na Entrada quanto na
+Saída/Conferência (individual e no "Tudo pra DOCA"), travando o clique se
+ninguém escolhesse.
 
-`opcoesDocaFisicaHtml()` monta as opções uma vez só, reaproveitada nos
-três selects -- lista desalinhada entre eles seria pior que não ter
-select nenhum. A lista de docas (`docasParaEscolha`) é a MESMA consulta
-que já alimentava o selo 🚛 no Controle EXP (`carregarCarregamentosAbertos()`,
-14/09/2026 mais cedo), sem busca nova.
+### Correção: o seletor saiu da Entrada/Saída-Conferência, virou um por pedido na aba DOCA
 
-O "desfazer" (volta pra `na_expedicao`) limpa `doca_id` junto com os
-outros carimbos -- item que voltou pro endereço não está mais em doca
-nenhuma. A aba DOCA (dentro do Controle EXP, a que agrupa por pedido com
-"✓ Carregou") ganhou coluna **"Doca"** mostrando o nome físico
-(`nomeDaDocaFisica()`), pra quem for buscar o material saber exatamente
-onde procurar.
+Depois de ver a tela com o seletor em cada linha, o Robson apontou a
+própria aba DOCA com uma seta e corrigiu: *"a parte em qual doca so na
+aba que coloquei a flecha, me importa mais a doca la de fora do
+carregamento"*. Perguntado se o seletor deveria ficar por pedido ou por
+item dentro da aba DOCA, escolheu **por pedido**.
 
-Conferido no navegador: os três selects oferecem Doca 1/2/3; clicar sem
-escolher recusa com aviso e não grava nada, nos três pontos; escolhendo,
-grava `doca_id` junto com `status`/`na_doca_por`/`na_doca_em`; "Tudo pra
-DOCA" aplica a MESMA doca a todos os itens do endereço; a aba DOCA mostra
-o nome certo da doca por item. Zero erro de console (o 404 de
-`reservas_aco` que apareceu no teste é falta de tabela do Victor, não
-deste código).
+Entrada e Saída/Conferência voltaram a ser um clique simples (sem
+escolher nada) -- `marcarSaidaExpControle(id, conferente, 'na_doca')` sem
+`docaId`, gravando `doca_id: null`. É o mesmo raciocínio de sempre: quem
+está esvaziando um endereço rápido não pode parar em cada item pra
+escolher uma doca.
+
+O seletor mudou de lugar e de escopo: agora é **um por PEDIDO**, dentro
+do cabeçalho de cada grupo na aba DOCA (`.doca-grupo-select`), ao lado do
+botão "✓ Todo pedido carregou". Ao trocar, grava `doca_id` em TODOS os
+itens daquele pedido de uma vez (`update ... in(ids)`, um request só, não
+um por item) -- não é transição de status, é só o dado "onde está
+parado", então não passa por `marcarSaidaExpControle()`.
+
+`docaComumDoGrupo()` decide o valor inicial do select: se todo item do
+pedido já está na mesma doca, nasce marcado nela (confirma o que já foi
+feito); se divergem (ou nenhum tem doca ainda), nasce em branco --
+marcar uma doca por padrão quando os itens divergem inventaria um dado
+que ninguém confirmou.
+
+`opcoesDocaFisicaHtml(selecionadoId)` ganhou o parâmetro pra isso. A
+coluna **"Doca"** por item (mostrando `nomeDaDocaFisica()`) continua na
+tabela -- é a conferência visual de que o select do grupo bateu com a
+realidade de cada linha.
+
+Conferido no navegador: Entrada e Saída/Conferência voltaram ao clique
+único, sem select, gravando `doca_id: null`; o select por pedido nasce em
+branco com dois itens sem doca, marcado quando os dois já concordam, e em
+branco de novo quando divergem; escolher uma doca grava os dois itens do
+pedido num update só. Zero erro de console (o 404 de `reservas_aco` que
+aparece nos testes é falta de tabela do Victor, não deste código).
 
 ## Exportar HTML no Painel de Docas (14/09/2026)
 

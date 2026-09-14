@@ -1329,10 +1329,19 @@ let docasParaEscolha = [];
 // Select "qual doca" repetido em três lugares (Entrada, Saída/Conferência
 // item a item, e o "Tudo pra DOCA" por localização) -- função só, pra não
 // desalinhar as opções entre eles.
-function opcoesDocaFisicaHtml() {
+function opcoesDocaFisicaHtml(selecionadoId) {
   if (!docasParaEscolha.length) return '<option value="">Sem doca cadastrada</option>';
   return '<option value="">Qual doca?</option>'
-    + docasParaEscolha.map(d => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.nome)}</option>`).join('');
+    + docasParaEscolha.map(d => `<option value="${escapeHtml(d.id)}"${d.id === selecionadoId ? ' selected' : ''}>${escapeHtml(d.nome)}</option>`).join('');
+}
+
+// Se todo item do grupo já está na mesma doca, o select nasce marcado
+// nela (confirma o que já foi feito); se estão em docas diferentes (ou
+// ainda sem nenhuma), nasce em branco -- marcar "Doca 1" por padrão
+// quando os itens divergem inventaria um dado que ninguém confirmou.
+function docaComumDoGrupo(linhas) {
+  const valores = new Set(linhas.map(l => l.doca_id || ''));
+  return valores.size === 1 ? [...valores][0] : '';
 }
 
 async function carregarCarregamentosAbertos() {
@@ -1622,11 +1631,7 @@ function renderExpControle(erroCarregamento) {
              style="width:140px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px;">`
         : '—'}</td>
       <td class="col-acoes">
-        ${retirado ? '' : `<select class="expctrl-doca-select" data-id="${escapeHtml(l.id)}"
-                   title="Pra qual doca este item está indo" style="max-width:92px; font-size:11px; padding:3px 4px; border:1px solid var(--border); border-radius:6px;">
-                     ${opcoesDocaFisicaHtml()}
-                   </select>
-                   <button class="acao-btn expctrl-saida" data-id="${escapeHtml(l.id)}" title="Saiu do endereço pra área de carregamento (DOCA)">🚚 DOCA</button>`}
+        ${retirado ? '' : `<button class="acao-btn expctrl-saida" data-id="${escapeHtml(l.id)}" title="Saiu do endereço pra área de carregamento (DOCA)">🚚 DOCA</button>`}
         <button class="acao-btn expctrl-excluir" data-id="${escapeHtml(l.id)}" title="Excluir este registro">🗑</button>
       </td>
     </tr>`;
@@ -2900,16 +2905,13 @@ document.getElementById('expCtrlBody').addEventListener('click', async (e) => {
   }
   const btnSaida = e.target.closest('.expctrl-saida');
   if (btnSaida) {
-    // Robson, 14/09/2026: "tem que ter as opçoes das 03 docas pra ela
-    // marcar" -- obrigatório escolher, senão o material fica marcado
-    // "na doca" sem ninguém saber em qual das três.
-    const select = document.querySelector(`.expctrl-doca-select[data-id="${btnSaida.dataset.id}"]`);
-    const docaId = select ? select.value : '';
-    if (!docaId) { alert('Escolha pra qual doca este item está indo.'); return; }
-
-    // Vai pra doca, não direto pro carregamento -- mesmo fluxo de 3 estados
-    // do botão DOCA da aba Saída/Conferência (sql/fase36-doca.sql).
-    const ok = await marcarSaidaExpControle(btnSaida.dataset.id, nomeUsuarioAtual, 'na_doca', docaId);
+    // Robson, 14/09/2026, depois de ver o seletor de doca nesta tela:
+    // "a parte em qual doca so na aba que coloquei a flecha, me importa
+    // mais a doca la de fora do carregamento" -- escolher a doca saiu
+    // daqui (e da Saída/Conferência) e virou só um seletor por PEDIDO
+    // dentro da própria aba DOCA (ver renderDoca()), pra não travar o
+    // clique rápido de quem está esvaziando o endereço.
+    const ok = await marcarSaidaExpControle(btnSaida.dataset.id, nomeUsuarioAtual, 'na_doca');
     if (ok) await carregarProgramacao();
   }
 });
@@ -3707,12 +3709,7 @@ function renderConferencia() {
         <div class="cfg-barra">
           <span class="loc-chip">${escapeHtml(local)}</span>
           <span style="font-size:12px; color:var(--muted);">${itens.length} item(ns)</span>
-          <select class="conf-doca-select-lote" data-local="${escapeHtml(local)}"
-                  title="Pra qual doca todo mundo deste endereço está indo" style="margin-left:auto;
-                  max-width:130px; padding:5px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px;">
-            ${opcoesDocaFisicaHtml()}
-          </select>
-          <button class="btn btn-primary conf-retirar-tudo" data-local="${escapeHtml(local)}"
+          <button class="btn btn-primary conf-retirar-tudo" data-local="${escapeHtml(local)}" style="margin-left:auto;"
                   title="Todo mundo saiu deste endereço pra área de carregamento">
             🚚 Tudo pra DOCA
           </button>
@@ -3730,10 +3727,6 @@ function renderConferencia() {
                   <td class="num">${l.quantidade != null ? escapeHtml(l.quantidade) : '—'}</td>
                   <td class="loc">${escapeHtml(l.numero_pedido || '—')}${seloDocaDoPedido(l.numero_pedido)}</td>
                   <td class="col-acoes">
-                    <select class="conf-doca-select" data-id="${escapeHtml(l.id)}"
-                            title="Pra qual doca este item está indo" style="max-width:110px; padding:4px 5px; border:1px solid var(--border); border-radius:6px; font-size:12px;">
-                      ${opcoesDocaFisicaHtml()}
-                    </select>
                     <button class="btn conf-retirar-item" data-id="${escapeHtml(l.id)}"
                             title="Saiu deste endereço pra área de carregamento">🚚 DOCA</button>
                   </td>
@@ -3757,16 +3750,16 @@ document.getElementById('confBody').addEventListener('click', async (e) => {
   // aba de saída da localização automaticamente o material é transferido
   // pra lá" -- vai pra 'na_doca', não direto pro 'retirado' (fim de linha
   // fica pro botão ✓ Carregou, na aba DOCA). Ver sql/fase36-doca.sql.
+  // Robson, 14/09/2026, depois de ver o seletor de doca nesta tela: "a
+  // parte em qual doca so na aba que coloquei a flecha, me importa mais
+  // a doca la de fora do carregamento" -- escolher a doca saiu daqui (e
+  // da Entrada) e virou um seletor por PEDIDO dentro da própria aba DOCA
+  // (ver renderDoca()), pra não travar o clique rápido de quem está
+  // esvaziando o endereço.
   const btnItem = e.target.closest('.conf-retirar-item');
   if (btnItem) {
-    // Robson, 14/09/2026: "tem que ter as opçoes das 03 docas pra ela
-    // marcar" -- obrigatório escolher a doca física antes de confirmar.
-    const select = document.querySelector(`.conf-doca-select[data-id="${btnItem.dataset.id}"]`);
-    const docaId = select ? select.value : '';
-    if (!docaId) { alert('Escolha pra qual doca este item está indo.'); return; }
-
     btnItem.disabled = true;
-    const ok = await marcarSaidaExpControle(btnItem.dataset.id, nome, 'na_doca', docaId);
+    const ok = await marcarSaidaExpControle(btnItem.dataset.id, nome, 'na_doca');
     if (ok) await carregarProgramacao();
     else btnItem.disabled = false;
     return;
@@ -3775,16 +3768,10 @@ document.getElementById('confBody').addEventListener('click', async (e) => {
   const btnLocal = e.target.closest('.conf-retirar-tudo');
   if (btnLocal) {
     const local = btnLocal.dataset.local;
-    // Todo mundo desta localização vai pra MESMA doca -- é um endereço só
-    // sendo esvaziado de uma vez, não faria sentido perguntar item a item.
-    const selectLote = document.querySelector(`.conf-doca-select-lote[data-local="${CSS.escape(local)}"]`);
-    const docaId = selectLote ? selectLote.value : '';
-    if (!docaId) { alert('Escolha pra qual doca este endereço está indo.'); return; }
-
     const itens = linhasDoSetorAtual().filter(l => (l.localizacao || '(sem localização)') === local && aindaNoEndereco(l.status));
     if (!confirm(`Confirmar que ${itens.length} item(ns) de "${local}" saíram pra DOCA?`)) return;
     btnLocal.disabled = true;
-    for (const item of itens) await marcarSaidaExpControle(item.id, nome, 'na_doca', docaId);
+    for (const item of itens) await marcarSaidaExpControle(item.id, nome, 'na_doca');
     await carregarProgramacao();
   }
 });
@@ -4068,7 +4055,17 @@ function renderDoca() {
       <div class="cfg-barra">
         <span class="loc-chip">${chave === '(sem pedido)' ? 'Sem nº de pedido' : 'Pedido ' + escapeHtml(chave)}</span>
         <span style="font-size:12px; color:var(--muted);">${linhas.length} item(ns)</span>
-        <button class="btn btn-primary doca-tudo-carregou" data-pedido="${escapeHtml(chave)}" style="margin-left:auto;">
+        <!-- Robson, 14/09/2026: "a parte em qual doca so na aba que
+             coloquei a flecha, me importa mais a doca la de fora do
+             carregamento" -- um seletor por PEDIDO aqui na aba DOCA
+             (não mais item a item na Entrada/Saída-Conferência): marca
+             de uma vez a doca física de todo o pedido, sem travar o
+             clique rápido de quem esvazia o endereço. -->
+        <select class="doca-grupo-select" data-pedido="${escapeHtml(chave)}" style="margin-left:auto;
+                padding:5px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px;">
+          ${opcoesDocaFisicaHtml(docaComumDoGrupo(linhas))}
+        </select>
+        <button class="btn btn-primary doca-tudo-carregou" data-pedido="${escapeHtml(chave)}">
           ✓ Todo pedido carregou
         </button>
       </div>
@@ -4105,6 +4102,28 @@ function renderDoca() {
 
   renderHistoricoRetiradasDoca();
 }
+
+// Marca a doca física de TODO o pedido de uma vez (um update só, não um
+// por item) -- não é transição de status, é só o dado "onde está
+// fisicamente parado", então não passa por marcarSaidaExpControle().
+document.getElementById('docaBody').addEventListener('change', async (e) => {
+  const select = e.target.closest('.doca-grupo-select');
+  if (!select) return;
+  const docaId = select.value;
+  if (!docaId) return; // voltou pro "Qual doca?" -- nada a gravar
+
+  const pedido = select.dataset.pedido;
+  const itens = linhasNaDoca().filter(l => chavePedidoFolha(l.numero_pedido) === pedido);
+  if (!itens.length) return;
+
+  select.disabled = true;
+  const { error } = await sb.from('exp_controle_itens')
+    .update({ doca_id: docaId }).in('id', itens.map(l => l.id));
+  select.disabled = false;
+
+  if (error) { alert('Não foi possível marcar a doca: ' + error.message); return; }
+  await carregarProgramacao();
+});
 
 document.getElementById('docaBusca').addEventListener('input', (e) => {
   buscaDoca = e.target.value;
