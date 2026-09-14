@@ -1321,6 +1321,20 @@ function seloDocaDoPedido(numeroPedido) {
 // (doca_carregamento_pedidos -> doca_carregamentos -> docas): o aninhado
 // depende de o PostgREST resolver duas relações de uma vez, e quando
 // falha, falha silencioso -- aqui é preferível previsível.
+// As 3 docas cadastradas, pro select do botão 🚚 DOCA (ver
+// marcarDocaFisica() e opcoesDocaFisicaHtml()) -- alimentado pela mesma
+// consulta de baixo, sem busca própria.
+let docasParaEscolha = [];
+
+// Select "qual doca" repetido em três lugares (Entrada, Saída/Conferência
+// item a item, e o "Tudo pra DOCA" por localização) -- função só, pra não
+// desalinhar as opções entre eles.
+function opcoesDocaFisicaHtml() {
+  if (!docasParaEscolha.length) return '<option value="">Sem doca cadastrada</option>';
+  return '<option value="">Qual doca?</option>'
+    + docasParaEscolha.map(d => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.nome)}</option>`).join('');
+}
+
 async function carregarCarregamentosAbertos() {
   carregamentoAbertoPorPedido = new Map();
   pedidoChamadoParaDoca = new Map();
@@ -1334,11 +1348,15 @@ async function carregarCarregamentosAbertos() {
   if (carregamentos.error || docas.error) {
     // Silencioso de propósito (mesmo padrão de carregarConferirExpNotas):
     // se o fase39 ainda não rodou no Supabase, o Controle EXP continua
-    // funcionando inteiro -- só não mostra o aviso da doca.
+    // funcionando inteiro -- só não mostra o aviso da doca, e o botão
+    // 🚚 DOCA não tem doca pra oferecer (ver marcarDocaFisica()).
     console.warn('Não foi possível carregar os carregamentos das docas:',
                  (carregamentos.error || docas.error).message);
     return;
   }
+  // Mesma consulta alimenta o select "qual doca" do botão 🚚 DOCA (fase43)
+  // -- é a mesma lista de docas, não precisa buscar de novo.
+  docasParaEscolha = docas.data || [];
   if (!(carregamentos.data || []).length) return;
 
   const nomeDaDoca = new Map((docas.data || []).map(d => [d.id, d.nome]));
@@ -1604,7 +1622,11 @@ function renderExpControle(erroCarregamento) {
              style="width:140px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px;">`
         : '—'}</td>
       <td class="col-acoes">
-        ${retirado ? '' : `<button class="acao-btn expctrl-saida" data-id="${escapeHtml(l.id)}" title="Saiu do endereço pra área de carregamento (DOCA)">🚚 DOCA</button>`}
+        ${retirado ? '' : `<select class="expctrl-doca-select" data-id="${escapeHtml(l.id)}"
+                   title="Pra qual doca este item está indo" style="max-width:92px; font-size:11px; padding:3px 4px; border:1px solid var(--border); border-radius:6px;">
+                     ${opcoesDocaFisicaHtml()}
+                   </select>
+                   <button class="acao-btn expctrl-saida" data-id="${escapeHtml(l.id)}" title="Saiu do endereço pra área de carregamento (DOCA)">🚚 DOCA</button>`}
         <button class="acao-btn expctrl-excluir" data-id="${escapeHtml(l.id)}" title="Excluir este registro">🗑</button>
       </td>
     </tr>`;
@@ -2028,12 +2050,19 @@ async function gravarEtiquetaEmLote(linhas) {
 // sequência (entrou na doca, depois carregou), e usar as mesmas colunas
 // pras duas coisas apagaria "há quanto tempo ficou na doca antes de
 // carregar" assim que a segunda etapa acontecesse.
-async function marcarSaidaExpControle(id, conferente, novoStatus) {
+async function marcarSaidaExpControle(id, conferente, novoStatus, docaFisicaId) {
   const status = novoStatus || 'retirado';
   const linha = progExpControle.find(l => l.id === id);
   let patch;
   if (status === 'na_doca') {
-    patch = { status, na_doca_por: conferente, na_doca_em: new Date().toISOString() };
+    // Robson, 14/09/2026: "a minha responsavel que deixou o material la
+    // ela coloca o numero da doca" -- quem carrega o material já sabe pra
+    // qual das 3 docas físicas está indo; `doca_id` registra isso no
+    // mesmo instante (ver sql/fase43-exp-item-doca-fisica.sql). Diferente
+    // de `doca_carregamento_id` (fase39): aquele é o CAMINHÃO específico
+    // que carrega o pedido; este é só o ENDEREÇO FÍSICO (Doca 1/2/3), e
+    // pode existir antes de qualquer caminhão estar registrado ali.
+    patch = { status, na_doca_por: conferente, na_doca_em: new Date().toISOString(), doca_id: docaFisicaId || null };
   } else if (status === 'retirado') {
     patch = { status, retirado_por: conferente, retirado_em: new Date().toISOString() };
     // Painel de Docas (fase39): carimba em QUAL caminhão este item subiu,
@@ -2051,7 +2080,7 @@ async function marcarSaidaExpControle(id, conferente, novoStatus) {
     // O vínculo com o carregamento sai junto: o item não subiu naquele
     // caminhão, então não pode continuar contando na barra dele.
     patch = { status, na_doca_por: null, na_doca_em: null, retirado_por: null, retirado_em: null,
-              doca_carregamento_id: null };
+              doca_carregamento_id: null, doca_id: null };
   }
   const { error } = await sb.from('exp_controle_itens').update(patch).eq('id', id);
   if (error) { alert('Não foi possível salvar: ' + error.message); return false; }
@@ -2871,9 +2900,16 @@ document.getElementById('expCtrlBody').addEventListener('click', async (e) => {
   }
   const btnSaida = e.target.closest('.expctrl-saida');
   if (btnSaida) {
+    // Robson, 14/09/2026: "tem que ter as opçoes das 03 docas pra ela
+    // marcar" -- obrigatório escolher, senão o material fica marcado
+    // "na doca" sem ninguém saber em qual das três.
+    const select = document.querySelector(`.expctrl-doca-select[data-id="${btnSaida.dataset.id}"]`);
+    const docaId = select ? select.value : '';
+    if (!docaId) { alert('Escolha pra qual doca este item está indo.'); return; }
+
     // Vai pra doca, não direto pro carregamento -- mesmo fluxo de 3 estados
     // do botão DOCA da aba Saída/Conferência (sql/fase36-doca.sql).
-    const ok = await marcarSaidaExpControle(btnSaida.dataset.id, nomeUsuarioAtual, 'na_doca');
+    const ok = await marcarSaidaExpControle(btnSaida.dataset.id, nomeUsuarioAtual, 'na_doca', docaId);
     if (ok) await carregarProgramacao();
   }
 });
@@ -3671,7 +3707,12 @@ function renderConferencia() {
         <div class="cfg-barra">
           <span class="loc-chip">${escapeHtml(local)}</span>
           <span style="font-size:12px; color:var(--muted);">${itens.length} item(ns)</span>
-          <button class="btn btn-primary conf-retirar-tudo" data-local="${escapeHtml(local)}" style="margin-left:auto;"
+          <select class="conf-doca-select-lote" data-local="${escapeHtml(local)}"
+                  title="Pra qual doca todo mundo deste endereço está indo" style="margin-left:auto;
+                  max-width:130px; padding:5px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px;">
+            ${opcoesDocaFisicaHtml()}
+          </select>
+          <button class="btn btn-primary conf-retirar-tudo" data-local="${escapeHtml(local)}"
                   title="Todo mundo saiu deste endereço pra área de carregamento">
             🚚 Tudo pra DOCA
           </button>
@@ -3689,6 +3730,10 @@ function renderConferencia() {
                   <td class="num">${l.quantidade != null ? escapeHtml(l.quantidade) : '—'}</td>
                   <td class="loc">${escapeHtml(l.numero_pedido || '—')}${seloDocaDoPedido(l.numero_pedido)}</td>
                   <td class="col-acoes">
+                    <select class="conf-doca-select" data-id="${escapeHtml(l.id)}"
+                            title="Pra qual doca este item está indo" style="max-width:110px; padding:4px 5px; border:1px solid var(--border); border-radius:6px; font-size:12px;">
+                      ${opcoesDocaFisicaHtml()}
+                    </select>
                     <button class="btn conf-retirar-item" data-id="${escapeHtml(l.id)}"
                             title="Saiu deste endereço pra área de carregamento">🚚 DOCA</button>
                   </td>
@@ -3714,8 +3759,14 @@ document.getElementById('confBody').addEventListener('click', async (e) => {
   // fica pro botão ✓ Carregou, na aba DOCA). Ver sql/fase36-doca.sql.
   const btnItem = e.target.closest('.conf-retirar-item');
   if (btnItem) {
+    // Robson, 14/09/2026: "tem que ter as opçoes das 03 docas pra ela
+    // marcar" -- obrigatório escolher a doca física antes de confirmar.
+    const select = document.querySelector(`.conf-doca-select[data-id="${btnItem.dataset.id}"]`);
+    const docaId = select ? select.value : '';
+    if (!docaId) { alert('Escolha pra qual doca este item está indo.'); return; }
+
     btnItem.disabled = true;
-    const ok = await marcarSaidaExpControle(btnItem.dataset.id, nome, 'na_doca');
+    const ok = await marcarSaidaExpControle(btnItem.dataset.id, nome, 'na_doca', docaId);
     if (ok) await carregarProgramacao();
     else btnItem.disabled = false;
     return;
@@ -3724,10 +3775,16 @@ document.getElementById('confBody').addEventListener('click', async (e) => {
   const btnLocal = e.target.closest('.conf-retirar-tudo');
   if (btnLocal) {
     const local = btnLocal.dataset.local;
+    // Todo mundo desta localização vai pra MESMA doca -- é um endereço só
+    // sendo esvaziado de uma vez, não faria sentido perguntar item a item.
+    const selectLote = document.querySelector(`.conf-doca-select-lote[data-local="${CSS.escape(local)}"]`);
+    const docaId = selectLote ? selectLote.value : '';
+    if (!docaId) { alert('Escolha pra qual doca este endereço está indo.'); return; }
+
     const itens = linhasDoSetorAtual().filter(l => (l.localizacao || '(sem localização)') === local && aindaNoEndereco(l.status));
     if (!confirm(`Confirmar que ${itens.length} item(ns) de "${local}" saíram pra DOCA?`)) return;
     btnLocal.disabled = true;
-    for (const item of itens) await marcarSaidaExpControle(item.id, nome, 'na_doca');
+    for (const item of itens) await marcarSaidaExpControle(item.id, nome, 'na_doca', docaId);
     await carregarProgramacao();
   }
 });
@@ -3958,6 +4015,13 @@ document.getElementById('docaConferenteInput').addEventListener('input', (e) => 
   } catch (err) { /* idem */ }
 })();
 
+// Nome da doca física (Doca 1/2/3) a partir do id gravado no item --
+// mesma lista de docasParaEscolha que alimenta o select do botão 🚚 DOCA.
+function nomeDaDocaFisica(docaId) {
+  if (!docaId) return '—';
+  return (docasParaEscolha.find(d => d.id === docaId) || {}).nome || '—';
+}
+
 function linhasNaDoca() {
   const busca = normalizaBuscaLocal(buscaDoca);
   return linhasDoSetorAtual().filter(l => {
@@ -4010,7 +4074,7 @@ function renderDoca() {
       </div>
       <div class="scroll-area">
         <table>
-          <thead><tr><th>Item</th><th>Descrição</th><th>Qtd</th><th>Veio de</th><th>Levou pra doca</th><th>Ação</th></tr></thead>
+          <thead><tr><th>Item</th><th>Descrição</th><th>Qtd</th><th>Veio de</th><th>Doca</th><th>Levou pra doca</th><th>Ação</th></tr></thead>
           <tbody>
             ${linhas.map(l => {
               const desc = expCtrlDescMap.get(normalizaCodigoItem(l.codigo_item));
@@ -4025,6 +4089,7 @@ function renderDoca() {
                 <td>${desc && desc.descricao ? escapeHtml(desc.descricao) : '—'}</td>
                 <td class="num">${l.quantidade != null ? escapeHtml(l.quantidade) : '—'}</td>
                 <td class="loc">${escapeHtml(l.localizacao || '—')}</td>
+                <td class="loc"><span class="loc-chip">${escapeHtml(nomeDaDocaFisica(l.doca_id))}</span></td>
                 <td class="loc">${quemLevou}<div style="font-size:11px; color:var(--muted);">${escapeHtml(desde)}</div></td>
                 <td class="col-acoes">
                   <button class="btn doca-carregou" data-id="${escapeHtml(l.id)}">✓ Carregou</button>

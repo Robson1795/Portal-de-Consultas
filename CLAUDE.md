@@ -3016,6 +3016,64 @@ grupo; busca por pedido continua funcionando; item retirado na mesma
 localização continua fora, mesmo buscando por ela. Zero erro de
 console.
 
+## Qual das 3 docas físicas recebeu o material (14/09/2026)
+
+O Robson, olhando o botão 🚚 DOCA na aba Entrada: *"nessa aba das docas
+quando sai para carergar a minha responsavel que deixou o material la ela
+coloca o numero da doca, entao tem que ter as opçoes das 03 docas pra ela
+marcar o carregamento"*.
+
+Até aqui, "na_doca" (fase36) era um lugar só, indiferenciado -- o botão
+só marcava "saiu do endereço", sem dizer PRA QUAL das 3 docas físicas.
+Quem leva o material fisicamente já sabe pra qual está indo (é ela quem
+carrega a caixa até lá); a escolha vira dado nesse mesmo instante, em vez
+de ficar só na cabeça de quem carregou.
+
+Coluna nova, `exp_controle_itens.doca_id` (`sql/fase43-exp-item-doca-
+fisica.sql`), apontando pra `docas` -- a MESMA tabela que já alimenta o
+Painel de Docas (fase39). Doca 1/2/3 tem um cadastro só no sistema
+inteiro, não um texto redigitado aqui que pode divergir de lá.
+
+⚠️ **Diferente de `doca_carregamento_id`** (fase39, usado por
+`carregamentoAbertoDoPedido()`): aquela coluna aponta pra um CAMINHÃO
+específico, e só existe quando há um caminhão de verdade encostado
+carregando aquele pedido. Esta (`doca_id`) é só o ENDEREÇO FÍSICO -- o
+material pode chegar na doca ANTES de qualquer caminhão ser registrado
+ali, e mesmo assim precisa dizer em qual das três está parado. Confundir
+as duas faria a barra de progresso de um caminhão inexistente reagir a um
+material que só está esperando no lugar certo.
+
+Select "Qual doca?" obrigatório em **três pontos**, todos chamando o
+mesmo `marcarSaidaExpControle(id, conferente, 'na_doca', docaId)`
+(recusa com alerta se `docaId` vier vazio):
+- Entrada, por item (`.expctrl-doca-select` + botão 🚚 DOCA);
+- Saída/Conferência, por item (`.conf-doca-select`);
+- Saída/Conferência, **"Tudo pra DOCA"** por localização
+  (`.conf-doca-select-lote`) -- todo mundo daquele endereço vai pra MESMA
+  doca de uma vez, não pergunta item a item (é um endereço só sendo
+  esvaziado).
+
+`opcoesDocaFisicaHtml()` monta as opções uma vez só, reaproveitada nos
+três selects -- lista desalinhada entre eles seria pior que não ter
+select nenhum. A lista de docas (`docasParaEscolha`) é a MESMA consulta
+que já alimentava o selo 🚛 no Controle EXP (`carregarCarregamentosAbertos()`,
+14/09/2026 mais cedo), sem busca nova.
+
+O "desfazer" (volta pra `na_expedicao`) limpa `doca_id` junto com os
+outros carimbos -- item que voltou pro endereço não está mais em doca
+nenhuma. A aba DOCA (dentro do Controle EXP, a que agrupa por pedido com
+"✓ Carregou") ganhou coluna **"Doca"** mostrando o nome físico
+(`nomeDaDocaFisica()`), pra quem for buscar o material saber exatamente
+onde procurar.
+
+Conferido no navegador: os três selects oferecem Doca 1/2/3; clicar sem
+escolher recusa com aviso e não grava nada, nos três pontos; escolhendo,
+grava `doca_id` junto com `status`/`na_doca_por`/`na_doca_em`; "Tudo pra
+DOCA" aplica a MESMA doca a todos os itens do endereço; a aba DOCA mostra
+o nome certo da doca por item. Zero erro de console (o 404 de
+`reservas_aco` que apareceu no teste é falta de tabela do Victor, não
+deste código).
+
 ## Exportar HTML no Painel de Docas (14/09/2026)
 
 O Robson: *"Depois quero um campo que extrai o relatorio em HTM"*.
