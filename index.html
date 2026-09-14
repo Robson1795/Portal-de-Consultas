@@ -94,6 +94,12 @@
           <button class="topbar-menu" id="menuToggle" title="Abrir/fechar menu" aria-label="Abrir ou fechar o menu">&#9776;</button>
           <div class="topbar-local" id="topbarLocal"></div>
           <div class="topbar-user">
+            <!-- Busca global (14/09/2026): o mesmo código de item vive em seis
+                 tabelas diferentes, e não havia como perguntar "onde está?" uma
+                 vez só. Fica no cabeçalho porque não pertence a tela nenhuma --
+                 é a pergunta que se faz de qualquer uma delas. Ctrl+K também abre. -->
+            <button class="topbar-tema" id="buscaGlobalBtn" title="Procurar um item em todas as telas (Ctrl+K)"
+                    aria-label="Busca global">🔎</button>
             <!-- Canal do consultor para o Robson e o Victor (ver js/sugestao.js).
                  Fica escondido por padrão: montarMenu() decide quem vê. -->
             <button class="topbar-tema" id="sugestaoBtn" style="display:none;"
@@ -1855,6 +1861,27 @@
     </div>
   </div>
 
+  <!-- ============ BUSCA GLOBAL (14/09/2026) ============
+       Só leitura: responde ONDE o item está, em todas as telas de uma vez, e
+       manda pra tela que resolve. Ver FONTES_BUSCA em js/busca.js -- tela nova
+       no portal é uma entrada nova ali. -->
+  <div class="modal-overlay" id="buscaGlobalModal">
+    <div class="modal-box" id="buscaGlobalBox" style="max-width:720px;">
+      <button class="modal-close" id="buscaGlobalFechar">✕</button>
+      <h3 style="margin-top:0;">🔎 Onde está este item?</h3>
+      <div class="modal-text" style="font-size:12px; color:var(--muted); margin-bottom:10px;">
+        Almoxarifado, EPI, Benchmark, expedição, doca, Catálogo EXP, aço e reservas —
+        das oito unidades, de uma vez. Digite o código (ou parte da descrição).
+      </div>
+      <div style="display:flex; gap:8px;">
+        <input type="text" id="buscaGlobalInput" placeholder="Ex.: 996613I"
+               style="flex:1; padding:10px 12px; border:1px solid var(--border); border-radius:10px;
+                      font-size:15px; background:var(--panel); color:var(--ink);">
+        <button class="btn btn-primary" id="buscaGlobalIr">Procurar</button>
+      </div>
+      <div id="buscaGlobalResultado" style="margin-top:14px;"></div>
+    </div>
+  </div>
   <div class="modal-overlay" id="ondeEstaModal">
     <div class="modal-box" id="ondeEstaModalBox" style="max-width:640px;"></div>
   </div>
@@ -1964,6 +1991,9 @@
 <!-- Depois dos outros: usa escapeHtml, rotuloUnidade e os globais de sessão. -->
 <script src="js/sugestao.js"></script>
 <script src="js/notificacoes.js"></script>
+<!-- Busca global: usa normalizaCodigoItem/escapeIlike (js/estoque.js) e
+     tempoReservadoTexto (js/reservas.js), os dois só em tempo de execução. -->
+<script src="js/busca.js"></script>
 <!-- ⚠️ O Painel do Dia vai por ÚLTIMO: ele lê constantes de quase todos os
      outros arquivos (RESERVA_DIAS_CRITICA, PERFIS, DEPOSITOS...). Carregado
      antes deles, o `const` do topo dele avalia cedo demais e o arquivo inteiro

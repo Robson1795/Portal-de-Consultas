@@ -1279,3 +1279,33 @@ td.col-acoes { white-space: nowrap; text-align: center; }
 @media (max-width: 560px) {
   .painel-grade { grid-template-columns: 1fr; }
 }
+
+
+/* ============ Busca global (14/09/2026) ============ */
+.busca-cabeca { border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 10px; }
+.busca-codigo { font-size: 20px; font-weight: 800; color: var(--ink); }
+.busca-descricao { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+.busca-bloco { margin-bottom: 14px; }
+.busca-bloco-titulo {
+  font-size: 13px; font-weight: 700; color: var(--blue-texto);
+  display: flex; align-items: center; gap: 8px; margin-bottom: 4px;
+}
+.busca-conta {
+  background: var(--row-alt); color: var(--muted); border-radius: 999px;
+  padding: 1px 8px; font-size: 11px; font-weight: 700;
+}
+.busca-tabela { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.busca-tabela td { padding: 4px 6px; border-bottom: 1px solid var(--border); color: var(--ink); }
+.busca-tabela td.num { text-align: right; white-space: nowrap; font-weight: 700; }
+
+.busca-vazio { text-align: center; color: var(--muted); font-size: 13.5px; padding: 14px 4px; line-height: 1.5; }
+.busca-corte { font-size: 11px; color: var(--muted); padding: 2px 6px; }
+.busca-erro {
+  font-size: 12px; color: var(--erro-borda); background: var(--erro-fundo);
+  border: 1px solid var(--erro-borda); border-radius: 8px; padding: 6px 10px; margin-bottom: 10px;
+}
+/* Os candidatos por descrição: um por linha, o código em destaque -- é nele que
+   se clica pra repetir a busca certa. */
+.busca-sugestoes { display: flex; flex-direction: column; gap: 6px; }
+.busca-sugestao { text-align: left; font-weight: 400; }

@@ -41,6 +41,7 @@ servidos são o próprio código-fonte. Divididos na Fase 2a (03/09/2026):
 | `js/notificacoes.js` | Popup de canto: avisa o admin de cadastro pendente, em qualquer tela (seção 21) |
 | `js/reservas.js` | Reserva de bobinas de aço pelo PCP: abas Reservas e Histórico, etiqueta (seção 23) |
 | `js/painel.js` | Painel do Dia: o que está fora do lugar agora, por perfil (seção 25) |
+| `js/busca.js` | Busca global: onde o item está em todas as telas, de uma vez (seção 26) |
 
 São **scripts clássicos, não módulos**, carregados nessa ordem no fim do `body`. O `let`/`const` de
 nível superior vai para o escopo lexical global, compartilhado entre os arquivos — é por isso que o
@@ -4167,3 +4168,64 @@ item, e a planilha em dias e não em itens); consultor não vê nenhum e
 `estoque_aco` vê só o do aço; com um aviso quebrado os 7 cards continuam e só o
 quebrado mostra `—` com o motivo; os cards de contagem realmente pedem
 `head: true`; e o clique leva à tela certa já filtrada. **18 de 18 checagens.**
+
+## 26. Busca global: uma pergunta, todas as telas (14/09/2026)
+
+O mesmo código de item vive hoje em **seis tabelas**: `estoque` (três depósitos ×
+oito unidades), `catalogo_exp_itens`, `exp_controle_itens` (expedição e doca),
+`bobinas_aco` e `reservas_aco`. Não havia como perguntar **"onde está o
+996613I?"** uma vez só — tinha de abrir tela por tela e lembrar de todas. O ⇄ já
+fazia uma fatia, mas só do almoxarifado.
+
+Botão 🔎 no cabeçalho (fica ali porque a pergunta não pertence a tela nenhuma) e
+**Ctrl+K** de qualquer lugar — o atalho que todo mundo já conhece de outros
+aplicativos; inventar um próprio só criaria uma coisa a mais para aprender.
+
+### O que ela responde
+
+Uma linha por lugar onde o item está, agrupada por fonte, dizendo unidade,
+endereço, quantidade e o que distingue aquele lugar (nº do pedido na expedição e
+na doca, lote no aço, pedido e há quanto tempo na reserva). **A expedição e a
+doca aparecem separadas**: "guardado no endereço" e "esperando o caminhão" são
+respostas diferentes para quem foi procurar o material.
+
+### Decisões
+
+- ⚠️ **Todo código passa por `normalizaCodigoItem()` no JS e `ilike` no banco.**
+  O `eq` do Postgres diferencia maiúscula de minúscula, e este projeto já perdeu
+  uma tarde com `996613I` gravado dos dois jeitos (seção 14). **Numa busca o
+  efeito seria pior que um número errado: o portal diria "não achei" sobre
+  material que está lá.** Testado digitando minúsculo contra banco maiúsculo.
+- **O código com sufixo da Trading entra junto** (`codigoTradingDoItem()`, a
+  mesma regra do comparativo entre unidades) — sem isso, item terminado em "I"
+  diria que a Trading não tem, tendo.
+- ⚠️ **Fonte que falha é nomeada e o resto da busca continua.** Cada uma é uma
+  consulta independente; uma tabela sem permissão não pode transformar "está em
+  cinco lugares" em "não achei". Mesmo princípio do Painel do Dia.
+- **Não achou como código? Procura na descrição** e devolve os códigos
+  candidatos, clicáveis. Quem não sabe o código de cabeça é justamente quem mais
+  precisa desta tela — e "não encontrado" e ponto final seria a resposta menos
+  útil possível.
+- **Sem resultado nenhum, a tela diz o que a busca cobre.** Assim a pessoa sabe
+  se o portal procurou onde ela achava que procuraria.
+- **Teto de 40 linhas por fonte**, dito quando corta: um código muito espalhado
+  encheria o modal de linha repetida e deixaria a resposta mais difícil de ler,
+  não mais fácil.
+- ⚠️ **É só leitura.** Não edita, não reserva, não conta — responde onde está e
+  manda para a tela que resolve.
+- **`FONTES_BUSCA` é a lista de onde procurar.** Tela nova no portal é uma
+  entrada nova ali (rótulo, tabela, coluna do código e como virar linha
+  legível) — não é preciso mexer em mais nada.
+
+⚠️ **As colunas do código não têm o mesmo nome entre as tabelas** — `item` em
+`estoque` e `bobinas_aco`, `codigo_item` em `catalogo_exp_itens`,
+`exp_controle_itens` e `reservas_aco` — e `exp_controle_itens` **não guarda
+descrição** (ela vem do catálogo). Conferido coluna a coluna na API antes de
+escrever, e é por isso que cada fonte declara a sua.
+
+Conferido no navegador com `sb.from` mockado (o mesmo item em 7 lugares, gravado
+maiúsculo, buscado minúsculo): acha as 7 fontes, separa almoxarifado de EPI e
+expedição de doca, traz as duas unidades do almoxarifado, mostra pedido e tempo
+na reserva; com uma fonte quebrada, ela é nomeada e as outras 6 continuam; texto
+que não é código vira busca por descrição com candidatos clicáveis; sem
+resultado, diz o que cobre; Ctrl+K abre e Esc fecha. **17 de 17 checagens.**
