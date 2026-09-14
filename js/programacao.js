@@ -3511,10 +3511,15 @@ document.getElementById('confBody').addEventListener('click', async (e) => {
 // "Se um dia perguntarem quando carregou os materiais, pesquiso por número
 // do pedido" -- pedido explicito do Robson. Historico nunca apaga o
 // registro, so o marca como retirado; a busca cobre pedido, item e local.
-function renderHistoricoRetiradas() {
-  const busca = document.getElementById('confHistBusca').value.trim().toLowerCase();
-  const corpo = document.getElementById('confHistBody');
-  const vazio = document.getElementById('confHistVazio');
+//
+// Reaproveitada nas DUAS abas que mostram histórico de retiradas -- Saída/
+// Conferência (original) e DOCA (12/09/2026: "assim que der saida da doca
+// o itens ficam arquivados em baixo, como fizemos na Aba saida/conferencia")
+// -- mesma lista (`status === 'retirado'`), só muda pra onde ela desenha.
+function renderHistoricoRetiradasGenerica(buscaInputId, corpoId, vazioId) {
+  const busca = document.getElementById(buscaInputId).value.trim().toLowerCase();
+  const corpo = document.getElementById(corpoId);
+  const vazio = document.getElementById(vazioId);
 
   let retirados = linhasDoSetorAtual().filter(l => l.status === 'retirado');
   retirados = [...retirados].sort((a, b) => new Date(b.retirado_em || 0) - new Date(a.retirado_em || 0));
@@ -3553,15 +3558,29 @@ function renderHistoricoRetiradas() {
   }).join('');
 }
 
-document.getElementById('confHistBusca').addEventListener('input', () => renderHistoricoRetiradas());
+function renderHistoricoRetiradas() {
+  renderHistoricoRetiradasGenerica('confHistBusca', 'confHistBody', 'confHistVazio');
+}
 
-document.getElementById('confHistBody').addEventListener('click', async (e) => {
+function renderHistoricoRetiradasDoca() {
+  renderHistoricoRetiradasGenerica('docaHistBusca', 'docaHistBody', 'docaHistVazio');
+}
+
+document.getElementById('confHistBusca').addEventListener('input', () => renderHistoricoRetiradas());
+document.getElementById('docaHistBusca').addEventListener('input', () => renderHistoricoRetiradasDoca());
+
+// Mesmo handler de "Desfazer" nas duas abas -- reseta sempre pra
+// "na_expedicao" (não interessa se a retirada tinha passado pela DOCA ou
+// não), e carregarProgramacao() já atualiza as duas listas de histórico.
+async function handleHistDesfazerClick(e) {
   const btn = e.target.closest('.hist-desfazer');
   if (!btn) return;
   if (!confirm('Desfazer esta retirada? O item volta para "na expedição" no Controle EXP.')) return;
   const ok = await marcarSaidaExpControle(btn.dataset.id, null, 'na_expedicao');
   if (ok) await carregarProgramacao();
-});
+}
+document.getElementById('confHistBody').addEventListener('click', handleHistDesfazerClick);
+document.getElementById('docaHistBody').addEventListener('click', handleHistDesfazerClick);
 
 // ---- Relatório de saídas do dia pro PCP -------------------------------------
 // "isso que saiu pro carregamento foi realmente faturado?" (pedido do
@@ -3570,9 +3589,14 @@ document.getElementById('confHistBody').addEventListener('click', async (e) => {
 // a pessoa confere e clica em enviar. O e-mail do PCP fica em
 // config_unidade (aba Configurações), NÃO fixo no código: cada unidade
 // tem o próprio PCP.
+// Robson, 12/09/2026: "coloque a aba de relatorio de saida nessa aba doca" --
+// mesmo relatório, também na DOCA (é lá que o "Carregou" de verdade acontece
+// desde a etapa DOCA), sem duplicar a lógica: os dois campos de data partem
+// preenchidos com hoje.
 (function iniciarDataRelatorioPcp() {
   const hoje = new Date().toLocaleDateString('en-CA'); // AAAA-MM-DD, formato do <input type="date">
   document.getElementById('relPcpData').value = hoje;
+  document.getElementById('relPcpDocaData').value = hoje;
 })();
 
 // Monta o mailto do relatório -- função pura (não mexe no DOM nem navega),
@@ -3631,10 +3655,13 @@ function montarRelatorioPcp(dataEscolhida, emailPcp) {
   };
 }
 
-document.getElementById('relPcpGerarBtn').addEventListener('click', async () => {
-  const msg = document.getElementById('relPcpMsg');
-  const btn = document.getElementById('relPcpGerarBtn');
-  const dataEscolhida = document.getElementById('relPcpData').value;
+// Reaproveitado pelos dois botões "Gerar e enviar pro PCP" (Saída/Conferência
+// e DOCA, 12/09/2026) -- mesma lógica, só muda de onde lê a data e onde
+// escreve a mensagem.
+async function gerarRelatorioPcpClick(dataInputId, msgId, botaoId) {
+  const msg = document.getElementById(msgId);
+  const btn = document.getElementById(botaoId);
+  const dataEscolhida = document.getElementById(dataInputId).value;
 
   if (!dataEscolhida) {
     msg.textContent = 'Escolha uma data.';
@@ -3664,7 +3691,12 @@ document.getElementById('relPcpGerarBtn').addEventListener('click', async () => 
   if (!resultado.ok) return;
 
   window.location.href = resultado.href;
-});
+}
+
+document.getElementById('relPcpGerarBtn').addEventListener('click',
+  () => gerarRelatorioPcpClick('relPcpData', 'relPcpMsg', 'relPcpGerarBtn'));
+document.getElementById('relPcpDocaGerarBtn').addEventListener('click',
+  () => gerarRelatorioPcpClick('relPcpDocaData', 'relPcpDocaMsg', 'relPcpDocaGerarBtn'));
 
 // ---- Aba DOCA: item que já saiu do endereço, esperando o caminhão ------
 // Robson, 11/09/2026: "quero uma aba só de DOCA, aí quando eu marcar na
@@ -3724,6 +3756,9 @@ function renderDoca() {
     vazio.textContent = buscaDoca.trim()
       ? 'Nenhum item na doca bate com a busca.'
       : 'Nada na doca no momento.';
+    // Mesmo sem nada esperando na doca agora, o histórico de quem já
+    // carregou continua tendo o que mostrar -- não pode sumir junto.
+    renderHistoricoRetiradasDoca();
     return;
   }
 
@@ -3778,6 +3813,8 @@ function renderDoca() {
       </div>
     </div>`;
   }).join('');
+
+  renderHistoricoRetiradasDoca();
 }
 
 document.getElementById('docaBusca').addEventListener('input', (e) => {

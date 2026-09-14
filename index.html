@@ -873,6 +873,43 @@
         <div class="empty-msg" id="docaVazio" style="display:none;">
           Nada na doca no momento.
         </div>
+
+        <!-- ---- Historico de retiradas + Relatorio pro PCP, tambem aqui na
+             DOCA (12/09/2026): "assim que der saida da doca o itens ficam
+             arquivados em baixo, como fizemos na Aba saida/conferencia" --
+             mesmo padrao da aba Saida/Conferencia (confHistBody/relPcpGerarBtn
+             logo acima), porque desde a fase36 (etapa DOCA) e aqui que o
+             "Carregou" de verdade acontece -- ver renderHistoricoRetiradas()
+             e montarRelatorioPcp() em js/programacao.js, reaproveitados pelas
+             duas abas. -->
+        <div style="border-top:1px solid var(--border); margin-top:10px;">
+          <div class="cfg-barra">
+            <strong>Histórico de retiradas</strong>
+            <input type="text" id="docaHistBusca" placeholder="Buscar por nº pedido, item ou localização..."
+                   style="flex:1; min-width:200px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          </div>
+
+          <div class="cfg-barra">
+            <span class="modal-label" style="margin:0;">Relatório de saídas do dia</span>
+            <input type="date" id="relPcpDocaData" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+            <button class="btn btn-primary" id="relPcpDocaGerarBtn" style="margin-left:auto;">Gerar e enviar pro PCP</button>
+          </div>
+          <div class="status-msg" id="relPcpDocaMsg" style="padding:0 16px 8px;"></div>
+          <div class="scroll-area">
+            <table>
+              <thead>
+                <tr>
+                  <th>Nº Pedido</th><th>Item</th><th>Descrição</th><th>Qtd</th>
+                  <th>Localização</th><th>Retirado por</th><th>Retirado em</th>
+                </tr>
+              </thead>
+              <tbody id="docaHistBody"></tbody>
+            </table>
+          </div>
+          <div class="empty-msg" id="docaHistVazio" style="display:none;">
+            Nenhuma retirada registrada ainda.
+          </div>
+        </div>
       </div>
 
       <!-- ---- Auditoria física: caminhada pela expedição, endereço por

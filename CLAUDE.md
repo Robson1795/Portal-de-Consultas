@@ -3006,6 +3006,50 @@ grupo; busca por pedido continua funcionando; item retirado na mesma
 localização continua fora, mesmo buscando por ela. Zero erro de
 console.
 
+## Histórico de retiradas + Relatório pro PCP também na DOCA (12/09/2026)
+
+O Robson: *"preciso que coloque a aba de relatorio de saida nessa aba doca
+dessa aba que irei envia para o PCP"* e, na sequência: *"assim que der
+saida da doca o itens ficam arquivados em baixo, como fizemos na Aba
+saida/conferencia"*.
+
+Desde a etapa DOCA (fase36), o "Carregou" de verdade acontece ali, não
+mais na Saída/Conferência (que hoje só manda pra `na_doca`) -- então
+tanto o Histórico de retiradas quanto o Relatório pro PCP fazem mais
+sentido também na própria DOCA, sem precisar trocar de aba pra ver o que
+acabou de sair ou pra mandar o e-mail do dia. Perguntado se isso
+substituía o que já existe na Saída/Conferência ou se somava, a resposta
+foi somar: fica nas duas abas por enquanto.
+
+Nenhuma lógica nova: `renderHistoricoRetiradasGenerica(buscaInputId,
+corpoId, vazioId)` — extraída de `renderHistoricoRetiradas()`, mesma
+lista (`status === 'retirado'` desta unidade/setor) — agora desenha tanto
+`#confHistBody` (Saída/Conferência) quanto `#docaHistBody` (DOCA, ids
+próprios: `docaHistBusca`/`docaHistVazio`), chamada ao fim de
+`renderConferencia()` e de `renderDoca()` (nos dois caminhos: lista vazia
+e lista cheia). O botão "↺ Desfazer" usa o mesmo handler
+(`handleHistDesfazerClick`) nas duas tabelas -- sempre reseta pra
+`na_expedicao`, sem distinguir se a retirada passou pela doca ou não
+(mesmo comportamento de sempre, só compartilhado).
+
+O relatório pro PCP (`gerarRelatorioPcpClick`, extraído do handler único
+de antes) também virou dois botões (`relPcpGerarBtn`/`relPcpDocaGerarBtn`)
+chamando a MESMA `montarRelatorioPcp()` e a mesma função
+`email_pcp_da_unidade()` -- o e-mail continua vindo de `config_unidade`
+(aba Configurações), não fixo no código, porque cada unidade tem o
+próprio PCP. O Robson passou `pcparaquari@kingspanisoeste.com.br` como o
+e-mail da 106 (Araquari) -- isso é dado de configuração, não código: só
+precisa estar cadastrado no campo "E-mail PCP" da aba Configurações
+(fase8-email-pcp.sql) pra unidade 106; nenhum SQL novo, nenhuma mudança
+de código guarda esse endereço.
+
+Testado: histórico da DOCA lista os `retirado` mais recentes primeiro,
+busca própria filtra sem afetar a busca da Saída/Conferência; "Desfazer"
+manda o patch certo (`na_expedicao`, limpa os dois carimbos) e recarrega
+os dois históricos; botão "Gerar e enviar pro PCP" da DOCA escreve só na
+própria mensagem (`relPcpDocaMsg`), sem tocar na da Saída/Conferência, e
+monta o mailto com o e-mail e os itens certos. Zero erro de console.
+
 ## Folha impressa do CANT agrupa por endereço, não por pedido (12/09/2026)
 
 Mesmo screenshot de antes: 3 itens na mesma localização (EXP CANT A-01),
