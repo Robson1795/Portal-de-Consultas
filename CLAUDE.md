@@ -3,7 +3,7 @@
 Contexto do projeto para qualquer agente de IA ou pessoa que for mexer neste repositório.
 Sempre em **português do Brasil**.
 
-**Atualizado:** 14/09/2026 (Painel do Dia, busca global, inventário fechado, leitor de código, backup)
+**Atualizado:** 14/09/2026 (QR em todas as etiquetas do portal)
 **Mantenedores:** Robson (dono do projeto e admin geral) · Victor Dobner (colaborador)
 
 > Este arquivo é lido automaticamente pelo Claude Code ao abrir a pasta do projeto.
@@ -4615,3 +4615,81 @@ trás, procura QR e os lineares, o que é lido vai para a busca, **a câmera é
 desligada ao ler e ao fechar no ✕**; permissão negada vira mensagem com o nome do
 erro; o QR sai como `data:` URL e a etiqueta sai igual sem ele. **20 de 20
 checagens.**
+
+### O QR passou a sair em TODAS as etiquetas (14/09/2026)
+
+O Victor, logo depois: *"expanda a ideia do QR code para todas as telas que
+fazem etiquetas"*. Eram três folhas no portal, e só a de reserva tinha:
+
+| Folha | Onde | QR |
+|---|---|---|
+| Etiqueta de reserva de aço | `js/reservas.js` | já tinha |
+| Etiqueta da Trading | `js/estoque.js` | **entrou** |
+| Ficha do Controle EXP | `js/programacao.js` | **entrou** |
+
+**As tabelas exportadas em HTML ficaram de fora de propósito** — Exportar da
+Entrada e da Auditoria produzem *planilha para olhar na tela*, não etiqueta para
+colar em material. QR ali não teria o que responder.
+
+Todas seguem a mesma regra da primeira: **o QR carrega só o código do item**, e
+scanear abre a busca global — que responde onde o material está, em todas as
+telas.
+
+### ⚠️ Onde o QR pode entrar em cada folha não foi escolha de gosto
+
+Cada uma dessas folhas tem tipografia **medida**, e o QR não podia comer o
+espaço de nenhuma:
+
+- **Trading**: vai na **faixa de cima**, a única folgada (só "TRADING" em 12mm e
+  a unidade em 4mm). Abaixo dela tudo é medido — o item em 32mm e principalmente
+  o **endereço em 40mm**, que é o limite onde `B-01-01-01` ainda cabe numa linha
+  só nos 265mm da paisagem. Roubar largura dali partiria o endereço em duas
+  linhas, que é pior que letra menor.
+- **Controle EXP**: **posicionado no canto inferior, fora do fluxo**, e a única
+  coisa que cede espaço é a linha miúda de detalhes (3,5mm, que já quebra
+  sozinha). **Não entra no `.ficha-topo`**: aquela linha é medida — item de 8
+  dígitos mais quantidade de 6 já dá 183mm contra os 178mm úteis do A4, e é o
+  `flex-wrap` que impede o navegador de quebrar **o código do item** no meio.
+  Um QR ali tiraria os 21mm que valem os 3 metros de leitura.
+
+### Duas correções que vieram junto
+
+- ⚠️ **A aba passou a ser aberta ANTES do `await`** — nas três folhas, incluindo
+  a de reserva, que já estava errada. `window.open` exige **ativação transitória
+  do usuário**, que expira poucos segundos depois do clique: gerando o QR
+  primeiro, um CDN lento faria o navegador **bloquear a aba**, e a pessoa veria
+  só o aviso de pop-up, sem folha nenhuma. Agora a aba nasce em branco por
+  milissegundos e recebe a folha em seguida.
+- **`color-scheme: light` nas duas folhas antigas.** Era o furo registrado na
+  seção 23 e deixado em aberto: no tema escuro o navegador escurecia a folha
+  sozinho e a prévia saía **preto no preto**. Apareceu na tela ao conferir o QR,
+  e as duas folhas estavam sendo editadas de qualquer forma.
+
+**`qrDataURLs(codigos)`** (js/scanner.js) é a versão em lote: **dedupe pelo
+código normalizado** (o mesmo item aparece numa linha por endereço) e **cache
+entre impressões** — numa folha de 200 itens é a diferença entre instantâneo e
+travado. E **nunca lança**: devolve o que conseguiu, e **folha sem QR sai igual**.
+Na primeira falha para de tentar — se o CDN não respondeu, não vai responder nas
+outras 199.
+
+### ⚠️ Eu caí na armadilha da crase, duas vezes, no mesmo dia
+
+O CSS destas folhas mora dentro de **template literal**, e a seção 13 já avisa
+em dose dupla que **crase em comentário fecha a string**. Escrevi
+`` `align-self: center` `` e `` `.ficha-topo` `` em comentários de CSS e
+**quebrei `js/estoque.js` e `js/programacao.js` inteiros** — os dois deixaram de
+avaliar, e com eles sumiram `normalizaCodigoItem`, `loadData` e todo o resto.
+O sintoma chega longe da causa (`Unexpected identifier 'align'`, e depois
+`topo is not defined`).
+
+Fica registrado o que resolveu: além de tirar as crases, passei uma **varredura
+automática** por crase dentro de `/* */` em todos os `js/*.js` — é uma checagem
+de dois segundos que pega esta classe de erro inteira, e vale rodar sempre que
+mexer no CSS de uma folha.
+
+Conferido no navegador: o lote transforma 6 entradas em 2 QR e reusa o cache na
+segunda impressão; gerador fora do ar devolve mapa vazio **sem lançar**; a
+etiqueta da Trading recebe o QR mantendo endereço em 40mm e item em 32mm; a
+ficha do EXP recebe um por ficha **sem tocar na linha medida do topo**; as três
+folhas saem **iguais** sem QR; e a aba abre antes de gerar (`abriu → gerou →
+escreveu`). **18 de 18 checagens.**
