@@ -3,7 +3,7 @@
 Contexto do projeto para qualquer agente de IA ou pessoa que for mexer neste repositório.
 Sempre em **português do Brasil**.
 
-**Atualizado:** 11/09/2026 (senhas de tela removidas; sugestão vai pro Teams)
+**Atualizado:** 14/09/2026 (reserva de aço pelo PCP)
 **Mantenedores:** Robson (dono do projeto e admin geral) · Victor Dobner (colaborador)
 
 > Este arquivo é lido automaticamente pelo Claude Code ao abrir a pasta do projeto.
@@ -39,6 +39,7 @@ servidos são o próprio código-fonte. Divididos na Fase 2a (03/09/2026):
 | `js/programacao.js` | Programação de Separação, Controle EXP Acessórios e Depósito Benchmark — o maior arquivo do projeto (~2.200 linhas) |
 | `js/analise.js` | Análise de Compras: demanda dos pedidos x saldo do almoxarifado (seção 14) |
 | `js/notificacoes.js` | Popup de canto: avisa o admin de cadastro pendente, em qualquer tela (seção 21) |
+| `js/reservas.js` | Reserva de bobinas de aço pelo PCP: abas Reservas e Histórico, etiqueta (seção 23) |
 
 São **scripts clássicos, não módulos**, carregados nessa ordem no fim do `body`. O `let`/`const` de
 nível superior vai para o escopo lexical global, compartilhado entre os arquivos — é por isso que o
@@ -470,6 +471,11 @@ Hoje ele cria só estrutura, e o RLS é assunto dos scripts da Fase 1.
    Configurações. Unidade sem e-mail tem o envio da Requisição ALM desabilitado.
    *(A senha de contagem, que também vivia aqui e travou a apresentação na 104, deixou
    de existir em 11/09/2026 — ver seção 22.)*
+
+5. **Rodar `sql/fase38-reservas-aco.sql`** no Supabase. Sem ele a aba **Reservas**
+   do Estoque de Aço abre, mas nenhuma reserva grava — e o que garante "um aço
+   reservado não pode ser reservado de novo" é o índice parcial que está lá
+   dentro, não a tela (seção 23).
 
 **De código:**
 
@@ -3673,3 +3679,215 @@ lembrar de abrir uma lista dentro do portal.
 - ⚠️ **O e-mail do Robson aqui é `robson.alves@`, que foi o dado do pedido.** Nos
   commits dele neste repositório o endereço é `r.alves1@kingspanisoeste.com.br`.
   Se o chat não abrir com ele, é o primeiro lugar para olhar.
+
+## 23. Reserva de aço pelo PCP (14/09/2026)
+
+O Victor: *"O PCP frequentemente identifica um aço que está disponível no
+estoque e solicita que ele seja reservado para um pedido que ainda vai entrar.
+(...) O problema é que, depois de reservado, muitas vezes o PCP esquece daquele
+material."*
+
+Hoje a reserva é só física: muda-se a bobina para uma área "Reservado" e cola-se
+uma etiqueta escrita à mão. Nada disso fica registrado — ninguém sabe há quanto
+tempo a bobina está parada, nem para qual pedido. Aço parado é dinheiro parado, e
+a bobina esquecida só aparece no inventário.
+
+Vive em **`js/reservas.js`**, carregado logo depois do `js/bobinas.js`.
+Script: `sql/fase38-reservas-aco.sql` (**ainda não rodado** — ver seção 12).
+
+### Uma ABA dentro do Estoque de Aço, não uma tela nova
+
+`📦 Aços | 🔒 Reservas | 📜 Histórico`, no mesmo padrão `data-*-aba` do Controle
+EXP. **Reserva sem a lista de aços ao lado é uma tela que ninguém abre**: quem
+reserva precisa achar a bobina primeiro, e a lista já está ali.
+
+Quem vê a página já é quem pode reservar — `PERFIS` só dá `bobinas` para
+`estoque_aco` e `admin` (decisão do Victor: *"Só Estoque Aço e Admin
+reservam"*, o PCP pede e eles registram). **`PERFIS` não mudou.**
+
+### ⚠️ Por que uma tabela própria, e não uma coluna em `bobinas_aco`
+
+`substituir_bobinas()` (fase15) faz, por unidade, `delete from bobinas_aco where
+est = e` seguido do `insert` da planilha inteira. Duas consequências, e as duas
+matam o desenho mais curto:
+
+1. Gravar `RESERVADO` na `localizacao` seria apagado na colagem seguinte — e,
+   enquanto durasse, a bobina ficaria **sem o endereço real**, que é o que
+   alguém usa para ir buscá-la.
+2. Uma reserva apontando para `bobinas_aco.id` perderia a bobina no dia
+   seguinte: os `id` são regenerados.
+
+`reservas_aco` é chaveada pelo **negócio**, não por id — mesmo padrão de
+`contagem_bobinas` (PK item+localizacao+lote), `analise_item_notas` (fase20) e
+`conferir_exp_notas` (fase33): **anotação que precisa sobreviver à substituição
+da planilha não mora na planilha.**
+
+### ⚠️ A chave é unidade + item + LOTE, e a localização fica de fora
+
+Decisão do Victor, perguntado explicitamente: **o Lote é o número da bobina**,
+então item+lote identifica UMA bobina.
+
+A localização não entra **de propósito**, e é o ponto do desenho: o processo
+físico MOVE a bobina para a área de "Reservado". Se o endereço entrasse na
+chave, a reserva perderia a bobina exatamente no momento em que ela é
+reservada. Com item+lote, a reserva segue a bobina para onde ela for.
+
+O endereço do momento vira **retrato** (`localizacao_na_reserva`), junto com
+descrição, dep, um e quantidade. Não é redundância: a planilha é trocada todo
+dia e o histórico é lido meses depois — sem o retrato, uma reserva de março
+mostraria o dado de hoje, ou nada, se a bobina já tiver saído da planilha.
+
+⚠️ `codigo_item` e `lote` são gravados **normalizados** (`normalizaCodigoItem()`,
+maiúsculo e sem espaço nas pontas), e a comparação em JS passa pela mesma
+função. É o `996613I` × `996613i` da seção 14 — aqui o efeito seria pior que um
+número errado: a bobina ficaria reservada no banco e a lista continuaria
+mostrando ela como livre, então alguém a cortaria.
+
+### Ativas e histórico são a MESMA tabela
+
+Discriminadas por `liberado_em` estar nulo ou preenchido — mesmo desenho do
+`status` da Requisição ALM. A aba Histórico é um **filtro**, não outra fonte:
+duas tabelas para o mesmo fato dariam duas verdades sobre ele.
+
+**Liberar é `update`, nunca `delete`** — o pedido era manter o histórico de
+"qual aço, para qual pedido, quem reservou, quando, quando foi liberado e por
+quem". Apagar a linha jogaria fora exatamente a informação que a tela existe
+para dar. O `update` leva `.is('liberado_em', null)` (não reescreve a data de
+quem já foi liberado por outra pessoa) e `.select('id')` como recibo — sem ele,
+um update barrado pelo RLS volta com `error null` e zero linha, e a tela diria
+"liberada" com o F5 desmentindo (item A1 da `AUDITORIA.md`).
+
+### ⚠️ "Um aço reservado não pode ser reservado de novo" é garantido pelo BANCO
+
+```sql
+create unique index idx_reservas_aco_uma_ativa
+  on reservas_aco (unidade, codigo_item, lote) where liberado_em is null;
+```
+
+A checagem na tela existe para **explicar** (diz para qual pedido, por quem e há
+quanto tempo, e leva até a reserva), mas não protege: duas pessoas com o portal
+aberto passariam as duas por ela. O índice é **parcial** porque a mesma bobina
+pode — e deve — ser reservada de novo depois de liberada: é o caso normal de um
+pedido que caiu e outro que entrou. O erro `23505` é traduzido na tela; a
+mensagem crua do Postgres não diz o que fazer.
+
+### O indicador na lista de aços
+
+Coluna **Reserva**, no fim da linha: `🟢 Disponível` + botão 🔒, ou
+`🟠 Pedido NNNN` clicável, que abre a aba Reservas já filtrada por aquele pedido
+— a pergunta seguinte a ver a marca é sempre "de quem é, e desde quando?".
+Reserva **atrasada sai em vermelho já aqui**, sem precisar abrir a outra aba.
+
+- ⚠️ **A coluna entra no FIM da linha de propósito.** `salvarContagemBobina()` e
+  o tempo real acham a célula "Saldo Ajustado" por índice (`td[10]`); uma coluna
+  no meio mudaria a conta sem erro nenhum aparecer.
+- A marca sai de um cruzamento **em memória** com `reservas_aco`. **Nada escreve
+  em `bobinas_aco`.**
+- `celulaReservaBobina()` (js/bobinas.js) confere `typeof reservaDaBobina ===
+  'function'` antes de tudo: se o fase38 ainda não tiver rodado ou o
+  `js/reservas.js` falhar, a tela de **contagem** tem de continuar funcionando —
+  ela é o motivo de a página existir. Pelo mesmo motivo, a falha de leitura das
+  reservas é `console.warn`, não mensagem na tela.
+
+### Reservas antigas: 3 e 7 dias, num lugar só
+
+`RESERVA_DIAS_ATENCAO` e `RESERVA_DIAS_CRITICA`, no topo do `js/reservas.js`.
+Ficam juntos e no topo porque é o que se mexe quando a régua estiver errada — e
+não espalhados por três lugares na hora de pintar a tabela. Não são chute: a
+reserva existe para um pedido *"que ainda vai entrar"*, e um pedido que não
+entrou em uma semana quase sempre é um pedido que mudou.
+
+Quatro indicadores no topo (Reservados · Recentes · Em atenção · Atrasadas), e a
+lista vem **da mais antiga para a mais nova**: a tela existe para achar reserva
+esquecida, e a esquecida é a de cima. Ordem alfabética esconderia o problema.
+
+O tempo aparece em **horas** enquanto for menos de um dia — "reservado há 0
+dias" numa reserva da manhã pareceria que a tela não está contando. No
+histórico, `tempoReservadoEntre()` conta quanto a reserva **durou**, não até
+agora: contar até agora daria um número que cresce sozinho numa reserva que já
+acabou.
+
+### A etiqueta
+
+Mesmo princípio das outras folhas do portal (Trading, Controle EXP): tamanhos em
+**milímetros, não em px** — aqui o papel é a medida. **RESERVADO em 26 mm** no
+topo, sozinho: é a única coisa que precisa ser lida de longe, porque é ela que
+impede alguém de cortar a bobina. O **pedido em segundo**, porque é a pergunta
+seguinte. O resto (aço, descrição, lote, peso, endereço, observação, quem
+reservou e quando) é conferência de perto.
+
+Sai **logo depois de reservar**, na mesma ação: a etiqueta vai na bobina agora,
+não numa segunda visita à tela. O 🖨️ de cada linha reimprime.
+
+- ⚠️ **A folha declara `color-scheme: light` e preto no branco explícitos.** A
+  aba da etiqueta abre no navegador de quem está com o portal no **tema
+  escuro**, e sem isso o navegador escurece a folha por conta própria: a
+  etiqueta aparece **preto no preto**, e a pessoa só descobre se olhar a prévia
+  antes de mandar imprimir. Não é o `@media print` do portal (seção 16) — esta
+  folha é outro documento, sem os tokens de tema. **As folhas antigas (etiqueta
+  da Trading em `js/estoque.js`, ficha do Controle EXP em `js/programacao.js`)
+  têm o mesmo furo e não foram tocadas aqui** — é a mesma linha de correção, se
+  alguém reclamar da prévia.
+- ⚠️ **Sem QR code, e é decisão, não esquecimento.** Não existe leitor no portal
+  nem rota de link profundo que abra uma reserva a partir de um código. Um QR
+  que ninguém escaneia é tinta gasta e uma promessa falsa na etiqueta. Se um dia
+  a câmera do módulo de OCR virar leitor de reserva, o campo natural para
+  codificar é o `id` da linha.
+
+### Detalhes que evitam defeito
+
+- **Pedido é obrigatório**, e não por burocracia: uma reserva sem pedido é
+  exatamente o material esquecido que esta tela existe para acabar.
+- **Sem `confirm()` e sem `alert()`** (seção 7). A confirmação de liberar é um
+  modal da própria tela; o aviso de "já está reservado" é a notificação de canto
+  (`js/notificacoes.js`), que ainda leva o atalho para a reserva no caminho.
+  Marcado "impedir que esta página crie novos diálogos", o Chrome engole os dois
+  e o clique vira botão quebrado.
+- **Sem tempo real**, de propósito: ligar o Realtime numa tabela exige
+  `ALTER PUBLICATION` no banco (ver o histórico do fase23), e uma reserva não
+  muda de segundo em segundo como uma contagem. No lugar, um **🔄 Recarregar** na
+  aba — a forma honesta de ver o que outra pessoa acabou de reservar.
+- **`carregarReservasAco()` é chamada de dentro de `loadBobinas()`**, e não só ao
+  abrir a tela: quem recarrega ao trocar de unidade é `trocarUnidade()`
+  (js/estoque.js), que chama `loadBobinas()`. Sem isso, a marca 🟠 da unidade
+  **anterior** ficaria na tela.
+- **O select de responsável é montado de quem realmente reservou**, não de uma
+  lista escrita à mão — nome novo entraria no banco e ficaria fora do filtro.
+- **Lista vazia diz qual é a causa**: "nenhuma reserva bate com o filtro" é
+  diferente de "nenhum aço reservado nesta unidade", e culpar o filtro pela causa
+  errada faz a pessoa mexer nos filtros atrás de coisa que não existe.
+
+### RLS
+
+| | |
+|---|---|
+| **Leitura** | `esta_aprovado()` — é ela que faz o 🟠 aparecer; quem lê `bobinas_aco` precisa ler a reserva junto, senão a lista mostraria a bobina como livre |
+| **Escrita** | `eh_admin() or meu_perfil() = 'estoque_aco'` |
+
+⚠️ **Não é `pode_atualizar_bobinas()`**, apesar de ser sobre aço: aquela função é
+a lista `editores_bobinas` (quem **cola a planilha** — Jhonatan, Victor,
+Izabella). Reservar não é atualizar a planilha; é registro do dia a dia de quem
+opera o pátio. Usar aquela lista aqui deixaria o time do aço **sem conseguir
+reservar**.
+
+Não há política de DELETE separada: o `for all` cobre, mas a tela nunca apaga.
+Se um dia precisar apagar de verdade (uma reserva criada em duplicidade), que
+seja pelo painel, à mão, e com intenção.
+
+### Como isto foi conferido
+
+No navegador, com `sb.from` trocado por um mock local (3 bobinas, uma já
+reservada há 9 dias, uma reserva já liberada): a coluna Reserva nasce com 1 🟠 e
+2 botões de reservar e a atrasada sai em vermelho; o Saldo Ajustado continua em
+`td[10]` com 12 colunas; reservar sem pedido é recusado **sem chamar o banco**;
+o insert leva a chave normalizada, a unidade, o pedido, o responsável e o
+retrato da bobina; a etiqueta abre na mesma ação; reservar a mesma bobina de
+novo não abre o modal e vira notificação de canto; os quatro cards batem
+(2 ativas / 1 recente / 1 atrasada) e a reserva já liberada **não** aparece
+entre as ativas; a busca e o filtro de tempo filtram, e a lista vazia diz que é
+o filtro; o 🟠 leva à aba Reservas já filtrada; liberar grava quem, quando e por
+quê, **não apaga nada**, e devolve a bobina a 🟢 na lista; o histórico mostra as
+duas encerradas e diz quanto cada uma **durou**; a etiqueta sai com RESERVADO
+antes do pedido, toda em milímetros, com aço, lote e responsável, e sem QR.
+**40 de 41 checagens passaram** — a única falha foi da própria checagem, que
+lia o `<title>` da etiqueta junto com o corpo. Zero erro de console.
