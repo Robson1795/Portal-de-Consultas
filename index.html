@@ -1324,6 +1324,19 @@
           <option value="Bitrem">Bitrem</option>
           <option value="Outro">Outro</option>
         </select>
+        <!-- CIF (frete por conta da Kingspan) x FOB (por conta do
+             cliente/transportadora dele) -- Robson, 14/09/2026: "coloque
+             tambem cif ou fob". Sem opção em branco de propósito: o
+             conferente escolhe uma das duas ou deixa "Carreta" pré-
+             marcada de tipo de veículo passar batido, mas frete em
+             branco quer dizer "ninguém perguntou" -- melhor não gravar
+             nada do que gravar um chute. -->
+        <select id="docaFrete"
+                style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <option value="">Frete: CIF ou FOB?</option>
+          <option value="CIF">CIF (nosso frete)</option>
+          <option value="FOB">FOB (frete do cliente)</option>
+        </select>
         <input type="text" id="docaTransportadora" placeholder="Transportadora"
                style="flex:1; min-width:150px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
         <input type="text" id="docaDestino" placeholder="Destino"
@@ -1368,7 +1381,7 @@
           <table>
             <thead>
               <tr>
-                <th>Placa</th><th>Veículo</th><th>Transportadora</th><th>Destino</th><th>Pedidos</th>
+                <th>Placa</th><th>Veículo</th><th>Frete</th><th>Transportadora</th><th>Destino</th><th>Pedidos</th>
                 <th>Doca</th><th>Início</th><th>Fim</th><th>Duração</th><th>Conferente</th><th>Ação</th>
               </tr>
             </thead>

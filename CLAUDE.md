@@ -3016,6 +3016,32 @@ grupo; busca por pedido continua funcionando; item retirado na mesma
 localização continua fora, mesmo buscando por ela. Zero erro de
 console.
 
+## CIF ou FOB no Painel de Docas (14/09/2026)
+
+O Robson, olhando o painel já em uso: *"coloque tambem cif ou fob"*.
+
+Coluna nova (`frete`, `sql/fase42-doca-frete-cif-fob.sql`), com `check`
+travando só `CIF`/`FOB`/nulo -- e não uma tabela de cadastro (como serão
+os motivos de atraso da fase 2): é sigla fixa de logística, não um
+vocabulário que a operação vá querer editar depois.
+
+Select na chegada com opção em branco **selecionada por padrão**, ao
+contrário de Tipo de Veículo (que já vem em "Carreta"): frete em branco
+significa "ninguém perguntou ainda", e chutar CIF por padrão arriscaria
+responsabilidade errada num carregamento que ninguém confirmou. Sem
+frete escolhido grava `null`, não string vazia -- outra query que
+comparasse `frete = ''` não bateria com o que ficou salvo.
+
+Selo colorido (`freteHtml()`) no cartão da doca, na fila do pátio e como
+coluna nova em "Carregados hoje". As cores são deliberadamente diferentes
+do padrão verde/vermelho do resto do painel -- CIF x FOB não é "bom x
+ruim", é só "de quem é o frete".
+
+Conferido no navegador: CIF e FOB renderizam com selo próprio nos três
+lugares; carregamento sem frete mostra "—" no histórico e nada no
+cartão/fila; gravar sem escolher vira `null`; campo limpa depois do
+registro. Zero erro de console.
+
 ## Excluir carregamento no Painel de Docas (14/09/2026)
 
 O Robson, com um registro de teste travando a Doca 1 na tela dele:

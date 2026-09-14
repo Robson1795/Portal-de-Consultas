@@ -1336,3 +1336,14 @@ td.col-acoes { white-space: nowrap; text-align: center; }
   position: absolute; inset: 18% 12%; border: 3px solid rgba(255,255,255,0.9);
   border-radius: 10px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.35);
 }
+
+/* Selo CIF/FOB (fase42) -- cor é só "de quem é o frete", não é
+   semântica bom/ruim como o resto do painel, por isso as duas cores não
+   seguem o padrão verde/vermelho de status. */
+.doca-frete {
+  display: inline-block; font-size: 10.5px; font-weight: 800;
+  letter-spacing: 0.03em; padding: 1px 6px; border-radius: 5px;
+  white-space: nowrap;
+}
+.doca-frete-cif { background: var(--azul-fundo); color: var(--blue-texto); }
+.doca-frete-fob { background: var(--aviso-fundo); color: var(--aviso-texto); }

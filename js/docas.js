@@ -101,6 +101,18 @@ function pedidosDoCarregamento(id) {
 // conferente, um toque no número já liga. Só os dígitos vão pro href
 // (tel: não aceita parênteses e hífen em todo aparelho); na tela continua
 // aparecendo do jeito que foi digitado, que é como se confere se está certo.
+// Selo CIF/FOB -- Robson, 14/09/2026: "coloque tambem cif ou fob". Cores
+// diferentes de propósito (não é semântica bom/ruim como o resto do
+// painel, é só "de quem é o frete"): CIF por conta da Kingspan, FOB por
+// conta do cliente/transportadora dele. Frete não informado não mostra
+// nada -- inventar "CIF" por padrão seria arriscar responsabilidade
+// errada num carregamento que ninguém perguntou.
+function freteHtml(frete) {
+  if (frete !== 'CIF' && frete !== 'FOB') return '';
+  const classe = frete === 'CIF' ? 'doca-frete-cif' : 'doca-frete-fob';
+  return `<span class="doca-frete ${classe}">${frete}</span>`;
+}
+
 function telefoneHtml(numero) {
   const texto = String(numero || '').trim();
   if (!texto) return '';
@@ -190,7 +202,10 @@ function renderQuadroDocas() {
       </div>
 
       <div class="doca-veiculo">
-        <span class="doca-placa">${escapeHtml(c.placa)}</span>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <span class="doca-placa">${escapeHtml(c.placa)}</span>
+          ${freteHtml(c.frete)}
+        </div>
         <span class="doca-sub">${escapeHtml(c.tipo_veiculo || '—')}${c.transportadora ? ' · ' + escapeHtml(c.transportadora) : ''}</span>
         ${c.destino ? `<span class="doca-destino">📍 ${escapeHtml(c.destino)}</span>` : ''}
         ${c.motorista ? `<span class="doca-sub">Motorista: ${escapeHtml(c.motorista)}</span>` : ''}
@@ -252,6 +267,7 @@ function renderFilaDocas() {
     return `
     <div class="doca-fila-linha">
       <span class="doca-placa">${escapeHtml(c.placa)}</span>
+      ${freteHtml(c.frete)}
       <span class="doca-sub">${escapeHtml(c.tipo_veiculo || '—')}${c.transportadora ? ' · ' + escapeHtml(c.transportadora) : ''}</span>
       ${c.destino ? `<span class="doca-destino">📍 ${escapeHtml(c.destino)}</span>` : ''}
       ${telefoneHtml(c.telefone_motorista)}
@@ -290,6 +306,7 @@ function renderCarregadosHoje() {
     <tr>
       <td class="item">${escapeHtml(c.placa)}</td>
       <td>${escapeHtml(c.tipo_veiculo || '—')}</td>
+      <td>${freteHtml(c.frete) || '—'}</td>
       <td>${escapeHtml(c.transportadora || '—')}</td>
       <td>${escapeHtml(c.destino || '—')}</td>
       <td class="loc">${escapeHtml(pedidosDoCarregamento(c.id).join(' + ') || '—')}</td>
@@ -451,6 +468,7 @@ document.getElementById('docaChegadaBtn').addEventListener('click', async () => 
     transportadora: document.getElementById('docaTransportadora').value.trim() || null,
     destino: document.getElementById('docaDestino').value.trim() || null,
     tipo_veiculo: document.getElementById('docaTipoVeiculo').value,
+    frete: document.getElementById('docaFrete').value || null,
     meta_itens: meta,
     criado_por: nomeUsuarioAtual
   }).select('id').single();
@@ -470,7 +488,7 @@ document.getElementById('docaChegadaBtn').addEventListener('click', async () => 
   }
   await registrarEventoDoca(data.id, 'chegou', { placa, pedidos, meta_itens: meta });
 
-  ['docaPlaca', 'docaMotorista', 'docaTelefone', 'docaTransportadora', 'docaDestino', 'docaPedidos'].forEach(id => {
+  ['docaPlaca', 'docaMotorista', 'docaTelefone', 'docaTransportadora', 'docaDestino', 'docaPedidos', 'docaFrete'].forEach(id => {
     document.getElementById(id).value = '';
   });
   // A confirmação vem DEPOIS de recarregar: carregarPainelDocas() limpa a
