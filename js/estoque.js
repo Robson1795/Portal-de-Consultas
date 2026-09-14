@@ -2305,7 +2305,7 @@ function atualizarBotaoEtiquetas() {
   botao.disabled = etiquetasTrading.size === 0;
 }
 
-function montarHtmlEtiquetasTrading(linhas) {
+function montarHtmlEtiquetasTrading(linhas, qrPorCodigo) {
   const impressoEm = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
   const quem = nomeUsuarioAtual || emailUsuarioAtual || '—';
   const etiquetas = linhas.map(r => `
@@ -2313,6 +2313,8 @@ function montarHtmlEtiquetasTrading(linhas) {
       <div class="etq-topo">
         <span class="etq-marca">TRADING</span>
         <span class="etq-unidade">${escapeHtml(rotuloUnidade(unidadeAtual))}</span>
+        ${(qrPorCodigo && qrPorCodigo.get(normalizaCodigoItem(r.item)))
+          ? `<img class="etq-qr" src="${qrPorCodigo.get(normalizaCodigoItem(r.item))}" alt="">` : ''}
       </div>
       <div class="etq-item">${escapeHtml(r.item)}</div>
       <div class="etq-desc">${escapeHtml(r.descricao || '')}</div>
@@ -2334,7 +2336,14 @@ function montarHtmlEtiquetasTrading(linhas) {
      comprida. Por isso os corpos subiram junto; deixar os de retrato aqui
      seria desperdiçar exatamente o que a paisagem deu. */
   @page { size: A4 landscape; margin: 10mm; }
-  body { font-family: Arial, sans-serif; margin: 0; }
+  /* color-scheme: light + preto no branco explicitos. Esta folha abre numa aba
+     do navegador de quem talvez esteja com o portal no tema ESCURO, e sem isto
+     o navegador escurece a folha por conta propria: ela aparece preto no preto
+     na previa, e a pessoa so descobre se olhar antes de mandar imprimir. Nao e
+     o @media print do portal (secao 16) -- esta folha e outro documento, sem os
+     tokens de tema. Mesma correcao ja feita na etiqueta de reserva. */
+  :root { color-scheme: light; }
+  body { font-family: Arial, sans-serif; margin: 0; background: #fff; color: #000; }
   .etiqueta {
     box-sizing: border-box; padding: 5mm 6mm; text-align: center;
     /* Uma folha por item: é etiqueta de prateleira, duas na mesma folha
@@ -2348,6 +2357,15 @@ function montarHtmlEtiquetasTrading(linhas) {
   }
   .etq-marca { font-size: 12mm; font-weight: 900; letter-spacing: 0.08em; }
   .etq-unidade { font-size: 4mm; color: #333; }
+  /* ⚠️ O QR vai na FAIXA DE CIMA, e em lugar nenhum mais. Abaixo dela cada
+     corpo é medido: o item em 32mm e, principalmente, o endereço em 40mm --
+     que é o limite onde "B-01-01-01" ainda cabe numa linha só nos 265mm da
+     paisagem. Roubar largura de lá partiria o endereço em duas linhas, que é
+     pior que letra menor. A faixa de cima só tem a palavra TRADING (12mm) e a
+     unidade (4mm): sobra espaço, e é de lá que o QR sai.
+     O align-self: center existe porque a faixa alinha por BASELINE, e a baseline de
+     uma imagem é a borda de baixo -- sem isto o QR penduraria torto. */
+  .etq-qr { width: 20mm; height: 20mm; align-self: center; }
   .etq-item { font-size: 32mm; font-weight: 900; line-height: 1; overflow-wrap: anywhere; }
   .etq-desc { font-size: 9mm; font-weight: 700; line-height: 1.15; margin-top: 3mm; }
   .etq-qtd { font-size: 16mm; font-weight: 800; margin-top: 3mm; }
@@ -2370,11 +2388,22 @@ ${'<script>window.onload = () => window.print();<' + '/script>'}
 </body></html>`;
 }
 
-function imprimirEtiquetasTrading(linhas) {
+// ⚠️ Os QR são gerados ANTES de abrir a aba e entram como `data:` URL. A
+// etiqueta é outro documento, que vai pra impressora e às vezes pra um
+// computador sem internet -- pendurar um <script> de CDN lá dentro faria a
+// folha depender da rede no pior momento possível. Mesma regra da etiqueta de
+// reserva (seção 28).
+async function imprimirEtiquetasTrading(linhas) {
   if (!linhas.length) return;
+  // ⚠️ A ABA É ABERTA ANTES DO `await`, e a ordem é o ponto: `window.open`
+  // exige ativação transitória do usuário, que expira poucos segundos depois
+  // do clique. Gerando o QR primeiro, um CDN lento faria o navegador BLOQUEAR
+  // a aba -- e a pessoa veria só o aviso de pop-up, sem folha nenhuma. Assim a
+  // aba nasce em branco por alguns milissegundos e recebe a folha em seguida.
   const aba = window.open('', '_blank');
   if (!aba) { alert('O navegador bloqueou a nova aba. Libere pop-ups pra este site e tente de novo.'); return; }
-  aba.document.write(montarHtmlEtiquetasTrading(linhas));
+  const qrPorCodigo = await qrDataURLs(linhas.map(r => r.item));
+  aba.document.write(montarHtmlEtiquetasTrading(linhas, qrPorCodigo));
   aba.document.close();
 }
 

@@ -164,12 +164,42 @@ document.getElementById('scannerManualInput').addEventListener('keydown', (e) =>
 // que é exatamente o que a busca global responde com o código; e um id interno
 // numa etiqueta impressa vira lixo no dia em que a tabela mudar, enquanto o
 // código do item é a linguagem que o galpão inteiro já fala.
+// ⚠️ Cache entre impressões. O mesmo código sai em várias folhas, e o mesmo
+// item aparece em várias linhas da mesma folha (uma por endereço). Gerar de
+// novo o desenho idêntico é trabalho jogado fora -- e numa folha de 200 itens
+// isso é a diferença entre instantâneo e travado.
+const qrCache = new Map();
+
 async function qrDataURL(texto) {
+  const chave = String(texto);
+  if (qrCache.has(chave)) return qrCache.get(chave);
   await carregarBiblioteca('o gerador de QR', CDN_QRCODE, () => typeof qrcode !== 'undefined');
   // Tipo 0 = escolhe o menor tamanho que couber; 'M' = correção média, que
   // aguenta etiqueta amassada e suja sem inflar o desenho.
   const qr = qrcode(0, 'M');
-  qr.addData(String(texto));
+  qr.addData(chave);
   qr.make();
-  return qr.createDataURL(8, 0);
+  const url = qr.createDataURL(8, 0);
+  qrCache.set(chave, url);
+  return url;
+}
+
+// Versão em lote, para as folhas que saem com muitos itens de uma vez.
+//
+// ⚠️ NUNCA LANÇA. Devolve o que conseguiu, e folha sem QR sai igual -- a
+// regra que já valia na etiqueta de reserva: deixar de imprimir por causa de
+// um enfeite seria trocar um problema pequeno por um grande. Na primeira falha
+// para de tentar: se o CDN não respondeu, ele não vai responder nas outras 199.
+async function qrDataURLs(codigos) {
+  const mapa = new Map();
+  const unicos = [...new Set((codigos || []).map(c => normalizaCodigoItem(c)).filter(Boolean))];
+  for (const codigo of unicos) {
+    try {
+      mapa.set(codigo, await qrDataURL(codigo));
+    } catch (e) {
+      console.warn('QR das etiquetas: o gerador não respondeu, as folhas saem sem ele.', e.message);
+      return mapa;
+    }
+  }
+  return mapa;
 }
