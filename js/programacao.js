@@ -3117,7 +3117,7 @@ async function exportarExpControleXlsx(nomeBase) {
 // quem exporta abre o arquivo na tela pra olhar, e a ficha gigante ali só
 // atrapalhava. Ver montarHtmlExpControleTabela() logo abaixo, que é o que
 // o Exportar HTML usa agora.
-function montarHtmlExpControle(scriptAutoImprimir) {
+function montarHtmlExpControle(scriptAutoImprimir, qrPorCodigo) {
   const linhasFiltradas = linhasParaImprimirExpControle();
   // Uma FICHA por item, e não uma linha de tabela. A folha vai colada no
   // pallet no nível 3 do porta-pallet e é lida do chão (Robson, 09/09/2026:
@@ -3190,6 +3190,8 @@ function montarHtmlExpControle(scriptAutoImprimir) {
           <div class="ficha-desc">${escapeHtml(descricao || '')}</div>
           ${producaoHtml}
           <div class="ficha-detalhes">${detalhe('Local', localizacao)}${detalhe('Pedido', pedido)}${detalhe('Status', status)}${detalhe('Entrada', entrada)}${detalhe('Saída', saida)}</div>
+          ${(qrPorCodigo && qrPorCodigo.get(normalizaCodigoItem(item)))
+            ? `<img class="ficha-qr" src="${qrPorCodigo.get(normalizaCodigoItem(item))}" alt="">` : ''}
         </article>`;
         }).join('')}
     </section>`;
@@ -3223,12 +3225,21 @@ function montarHtmlExpControle(scriptAutoImprimir) {
      corpo) pede corpo de ~21 mm. É por isso que o código do item está em 21mm
      e não num número redondo qualquer. */
   @page { size: A4 portrait; margin: 8mm; }
-  body { font-family: Arial, sans-serif; margin: 0; padding: 8mm; box-sizing: border-box; }
+  /* color-scheme: light + preto no branco explicitos. Esta folha abre numa aba
+     do navegador de quem talvez esteja com o portal no tema ESCURO, e sem isto
+     o navegador escurece a folha por conta propria: ela aparece preto no preto
+     na previa, e a pessoa so descobre se olhar antes de mandar imprimir. Nao e
+     o @media print do portal (secao 16) -- esta folha e outro documento, sem os
+     tokens de tema. Mesma correcao ja feita na etiqueta de reserva. */
+  :root { color-scheme: light; }
+  body { font-family: Arial, sans-serif; margin: 0; padding: 8mm; box-sizing: border-box; background: #fff; color: #000; }
   h2 { font-size: 5mm; margin: 0 0 1mm; }
   .impresso-por { font-size: 3.5mm; color: #333; margin: 0 0 4mm; }
   .ficha {
     border: 0.6mm solid #000; border-radius: 2mm; padding: 3mm 4mm; margin-bottom: 3mm;
     page-break-inside: avoid; break-inside: avoid;
+    /* position: relative por causa do QR do canto -- ver .ficha-qr. */
+    position: relative; min-height: 26mm;
   }
   /* UMA FOLHA POR PEDIDO, e nao por item (o Victor, 10/09/2026: "nao separar
      por item, separar por pedido. Se for do mesmo pedido, pode por na mesma
@@ -3288,6 +3299,16 @@ function montarHtmlExpControle(scriptAutoImprimir) {
     display: flex; flex-wrap: wrap; gap: 1mm 6mm;
   }
   .ficha-detalhes b { color: #555; font-weight: 700; }
+  /* ⚠️ O QR é POSICIONADO NO CANTO, fora do fluxo, e a única coisa que cede
+     espaço pra ele é a linha miúda de detalhes (3.5mm, que já quebra sozinha).
+     Ele NÃO entra na linha .ficha-topo: aquela linha é medida -- item de 8 dígitos
+     mais quantidade de 6 já dá 183mm contra os 178mm úteis do A4, e é o
+     flex-wrap que impede o navegador de quebrar o CÓDIGO DO ITEM no meio.
+     Um QR ali empurraria a conta e tiraria os 21mm que valem os 3 metros de
+     leitura -- justamente o que a ficha existe para garantir.
+     16mm: a uns 10cm do celular, sobra folga. */
+  .ficha-qr { position: absolute; right: 4mm; bottom: 3mm; width: 16mm; height: 16mm; }
+  .ficha-detalhes { padding-right: 19mm; }
   .endereco-grande {
     text-align: center; page-break-before: avoid; page-break-inside: avoid;
     font-size: 15vw; line-height: 1; font-weight: 900; letter-spacing: 0.05em;
@@ -3427,9 +3448,18 @@ document.getElementById('expCtrlImprimirBtn').addEventListener('click', async ()
   }
   expImprimirConfirmar = false;
 
+  // Os QR de todos os itens da folha, de uma vez e antes de abrir a aba (ver
+  // qrDataURLs em js/scanner.js): a folha sai com o desenho embutido, sem
+  // depender de rede na hora de imprimir. Falhando, a folha sai igual, sem QR.
+  // ⚠️ A ABA É ABERTA ANTES DO `await`, e a ordem é o ponto: `window.open`
+  // exige ativação transitória do usuário, que expira poucos segundos depois
+  // do clique. Gerando o QR primeiro, um CDN lento faria o navegador BLOQUEAR
+  // a aba -- e a pessoa veria só o aviso de pop-up, sem folha nenhuma. Assim a
+  // aba nasce em branco por alguns milissegundos e recebe a folha em seguida.
   const aba = window.open('', '_blank');
   if (!aba) { alert('O navegador bloqueou a nova aba. Libere pop-ups pra este site e tente de novo.'); return; }
-  aba.document.write(montarHtmlExpControle(true));
+  const qrPorCodigo = await qrDataURLs(linhas.map(l => l.codigo_item));
+  aba.document.write(montarHtmlExpControle(true, qrPorCodigo));
   aba.document.close();
 
   // Imprimir aqui É o ato de emitir a etiqueta, então a marcação sai junto:

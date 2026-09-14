@@ -457,6 +457,14 @@ async function imprimirEtiquetaReserva(id) {
   const r = reservasAco.find(x => x.id === id);
   if (!r) return;
 
+  // ⚠️ A ABA É ABERTA ANTES DO `await`, e a ordem é o ponto: `window.open`
+  // exige ativação transitória do usuário, que expira poucos segundos depois
+  // do clique. Gerando o QR primeiro, um CDN lento faria o navegador BLOQUEAR
+  // a aba -- e a pessoa veria só o aviso de pop-up, sem folha nenhuma. Assim a
+  // aba nasce em branco por alguns milissegundos e recebe a folha em seguida.
+  const aba = window.open('', '_blank');
+  if (!aba) { alert('O navegador bloqueou a nova aba. Libere pop-ups pra este site e tente de novo.'); return; }
+
   let qrSrc = null;
   try {
     qrSrc = await qrDataURL(normalizaCodigoItem(r.codigo_item));
@@ -464,8 +472,6 @@ async function imprimirEtiquetaReserva(id) {
     console.warn('Etiqueta de reserva: o QR não foi gerado, a folha sai sem ele.', e.message);
   }
 
-  const aba = window.open('', '_blank');
-  if (!aba) { alert('O navegador bloqueou a nova aba. Libere pop-ups pra este site e tente de novo.'); return; }
   aba.document.write(montarHtmlEtiquetaReserva(r, qrSrc));
   aba.document.close();
 }
