@@ -163,8 +163,31 @@ function carregamentoDaDoca(docaId) {
 // ---- Render ----------------------------------------------------------------
 function renderPainelDocas() {
   renderQuadroDocas();
+  renderOpcoesPasso2();
   renderFilaDocas();
   renderCarregadosHoje();
+  renderEscolhaVeiculo();
+}
+
+// Alimenta o passo 2 (expedição): a lista de quem está no pátio e as docas
+// livres. Só docas LIVRES no select -- oferecer uma doca ocupada só pra
+// recusar depois é pior que não oferecer.
+function renderOpcoesPasso2() {
+  const lista = document.getElementById('docaVeiculosPatio');
+  lista.innerHTML = veiculosNoPatio()
+    .map(c => `<option value="${escapeHtml(rotuloVeiculoPatio(c))}"></option>`).join('');
+
+  const select = document.getElementById('docaDestinoDoca');
+  const escolhidaAntes = select.value;
+  const livres = docasCadastro.filter(d => !carregamentoDaDoca(d.id));
+  select.innerHTML = livres.length
+    ? '<option value="">Em qual doca encostou?</option>'
+      + livres.map(d => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.nome)}</option>`).join('')
+    : '<option value="">Todas as docas ocupadas</option>';
+  // Mantém a doca já escolhida se ela continuar livre -- o painel se
+  // redesenha sozinho em tempo real, e perder a escolha no meio da
+  // digitação dos pedidos faria o encarregado recomeçar.
+  if (escolhidaAntes && livres.some(d => d.id === escolhidaAntes)) select.value = escolhidaAntes;
 }
 
 function renderQuadroDocas() {
@@ -252,14 +275,10 @@ function renderFilaDocas() {
   const vazio = document.getElementById('docasFilaVazio');
   const contagem = document.getElementById('docasFilaContagem');
 
-  const fila = docaCarregamentos.filter(c => c.status === 'aguardando' && !c.doca_id);
+  const fila = veiculosNoPatio();
   contagem.textContent = fila.length ? `${fila.length} veículo(s) esperando` : '';
   vazio.style.display = fila.length ? 'none' : 'block';
   if (!fila.length) { corpo.innerHTML = ''; return; }
-
-  const opcoesDocas = docasCadastro
-    .filter(d => !carregamentoDaDoca(d.id))
-    .map(d => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.nome)}</option>`).join('');
 
   corpo.innerHTML = fila.map(c => {
     const pedidos = pedidosDoCarregamento(c.id);
@@ -273,12 +292,13 @@ function renderFilaDocas() {
       ${telefoneHtml(c.telefone_motorista)}
       <span class="doca-pedidos">${pedidos.length ? escapeHtml(pedidos.join(' + ')) : '—'}</span>
       <span class="doca-sub">esperando ${espera}</span>
-      ${opcoesDocas
-        ? `<span class="doca-fila-acao">
-             <select class="doca-select-destino" data-id="${escapeHtml(c.id)}">${opcoesDocas}</select>
-             <button class="btn btn-primary doca-chamar" data-id="${escapeHtml(c.id)}">Chamar</button>
-           </span>`
-        : `<span class="doca-sub" style="color:var(--aviso-texto);">todas as docas ocupadas</span>`}
+      <!-- "Preparar" leva o veículo pro passo 2 em vez de encostar direto:
+           encostar exige informar os pedidos, e um botão que encostasse
+           daqui pularia justamente a informação que faz o material ser
+           separado pra doca. -->
+      <span class="doca-fila-acao">
+        <button class="btn btn-primary doca-preparar" data-id="${escapeHtml(c.id)}">Preparar carregamento</button>
+      </span>
       <button class="acao-btn doca-cancelar" data-id="${escapeHtml(c.id)}"
               title="Cancelar — o veículo existiu e foi embora sem carregar (fica no histórico)">🚫</button>
       <button class="acao-btn doca-excluir" data-id="${escapeHtml(c.id)}" data-placa="${escapeHtml(c.placa)}"
@@ -437,6 +457,49 @@ async function calcularMetaItens(pedidos) {
   return (data || []).length || null;
 }
 
+// ---- PASSO 1: portaria -----------------------------------------------------
+// Robson, 14/09/2026: "esses dados ser preenchidos pela portaria quando o
+// veiculo entrar, dai deixa como banco de dados". Sem campo de pedido
+// aqui: a portaria não sabe o que o caminhão vai levar -- quem sabe é a
+// expedição, no passo 2.
+
+// O "banco de dados" da frase acima, na prática: a MESMA placa costuma
+// voltar (transportadora fixa, motorista fixo). Ao digitar a placa, o
+// último registro dela preenche o resto -- a portaria confere em vez de
+// redigitar. Só preenche campo VAZIO: o que a pessoa já escreveu vale
+// mais que o histórico (motorista trocou, telefone novo).
+async function puxarUltimoVeiculoPelaPlaca() {
+  const campoPlaca = document.getElementById('docaPlaca');
+  const placa = campoPlaca.value.trim().toUpperCase();
+  const aviso = document.getElementById('docasMsg');
+  if (placa.length < 5) return;  // placa incompleta ainda: não vale consultar
+
+  const { data, error } = await sb.from('doca_carregamentos')
+    .select('motorista, telefone_motorista, transportadora, destino, tipo_veiculo, frete')
+    .eq('unidade', unidadeAtual).eq('placa', placa)
+    .order('chegada_em', { ascending: false }).limit(1);
+  if (error || !data || !data.length) return;
+
+  const ultimo = data[0];
+  const preencher = (id, valor) => {
+    const el = document.getElementById(id);
+    if (el && !el.value && valor) el.value = valor;
+  };
+  preencher('docaMotorista', ultimo.motorista);
+  preencher('docaTelefone', ultimo.telefone_motorista);
+  preencher('docaTransportadora', ultimo.transportadora);
+  preencher('docaDestino', ultimo.destino);
+  if (ultimo.frete && !document.getElementById('docaFrete').value) {
+    document.getElementById('docaFrete').value = ultimo.frete;
+  }
+  if (ultimo.tipo_veiculo) document.getElementById('docaTipoVeiculo').value = ultimo.tipo_veiculo;
+
+  aviso.textContent = `Dados preenchidos a partir da última entrada de ${placa} — confira antes de registrar.`;
+  aviso.className = 'status-msg status-ok';
+}
+
+document.getElementById('docaPlaca').addEventListener('blur', puxarUltimoVeiculoPelaPlaca);
+
 document.getElementById('docaChegadaBtn').addEventListener('click', async () => {
   const msg = document.getElementById('docasMsg');
   const btn = document.getElementById('docaChegadaBtn');
@@ -448,17 +511,12 @@ document.getElementById('docaChegadaBtn').addEventListener('click', async () => 
     return;
   }
 
-  // "KV876431, KV855935" ou "KV876431 KV855935" -- o conferente digita do
-  // jeito que está no papel; separador não pode ser regra decorada.
-  const pedidos = document.getElementById('docaPedidos').value
-    .split(/[,;\s]+/).map(p => p.trim().toUpperCase()).filter(Boolean);
-
   btn.disabled = true;
-  msg.textContent = 'Registrando chegada...';
+  msg.textContent = 'Registrando entrada...';
   msg.className = 'status-msg';
 
-  const meta = await calcularMetaItens(pedidos);
-
+  // Sem meta_itens nem pedidos: os dois só existem depois que a expedição
+  // disser o que esse caminhão leva (passo 2).
   const { data, error } = await sb.from('doca_carregamentos').insert({
     unidade: unidadeAtual,
     setor: typeof setorExpAtual !== 'undefined' ? setorExpAtual : 'exp',
@@ -469,7 +527,6 @@ document.getElementById('docaChegadaBtn').addEventListener('click', async () => 
     destino: document.getElementById('docaDestino').value.trim() || null,
     tipo_veiculo: document.getElementById('docaTipoVeiculo').value,
     frete: document.getElementById('docaFrete').value || null,
-    meta_itens: meta,
     criado_por: nomeUsuarioAtual
   }).select('id').single();
 
@@ -481,26 +538,148 @@ document.getElementById('docaChegadaBtn').addEventListener('click', async () => 
     return;
   }
 
-  if (pedidos.length) {
-    const { error: erroPedidos } = await sb.from('doca_carregamento_pedidos')
-      .insert(pedidos.map(numero_pedido => ({ carregamento_id: data.id, numero_pedido })));
-    if (erroPedidos) console.warn('Não foi possível vincular os pedidos:', erroPedidos.message);
-  }
-  await registrarEventoDoca(data.id, 'chegou', { placa, pedidos, meta_itens: meta });
+  await registrarEventoDoca(data.id, 'entrou', { placa });
 
-  ['docaPlaca', 'docaMotorista', 'docaTelefone', 'docaTransportadora', 'docaDestino', 'docaPedidos', 'docaFrete'].forEach(id => {
+  ['docaPlaca', 'docaMotorista', 'docaTelefone', 'docaTransportadora', 'docaDestino', 'docaFrete'].forEach(id => {
     document.getElementById(id).value = '';
   });
   // A confirmação vem DEPOIS de recarregar: carregarPainelDocas() limpa a
   // área de mensagem, então escrever antes fazia o aviso piscar e sumir --
-  // e o conferente ficava sem saber se a chegada entrou ou não.
+  // e a portaria ficava sem saber se a entrada foi registrada ou não.
   await carregarPainelDocas();
-  msg.textContent = `${placa} na fila do pátio${meta ? ` — ${meta} item(ns) previsto(s)` : ''}.`;
+  msg.textContent = `${placa} entrou — está no pátio, esperando a expedição encostar numa doca.`;
+  msg.className = 'status-msg status-ok';
+});
+
+// ---- PASSO 2: expedição ----------------------------------------------------
+// "o encarregado digita só a placa, ou nome do motorista, que ja vai puxar
+// os dados". A busca é só entre quem ESTÁ NO PÁTIO agora (entrou e não
+// encostou) -- procurar no histórico inteiro traria caminhão de ontem e
+// o encarregado encostaria o veículo errado sem perceber.
+function veiculosNoPatio() {
+  return docaCarregamentos.filter(c => c.status === 'aguardando' && !c.doca_id);
+}
+
+function carregamentoEscolhidoNoPatio() {
+  const texto = document.getElementById('docaBuscaVeiculo').value.trim().toLowerCase();
+  if (!texto) return null;
+  const patio = veiculosNoPatio();
+  // Bate primeiro pelo rótulo inteiro do datalist (o encarregado escolheu
+  // na lista), depois por pedaço de placa ou de nome -- ele pode ter
+  // digitado só "MBA" ou "jonas".
+  return patio.find(c => rotuloVeiculoPatio(c).toLowerCase() === texto)
+      || patio.find(c => String(c.placa || '').toLowerCase() === texto)
+      || patio.find(c => String(c.placa || '').toLowerCase().includes(texto)
+                      || String(c.motorista || '').toLowerCase().includes(texto))
+      || null;
+}
+
+function rotuloVeiculoPatio(c) {
+  return [c.placa, c.motorista, c.transportadora].filter(Boolean).join(' — ');
+}
+
+function renderEscolhaVeiculo() {
+  const caixa = document.getElementById('docaVeiculoEscolhido');
+  const c = carregamentoEscolhidoNoPatio();
+
+  if (!c) {
+    const digitou = document.getElementById('docaBuscaVeiculo').value.trim();
+    caixa.style.display = digitou ? 'block' : 'none';
+    caixa.className = 'doca-escolhido doca-escolhido-vazio';
+    caixa.innerHTML = digitou
+      ? 'Nenhum veículo no pátio com essa placa ou motorista. A portaria já registrou a entrada dele?'
+      : '';
+    return;
+  }
+
+  caixa.style.display = 'block';
+  caixa.className = 'doca-escolhido';
+  caixa.innerHTML = `
+    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+      <span class="doca-placa">${escapeHtml(c.placa)}</span>
+      ${freteHtml(c.frete)}
+      <span class="doca-sub">${escapeHtml(c.tipo_veiculo || '—')}${c.transportadora ? ' · ' + escapeHtml(c.transportadora) : ''}</span>
+      ${c.destino ? `<span class="doca-destino">📍 ${escapeHtml(c.destino)}</span>` : ''}
+      ${c.motorista ? `<span class="doca-sub">Motorista: ${escapeHtml(c.motorista)}</span>` : ''}
+      ${telefoneHtml(c.telefone_motorista)}
+      <span class="doca-sub" style="margin-left:auto;">no pátio há ${duracaoHhMm(minutosEntre(c.chegada_em, null))}</span>
+    </div>`;
+}
+
+document.getElementById('docaBuscaVeiculo').addEventListener('input', renderEscolhaVeiculo);
+
+document.getElementById('docaEncostarBtn').addEventListener('click', async () => {
+  const msg = document.getElementById('docasMsg');
+  const btn = document.getElementById('docaEncostarBtn');
+  const c = carregamentoEscolhidoNoPatio();
+
+  if (!c) {
+    msg.textContent = 'Escolha o veículo pela placa ou pelo nome do motorista.';
+    msg.className = 'status-msg status-err';
+    return;
+  }
+
+  const docaId = document.getElementById('docaDestinoDoca').value;
+  if (!docaId) {
+    msg.textContent = 'Escolha em qual doca o veículo encostou.';
+    msg.className = 'status-msg status-err';
+    return;
+  }
+
+  // "KV876431, KV855935" ou "KV876431 KV855935" -- o encarregado digita do
+  // jeito que está no papel; separador não pode ser regra decorada.
+  const pedidos = document.getElementById('docaPedidos').value
+    .split(/[,;\s]+/).map(p => p.trim().toUpperCase()).filter(Boolean);
+
+  if (!pedidos.length) {
+    msg.textContent = 'Informe o(s) pedido(s) que este veículo vai carregar — é o que faz o material ser separado pra doca.';
+    msg.className = 'status-msg status-err';
+    return;
+  }
+
+  btn.disabled = true;
+  msg.textContent = 'Encostando na doca...';
+  msg.className = 'status-msg';
+
+  // A meta só dá pra calcular AGORA: ela sai dos pedidos, e os pedidos só
+  // existem neste passo (na portaria ninguém sabia o que o caminhão leva).
+  const meta = await calcularMetaItens(pedidos);
+
+  const { error } = await sb.from('doca_carregamentos').update({
+    doca_id: docaId, chamado_em: new Date().toISOString(), meta_itens: meta
+  }).eq('id', c.id);
+
+  if (error) {
+    btn.disabled = false;
+    msg.textContent = 'Não foi possível encostar: ' + error.message;
+    msg.className = 'status-msg status-err';
+    return;
+  }
+
+  // Upsert com ignoreDuplicates: encostar o mesmo veículo de novo (troca de
+  // doca, correção de pedido) não pode estourar na chave única de
+  // (carregamento, pedido) -- ver fase39.
+  const { error: erroPedidos } = await sb.from('doca_carregamento_pedidos')
+    .upsert(pedidos.map(numero_pedido => ({ carregamento_id: c.id, numero_pedido })),
+            { onConflict: 'carregamento_id,numero_pedido', ignoreDuplicates: true });
+  if (erroPedidos) console.warn('Não foi possível vincular os pedidos:', erroPedidos.message);
+
+  await registrarEventoDoca(c.id, 'encostou', { doca_id: docaId, pedidos, meta_itens: meta });
+
+  btn.disabled = false;
+  document.getElementById('docaBuscaVeiculo').value = '';
+  document.getElementById('docaPedidos').value = '';
+  renderEscolhaVeiculo();
+
+  const nomeDoca = (docasCadastro.find(d => d.id === docaId) || {}).nome || 'doca';
+  await carregarPainelDocas();
+  msg.textContent = `${c.placa} encostou na ${nomeDoca} — ${pedidos.length} pedido(s)`
+    + `${meta ? `, ${meta} item(ns) a carregar` : ''}. O material já aparece chamado no Controle EXP.`;
   msg.className = 'status-msg status-ok';
 });
 
 document.getElementById('docasFilaBody').addEventListener('click', async (e) => {
-  const btnChamar = e.target.closest('.doca-chamar');
+  const btnPreparar = e.target.closest('.doca-preparar');
   const btnCancelar = e.target.closest('.doca-cancelar');
   const btnExcluir = e.target.closest('.doca-excluir');
 
@@ -509,20 +688,17 @@ document.getElementById('docasFilaBody').addEventListener('click', async (e) => 
     return;
   }
 
-  if (btnChamar) {
-    const id = btnChamar.dataset.id;
-    // `.doca-select-destino`, não `.doca-destino`: essa segunda classe é
-    // do TEXTO do destino do embarque (📍 Joinville), que passou a
-    // aparecer no mesmo bloco -- duas coisas diferentes com o mesmo nome
-    // pegariam o elemento errado aqui e ainda herdariam o estilo errado.
-    const select = document.querySelector(`.doca-select-destino[data-id="${id}"]`);
-    if (!select) return;
-    btnChamar.disabled = true;
-    const { error } = await sb.from('doca_carregamentos')
-      .update({ doca_id: select.value, chamado_em: new Date().toISOString() }).eq('id', id);
-    if (error) { alert('Não foi possível chamar: ' + error.message); btnChamar.disabled = false; return; }
-    await registrarEventoDoca(id, 'chamou', { doca_id: select.value });
-    await carregarPainelDocas();
+  // Preencher o passo 2 com este veículo e levar o foco pros pedidos --
+  // que é o único dado que ainda falta nesse momento.
+  if (btnPreparar) {
+    const c = docaCarregamentos.find(x => x.id === btnPreparar.dataset.id);
+    if (!c) return;
+    const busca = document.getElementById('docaBuscaVeiculo');
+    busca.value = rotuloVeiculoPatio(c);
+    renderEscolhaVeiculo();
+    const campoPedidos = document.getElementById('docaPedidos');
+    campoPedidos.focus();
+    campoPedidos.scrollIntoView({ block: 'center', behavior: 'smooth' });
     return;
   }
 

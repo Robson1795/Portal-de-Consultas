@@ -1277,6 +1277,20 @@ function aindaNoEndereco(status) {
 // outra, e "kv876431 " não pode deixar de casar com "KV876431".
 let carregamentoAbertoPorPedido = new Map();
 
+// Pedido que tem caminhão ENCOSTADO numa doca esperando (já chamado, mas
+// ainda não necessariamente carregando) -- Robson, 14/09/2026: "a
+// responsavel pelo exp acessoris ja sabe que tem que deixar o material na
+// parte que o conferente busca o material". É o aviso que faz o material
+// ser separado ANTES do conferente ir buscar.
+//
+// Mapa SEPARADO do de cima, mesmo saindo da mesma consulta, porque
+// respondem perguntas diferentes: este é só aviso na tela (inclui o
+// veículo que encostou e ainda não começou), o de cima decide em qual
+// caminhão a baixa vai ser carimbada (só quem está carregando de fato --
+// carimbar num carregamento que nem começou faria a barra de progresso
+// dele andar antes da hora).
+let pedidoChamadoParaDoca = new Map();   // numero_pedido -> { doca, carregando }
+
 function chavePedidoCarregamento(numeroPedido) {
   return String(numeroPedido == null ? '' : numeroPedido).trim().toUpperCase();
 }
@@ -1286,21 +1300,64 @@ function carregamentoAbertoDoPedido(numeroPedido) {
   return chave ? (carregamentoAbertoPorPedido.get(chave) || null) : null;
 }
 
+function chamadoParaDocaDoPedido(numeroPedido) {
+  const chave = chavePedidoCarregamento(numeroPedido);
+  return chave ? (pedidoChamadoParaDoca.get(chave) || null) : null;
+}
+
+// Selo "🚛 Doca 2" ao lado do nº do pedido, onde quer que o Controle EXP
+// mostre um pedido. Vazio quando não há caminhão esperando por ele.
+function seloDocaDoPedido(numeroPedido) {
+  const chamado = chamadoParaDocaDoPedido(numeroPedido);
+  if (!chamado) return '';
+  const titulo = chamado.carregando
+    ? `Carregando agora na ${chamado.doca} — o conferente está buscando este material`
+    : `Veículo encostado na ${chamado.doca} esperando — deixe o material na área de carregamento`;
+  return ` <span class="doca-chamado${chamado.carregando ? ' doca-chamado-carregando' : ''}"
+                 title="${escapeHtml(titulo)}">🚛 ${escapeHtml(chamado.doca)}</span>`;
+}
+
+// Três consultas pequenas em vez de um embed aninhado
+// (doca_carregamento_pedidos -> doca_carregamentos -> docas): o aninhado
+// depende de o PostgREST resolver duas relações de uma vez, e quando
+// falha, falha silencioso -- aqui é preferível previsível.
 async function carregarCarregamentosAbertos() {
   carregamentoAbertoPorPedido = new Map();
-  const { data, error } = await sb.from('doca_carregamento_pedidos')
-    .select('numero_pedido, carregamento_id, doca_carregamentos!inner(status, unidade)')
-    .eq('doca_carregamentos.status', 'carregando')
-    .eq('doca_carregamentos.unidade', unidadeAtual);
-  if (error) {
+  pedidoChamadoParaDoca = new Map();
+
+  const [carregamentos, docas] = await Promise.all([
+    sb.from('doca_carregamentos').select('id, status, doca_id')
+      .eq('unidade', unidadeAtual).in('status', ['aguardando', 'carregando']).not('doca_id', 'is', null),
+    sb.from('docas').select('id, nome').eq('unidade', unidadeAtual)
+  ]);
+
+  if (carregamentos.error || docas.error) {
     // Silencioso de propósito (mesmo padrão de carregarConferirExpNotas):
     // se o fase39 ainda não rodou no Supabase, o Controle EXP continua
-    // funcionando inteiro -- só não carimba o caminhão.
-    console.warn('Não foi possível carregar os carregamentos abertos:', error.message);
+    // funcionando inteiro -- só não mostra o aviso da doca.
+    console.warn('Não foi possível carregar os carregamentos das docas:',
+                 (carregamentos.error || docas.error).message);
     return;
   }
-  (data || []).forEach(r => {
-    carregamentoAbertoPorPedido.set(chavePedidoCarregamento(r.numero_pedido), r.carregamento_id);
+  if (!(carregamentos.data || []).length) return;
+
+  const nomeDaDoca = new Map((docas.data || []).map(d => [d.id, d.nome]));
+  const porCarregamento = new Map((carregamentos.data || []).map(c => [c.id, c]));
+
+  const { data: vinculos, error } = await sb.from('doca_carregamento_pedidos')
+    .select('numero_pedido, carregamento_id')
+    .in('carregamento_id', [...porCarregamento.keys()]);
+  if (error) { console.warn('Não foi possível carregar os pedidos das docas:', error.message); return; }
+
+  (vinculos || []).forEach(v => {
+    const c = porCarregamento.get(v.carregamento_id);
+    if (!c) return;
+    const chave = chavePedidoCarregamento(v.numero_pedido);
+    if (c.status === 'carregando') carregamentoAbertoPorPedido.set(chave, c.id);
+    pedidoChamadoParaDoca.set(chave, {
+      doca: nomeDaDoca.get(c.doca_id) || 'doca',
+      carregando: c.status === 'carregando'
+    });
   });
 }
 
@@ -1528,7 +1585,7 @@ function renderExpControle(erroCarregamento) {
       <td class="num"><input type="text" class="expctrl-qtd-input" data-id="${escapeHtml(l.id)}"
              value="${l.quantidade != null ? escapeHtml(l.quantidade) : ''}" placeholder="—"
              style="width:70px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px; text-align:right;"></td>
-      <td class="loc">${escapeHtml(l.numero_pedido || '—')}</td>
+      <td class="loc">${escapeHtml(l.numero_pedido || '—')}${seloDocaDoPedido(l.numero_pedido)}</td>
       <td class="loc">${escapeHtml(l.numero_os_op || '—')}</td>
       <td class="loc">${escapeHtml(l.lote || '—')}</td>
       <td class="loc">${escapeHtml(l.referencia || '—')}</td>
@@ -3600,7 +3657,7 @@ function renderConferencia() {
                   <td class="item">${escapeHtml(l.codigo_item)}</td>
                   <td>${desc && desc.descricao ? escapeHtml(desc.descricao) : '—'}</td>
                   <td class="num">${l.quantidade != null ? escapeHtml(l.quantidade) : '—'}</td>
-                  <td class="loc">${escapeHtml(l.numero_pedido || '—')}</td>
+                  <td class="loc">${escapeHtml(l.numero_pedido || '—')}${seloDocaDoPedido(l.numero_pedido)}</td>
                   <td class="col-acoes">
                     <button class="btn conf-retirar-item" data-id="${escapeHtml(l.id)}"
                             title="Saiu deste endereço pra área de carregamento">🚚 DOCA</button>

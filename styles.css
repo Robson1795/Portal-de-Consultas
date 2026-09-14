@@ -1347,3 +1347,52 @@ td.col-acoes { white-space: nowrap; text-align: center; }
 }
 .doca-frete-cif { background: var(--azul-fundo); color: var(--blue-texto); }
 .doca-frete-fob { background: var(--aviso-fundo); color: var(--aviso-texto); }
+
+/* ---- Passos do Painel de Docas: portaria x expedição (14/09/2026) ----
+   Robson: "esses dados ser preenchidos pela portaria quando o veiculo
+   entrar... A parte do encarregado da expedição é colocar o numero dos
+   pedidos e marcar qual a doca". São dois PAPÉIS diferentes na mesma
+   tela, então precisam de separação visual -- uma barra de campos
+   corrida faria a portaria digitar pedido e a expedição redigitar placa. */
+.doca-passo {
+  border: 1px solid var(--border); border-radius: 12px;
+  margin: 8px 16px; padding: 4px 0 8px; background: var(--row-alt);
+}
+.doca-passo-cab {
+  display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+  padding: 10px 16px 2px;
+}
+.doca-passo-num {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--blue); color: var(--sobre-acento);
+  font-size: 12px; font-weight: 800; flex: none;
+}
+.doca-passo-dica { font-size: 11.5px; color: var(--muted); }
+.doca-passo .cfg-barra { background: transparent; }
+
+/* Os dados que a expedição puxou pela placa/motorista. Existe pra
+   CONFERIR antes de encostar: placa parecida é erro fácil de cometer com
+   o caminhão na frente e pressa no pátio. */
+.doca-escolhido {
+  margin: 0 16px 8px; padding: 10px 12px; border-radius: 10px;
+  background: var(--panel); border: 1px solid var(--blue);
+}
+.doca-escolhido-vazio {
+  border-color: var(--aviso-borda); background: var(--aviso-fundo);
+  color: var(--aviso-texto); font-size: 12.5px; font-weight: 600;
+}
+
+/* Selo "🚛 Doca 2" ao lado do nº do pedido, no Controle EXP. É o aviso
+   pra quem cuida do EXP Acessórios: tem caminhão esperando esse material,
+   deixe na área onde o conferente busca. */
+.doca-chamado {
+  display: inline-block; font-size: 10.5px; font-weight: 800;
+  padding: 1px 6px; border-radius: 5px; white-space: nowrap;
+  background: var(--aviso-fundo); color: var(--aviso-texto);
+  border: 1px solid var(--aviso-borda);
+}
+/* Já carregando: deixou de ser "prepare" e virou "está acontecendo". */
+.doca-chamado-carregando {
+  background: var(--ok-fundo); color: var(--ok-texto); border-color: var(--ok-borda);
+}

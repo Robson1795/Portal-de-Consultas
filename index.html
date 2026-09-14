@@ -1310,9 +1310,22 @@
         <button class="btn" id="docasAtualizarBtn" style="margin-left:auto;">Atualizar</button>
       </div>
 
-      <!-- Chegada: o veículo entra na FILA do pátio, ainda sem doca. O
-           tempo de fila (chegada -> chamada) é indicador separado do
+      <!-- ---- PASSO 1: PORTARIA ----------------------------------------
+           Robson, 14/09/2026: "a ideia é esses dados ser preenchidos pela
+           portaria quando o veiculo entrar, dai deixa como banco de
+           dados. A parte do encarregado da expedição é colocar o numero
+           dos pedidos que vai ser carregado em cada veiculo e marcar qual
+           a doca que o veiculo encostou".
+           Aqui NÃO tem campo de pedido de propósito: a portaria não sabe
+           o que o caminhão vai levar, quem sabe é a expedição (passo 2).
+           O tempo de fila (entrada -> encostou) é indicador separado do
            tempo de carregamento -- ver fase39. -->
+      <div class="doca-passo">
+        <div class="doca-passo-cab">
+          <span class="doca-passo-num">1</span>
+          <strong>Portaria — entrada do veículo</strong>
+          <span class="doca-passo-dica">Digite a placa: se o veículo já veio antes, o resto vem preenchido.</span>
+        </div>
       <div class="cfg-barra" style="flex-wrap:wrap;">
         <input type="text" id="docaPlaca" placeholder="Placa" maxlength="10"
                style="width:120px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px; text-transform:uppercase; font-weight:700;">
@@ -1347,9 +1360,36 @@
              que é onde a chegada é registrada na prática. -->
         <input type="tel" id="docaTelefone" placeholder="Telefone do motorista"
                style="width:170px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
-        <input type="text" id="docaPedidos" placeholder="Nº do(s) pedido(s) — separe por vírgula"
-               style="flex:2; min-width:210px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
-        <button class="btn btn-primary" id="docaChegadaBtn">Registrar chegada</button>
+        <button class="btn btn-primary" id="docaChegadaBtn">Registrar entrada</button>
+      </div>
+      </div>
+
+      <!-- ---- PASSO 2: EXPEDIÇÃO --------------------------------------
+           "dai o encarregado digita só a placa, ou nome do motorista, que
+           ja vai puxar os dados". A lista só tem quem a portaria já
+           registrou e ainda não encostou -- não é busca livre no
+           histórico, é escolher entre os que estão no pátio agora. -->
+      <div class="doca-passo">
+        <div class="doca-passo-cab">
+          <span class="doca-passo-num">2</span>
+          <strong>Expedição — encostar na doca</strong>
+          <span class="doca-passo-dica">Placa ou motorista puxa os dados. Informe os pedidos e a doca.</span>
+        </div>
+        <div class="cfg-barra" style="flex-wrap:wrap;">
+          <input type="text" id="docaBuscaVeiculo" list="docaVeiculosPatio" autocomplete="off"
+                 placeholder="Placa ou nome do motorista..."
+                 style="flex:1; min-width:210px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px; font-weight:600;">
+          <datalist id="docaVeiculosPatio"></datalist>
+          <select id="docaDestinoDoca"
+                  style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;"></select>
+          <input type="text" id="docaPedidos" placeholder="Nº do(s) pedido(s) — separe por vírgula"
+                 style="flex:2; min-width:230px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <button class="btn btn-primary" id="docaEncostarBtn">Encostar na doca</button>
+        </div>
+        <!-- Os dados puxados aparecem aqui, pra conferir antes de encostar
+             (placa parecida é erro fácil de cometer com o caminhão na
+             frente e pressa no pátio). -->
+        <div id="docaVeiculoEscolhido" class="doca-escolhido" style="display:none;"></div>
       </div>
 
       <!-- O quadro: uma coluna por doca cadastrada nesta unidade -->

@@ -3016,6 +3016,91 @@ grupo; busca por pedido continua funcionando; item retirado na mesma
 localização continua fora, mesmo buscando por ela. Zero erro de
 console.
 
+## Portaria x Expedição: dois papéis no Painel de Docas (14/09/2026)
+
+O Robson redesenhou o fluxo depois de usar o painel: *"a ideia é esses
+dados ser preenchidos pela portaria quando o veiculo entrar, dai deixa
+como banco de dados. A parte do encarregado da expedição é colocar o
+numero dos pedidos que vai ser carregado em cada veiculo e marcar qual a
+doca que o veiculo encostou, dai o encarregado digita só a placa, ou nome
+do motorista, que ja vai puxar os dados, dai a responsavel pelo exp
+acessoris ja sabe que tem que deixar o material na parte que o conferente
+busca o material"*.
+
+**Nenhum SQL novo** -- as colunas já existiam desde a fase39/40/42. O que
+mudou foi QUEM preenche o quê, e quando.
+
+### Passo 1 — Portaria (entrada do veículo)
+
+Placa, tipo, frete, transportadora, destino, motorista e telefone. **Sem
+campo de pedido**, de propósito: a portaria não sabe o que o caminhão vai
+levar. O veículo entra no pátio, sem doca.
+
+O *"deixa como banco de dados"* virou auto-preenchimento: ao sair do campo
+placa, o **último registro daquela placa** preenche o resto
+(`puxarUltimoVeiculoPelaPlaca()`). A mesma placa costuma voltar
+(transportadora fixa, motorista fixo), então a portaria confere em vez de
+redigitar. Só preenche campo **vazio** -- o que a pessoa já escreveu vale
+mais que o histórico (motorista trocou, telefone novo). E avisa que
+preencheu, porque dado que aparece sozinho sem explicação vira dado que
+ninguém confere.
+
+### Passo 2 — Expedição (encostar na doca)
+
+*"digita só a placa, ou nome do motorista, que ja vai puxar os dados"*: um
+campo só, com `datalist` dos veículos **que estão no pátio agora** — não é
+busca no histórico, que traria caminhão de ontem e faria o encarregado
+encostar o veículo errado sem perceber. Casa por rótulo inteiro, por placa
+exata, ou por pedaço de placa/nome (ele digita "MBA" ou "jonas").
+
+Os dados puxados aparecem num cartão **para conferir antes de encostar** —
+placa parecida é erro fácil de cometer com o caminhão na frente e pressa
+no pátio.
+
+Pedido é **obrigatório** aqui (as outras validações também recusam sem
+veículo e sem doca): é o pedido que faz o material ser separado pra doca,
+então encostar sem ele deixaria o fluxo pela metade em silêncio. A
+`meta_itens` passou a ser calculada NESTE passo, não na entrada — ela sai
+dos pedidos, que antes não existiam ainda.
+
+O botão da fila do pátio deixou de ser "Chamar" (que encostava direto) e
+virou **"Preparar carregamento"**: preenche o passo 2 com aquele veículo e
+põe o foco nos pedidos. Encostar passou a ter um caminho só, e esse
+caminho sempre passa pelos pedidos.
+
+### O aviso no Controle EXP
+
+*"a responsavel pelo exp acessoris ja sabe que tem que deixar o material
+na parte que o conferente busca"* — perguntado se era só consequência do
+fluxo ou um aviso de verdade, ele pediu o aviso.
+
+Selo **🚛 Doca 2** ao lado do nº do pedido, na aba Entrada e na
+Saída/Conferência. Amarelo quando o veículo está encostado esperando
+("deixe o material na área de carregamento"), verde quando já está
+carregando ("o conferente está buscando"). Sem caminhão, sem selo.
+
+⚠️ **Dois mapas separados, saindo da mesma consulta** — e a diferença
+importa: `carregamentoAbertoPorPedido` (só `carregando`) decide em qual
+caminhão a baixa é carimbada; `pedidoChamadoParaDoca` (encostado **ou**
+carregando) é só o aviso visual. Juntar os dois faria a barra de progresso
+de um caminhão que nem começou a carregar andar sozinha.
+
+A consulta virou **três queries pequenas** em vez de um embed aninhado
+(`doca_carregamento_pedidos -> doca_carregamentos -> docas`): o aninhado
+depende de o PostgREST resolver duas relações de uma vez e, quando falha,
+falha silencioso.
+
+Conferido no navegador: passo 1 sem campo de pedido; placa repetida puxa
+motorista/telefone/destino/tipo/frete e **preserva** o que já estava
+digitado; busca do passo 2 acha por placa parcial e por nome do motorista,
+e avisa quando a portaria ainda não registrou; as três validações
+(veículo, doca, pedidos) recusam com mensagem própria; encostar grava
+`doca_id` + `chamado_em` + `meta_itens` e faz upsert dos pedidos em
+maiúscula sem estourar em duplicata; select de doca só oferece doca livre;
+selo aparece nas duas telas do Controle EXP, com tooltip diferente para
+esperando e carregando, e não aparece em pedido sem caminhão. Zero erro de
+console.
+
 ## CIF ou FOB no Painel de Docas (14/09/2026)
 
 O Robson, olhando o painel já em uso: *"coloque tambem cif ou fob"*.
