@@ -3016,6 +3016,25 @@ grupo; busca por pedido continua funcionando; item retirado na mesma
 localização continua fora, mesmo buscando por ela. Zero erro de
 console.
 
+## Exportar HTML no Painel de Docas (14/09/2026)
+
+O Robson: *"Depois quero um campo que extrai o relatorio em HTM"*.
+
+Botão "Exportar HTML" ao lado de "Carregados hoje", reaproveitando
+`montarHtmlTabelaGenerica()` -- a mesma função já usada pela Entrada e
+pela Auditoria (js/programacao.js, carregado antes de docas.js) -- em vez
+de inventar layout novo. Mesmas colunas da tabela na tela.
+
+Só os carregamentos **finalizados** de hoje entram no arquivo: fila e
+docas em andamento são estado do momento, mudam no minuto seguinte, e um
+"relatório" que já nasce desatualizado no segundo em que é aberto não
+serve pra guardar nem pra mandar por e-mail. Sem carregamento finalizado
+ainda, avisa em vez de baixar um arquivo vazio.
+
+Conferido no navegador: baixa `painel-docas-106-AAAA-MM-DD.html` com
+título, cabeçalho e as 11 colunas certas (inclusive Frete e Doca); sem
+nada finalizado, avisa e não baixa nada. Zero erro de console.
+
 ## Portaria x Expedição: dois papéis no Painel de Docas (14/09/2026)
 
 O Robson redesenhou o fluxo depois de usar o painel: *"a ideia é esses

@@ -320,8 +320,6 @@ function renderCarregadosHoje() {
   vazio.style.display = feitos.length ? 'none' : 'block';
   if (!feitos.length) { corpo.innerHTML = ''; return; }
 
-  const nomeDoca = (id) => (docasCadastro.find(d => d.id === id) || {}).nome || '—';
-
   corpo.innerHTML = feitos.map(c => `
     <tr>
       <td class="item">${escapeHtml(c.placa)}</td>
@@ -330,7 +328,7 @@ function renderCarregadosHoje() {
       <td>${escapeHtml(c.transportadora || '—')}</td>
       <td>${escapeHtml(c.destino || '—')}</td>
       <td class="loc">${escapeHtml(pedidosDoCarregamento(c.id).join(' + ') || '—')}</td>
-      <td class="loc">${escapeHtml(nomeDoca(c.doca_id))}</td>
+      <td class="loc">${escapeHtml(nomeDaDocaCadastrada(c.doca_id))}</td>
       <td class="loc">${c.inicio_em ? escapeHtml(formatarDataHoraBR(c.inicio_em)) : '—'}</td>
       <td class="loc">${c.fim_em ? escapeHtml(formatarDataHoraBR(c.fim_em)) : '—'}</td>
       <td class="num" style="font-weight:700;">${duracaoHhMm(minutosEntre(c.inicio_em, c.fim_em))}</td>
@@ -343,6 +341,53 @@ function renderCarregadosHoje() {
       </td>
     </tr>`).join('');
 }
+
+// ---- Exportar HTML -----------------------------------------------------
+// Robson, 14/09/2026: "Depois quero um campo que extrai o relatorio em
+// HTM". Mesmo padrão de toda exportação HTML do portal
+// (montarHtmlTabelaGenerica(), já usada pela Entrada e pela Auditoria em
+// js/programacao.js, carregado antes de docas.js) -- não inventa layout
+// novo, reaproveita cabeçalho/linha genéricos e o baixarArquivo() de lá.
+//
+// Exporta os carregamentos FINALIZADOS de hoje, nas mesmas colunas da
+// tabela "Carregados hoje" -- é o que já está na tela, só que pra
+// guardar/enviar por e-mail. Fila e docas em andamento não entram: são
+// estado do MOMENTO, não fato fechado, e mudam no minuto seguinte.
+const DOCAS_EXPORT_CABECALHO = [
+  'Placa', 'Veículo', 'Frete', 'Transportadora', 'Destino', 'Pedidos',
+  'Doca', 'Início', 'Fim', 'Duração', 'Conferente'
+];
+
+function nomeDaDocaCadastrada(docaId) {
+  return (docasCadastro.find(d => d.id === docaId) || {}).nome || '—';
+}
+
+function linhasExportacaoDocas() {
+  return docaCarregamentos
+    .filter(c => c.status === 'finalizado')
+    .sort((a, b) => new Date(b.fim_em || 0) - new Date(a.fim_em || 0))
+    .map(c => [
+      c.placa, c.tipo_veiculo || '', c.frete || '', c.transportadora || '', c.destino || '',
+      pedidosDoCarregamento(c.id).join(' + '), nomeDaDocaCadastrada(c.doca_id),
+      c.inicio_em ? formatarDataHoraBR(c.inicio_em) : '',
+      c.fim_em ? formatarDataHoraBR(c.fim_em) : '',
+      duracaoHhMm(minutosEntre(c.inicio_em, c.fim_em)),
+      c.conferente_fim || ''
+    ]);
+}
+
+document.getElementById('docasExportarBtn').addEventListener('click', () => {
+  const linhas = linhasExportacaoDocas();
+  if (!linhas.length) { alert('Nenhum carregamento finalizado hoje ainda para exportar.'); return; }
+
+  const html = montarHtmlTabelaGenerica({
+    titulo: `Painel de Docas — Carregados hoje — ${rotuloUnidade(unidadeAtual)}`,
+    cabecalho: DOCAS_EXPORT_CABECALHO,
+    linhas
+  });
+  const nomeBase = `painel-docas-${unidadeAtual}-${new Date().toISOString().slice(0, 10)}`;
+  baixarArquivo(new Blob([html], { type: 'text/html;charset=utf-8;' }), nomeBase + '.html');
+});
 
 // Cronômetro: só reescreve o TEXTO do tempo, não redesenha o quadro.
 // Redesenhar de minuto em minuto perderia o que estiver digitado nos
