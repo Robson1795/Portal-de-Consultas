@@ -94,6 +94,17 @@
           <button class="topbar-menu" id="menuToggle" title="Abrir/fechar menu" aria-label="Abrir ou fechar o menu">&#9776;</button>
           <div class="topbar-local" id="topbarLocal"></div>
           <div class="topbar-user">
+            <!-- Leitor de código (14/09/2026). Fica ao lado da busca porque é a
+                 mesma pergunta, feita com a câmera em vez do teclado: o código
+                 lido cai direto na busca global. -->
+            <button class="topbar-tema" id="scannerBtn" title="Ler código de barras ou QR com a câmera"
+                    aria-label="Ler código">📷</button>
+            <!-- Busca global (14/09/2026): o mesmo código de item vive em seis
+                 tabelas diferentes, e não havia como perguntar "onde está?" uma
+                 vez só. Fica no cabeçalho porque não pertence a tela nenhuma --
+                 é a pergunta que se faz de qualquer uma delas. Ctrl+K também abre. -->
+            <button class="topbar-tema" id="buscaGlobalBtn" title="Procurar um item em todas as telas (Ctrl+K)"
+                    aria-label="Busca global">🔎</button>
             <!-- Canal do consultor para o Robson e o Victor (ver js/sugestao.js).
                  Fica escondido por padrão: montarMenu() decide quem vê. -->
             <button class="topbar-tema" id="sugestaoBtn" style="display:none;"
@@ -201,6 +212,12 @@
               title="Imprime uma folha por item marcado, com a localização em letra grande">🖨️ Etiquetas (0)</button>
       <button class="btn" id="contagemBtn" title="Planilha para contagem física de estoque" style="font-size:16px; padding:9px 12px;">📋</button>
       <button class="btn" id="quemContouBtn" style="display:none;">Quem já contou</button>
+      <!-- Acuracidade de inventário ao longo do tempo. Fica aqui, ao lado da
+           contagem, em vez de virar mais um item de menu: é a mesma tarefa,
+           só que olhando pra trás. -->
+      <button class="btn" id="inventarioHistoricoBtn" style="display:none;"
+              title="Inventários já fechados nesta unidade, com a acuracidade de cada um">📊 Inventários</button>
+      <span class="status-msg" id="inventarioMsg"></span>
       <!-- Robson, 11/09/2026: "coloque uma caixa de seleção, para que eu
            selecione os itens que eu quero tirar da planilha" -- exclusão em
            lote, mesma permissão do 🗑️ por linha (ver podeVerEstoqueMinimo()
@@ -272,7 +289,17 @@
             <th class="col-acoes">Ações</th>
             <th class="col-contagem" style="display:none;">
               <div>Estoque Físico</div>
-              <button id="limparContagemBtn" type="button">Limpar tudo</button>
+              <!-- ⚠️ "Fechar inventário" é o caminho principal desde 14/09/2026: ele
+                   CONGELA a contagem em `inventarios`/`inventario_itens` e só então
+                   limpa. Antes, o único jeito de terminar era apagar -- e com a
+                   contagem ia embora a única prova do trabalho, e a resposta pra
+                   "qual é a nossa acuracidade?". Ver js/inventario.js. -->
+              <button id="fecharInventarioBtn" type="button"
+                      title="Guarda esta contagem no histórico (com a acuracidade) e limpa a tela">✅ Fechar inventário</button>
+              <!-- Continua existindo, e de propósito: contagem de teste ou começada
+                   errada não pode virar histórico. Só deixou de ser o único caminho. -->
+              <button id="limparContagemBtn" type="button"
+                      title="Apaga a contagem SEM guardar no histórico">Descartar</button>
             </th>
           </tr>
         </thead>
@@ -298,6 +325,41 @@
   <div class="footer-note">Dados armazenados no Supabase. Última atualização mostrada acima.</div>
   </div>
   <!-- fim de #estoqueContent -->
+
+  <!-- ================= PAINEL DO DIA (14/09/2026) =================
+       Primeira tela depois do login. Quase todo pedido registrado neste
+       projeto é a mesma frase dita de outro jeito -- "o PCP esquece daquele
+       material", "esqueço de tirar da localização", "a fila fica parada sem
+       ninguém saber". O portal já sabia todas essas coisas; só esperava
+       alguém abrir a tela certa e reparar.
+
+       ⚠️ Nenhum cálculo novo mora aqui: cada aviso é uma pergunta que alguma
+       tela já sabia fazer (ver AVISOS_PAINEL em js/painel.js). -->
+  <div id="painelContent" style="display:none;">
+    <div class="panel" style="padding:18px 16px;">
+      <div style="display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;">
+        <h2 id="painelSaudacao" style="margin:0; font-size:20px; color:var(--ink);">Bom dia</h2>
+        <span id="painelUnidade" style="color:var(--muted); font-size:13px; font-weight:600;"></span>
+        <button class="btn" id="painelRecarregar" style="margin-left:auto;">🔄 Recarregar</button>
+      </div>
+      <div id="painelResumo" style="margin-top:8px; font-size:14px; color:var(--ink);"></div>
+    </div>
+
+    <div class="painel-grade" id="painelGrade"></div>
+
+    <div class="cfg-nota">
+      <b>O painel não guarda nada.</b> Cada número é perguntado ao banco na hora em que esta tela
+      abre, e o clique leva pra tela onde a coisa se resolve — avisar sem dar o caminho só passa
+      pra frente o trabalho de procurar.
+      <br><br>
+      <b>Card zerado fica apagado, mas não some.</b> "Não tem nada atrasado" é exatamente a
+      informação que você veio buscar aqui; um card que desaparece deixaria a dúvida de se o
+      portal chegou a conferir. Some só o que não é do seu setor.
+      <br><br>
+      Os avisos seguem a unidade selecionada no topo — menos a fila de aprovação de cadastros,
+      que é da empresa inteira.
+    </div>
+  </div>
 
   <!-- ================= BOBINAS DE AÇO ================= -->
   <div id="bobinasContent" style="display:none;">
@@ -1505,6 +1567,91 @@
       indistinguível de "apagar o estoque da unidade", e apagar tem de ser um pedido explícito.
     </div>
 
+    <!-- ============ QUEM ESTÁ USANDO O PORTAL (14/09/2026) ============
+         `acessos` grava um login por linha desde o primeiro dia e NUNCA foi
+         lida por ninguém -- o único uso em js/*.js era o insert de js/auth.js.
+         É o dado que responde a pergunta nº 1 depois do rollout.
+
+         ⚠️ A pergunta que importa não é "quantos acessos", é **quem foi
+         aprovado e nunca entrou**: essa é a lista que precisa de um
+         telefonema, e a única que some sozinha quando o portal pega. -->
+    <div class="req-secao">Quem está usando o portal</div>
+    <div class="panel">
+      <div class="cfg-barra">
+        <select id="cfgAcessosPeriodo" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px; background:var(--panel); color:var(--ink);">
+          <option value="30">Últimos 30 dias</option>
+          <option value="90">Últimos 90 dias</option>
+          <option value="0">Desde o começo</option>
+        </select>
+        <button class="btn" id="cfgAcessosRecarregar">Recarregar</button>
+        <span class="status-msg" id="cfgAcessosMsg"></span>
+      </div>
+      <div class="stats" style="padding:0 16px;">
+        <div class="stat-pill">Entraram no período<strong id="cfg-ac-ativos">-</strong><span style="font-size:11px;">pessoas distintas</span></div>
+        <div class="stat-pill">Nunca entraram<strong id="cfg-ac-nunca">-</strong><span style="font-size:11px;">aprovados, sem nenhum acesso</span></div>
+        <div class="stat-pill">Sumidos<strong id="cfg-ac-sumidos">-</strong><span style="font-size:11px;">sem entrar há mais de 30 dias</span></div>
+        <div class="stat-pill">Acessos no período<strong id="cfg-ac-total">-</strong><span style="font-size:11px;">logins contados</span></div>
+      </div>
+      <div class="scroll-area">
+        <table id="cfgAcessosTabela">
+          <thead>
+            <tr>
+              <th>Situação</th>
+              <th>Pessoa</th>
+              <th>E-mail</th>
+              <th>Unidade</th>
+              <th>Perfil</th>
+              <th>Último acesso</th>
+              <th style="text-align:right;">Entradas</th>
+            </tr>
+          </thead>
+          <tbody id="cfgAcessosCorpo"></tbody>
+        </table>
+        <div class="empty-msg" id="cfgAcessosVazio" style="display:none;"></div>
+      </div>
+      <div class="cfg-nota">
+        <b>Conta aprovada que nunca entrou aparece primeiro</b>, e é o item de ação desta lista:
+        alguém foi liberado e não está usando — ou não sabe que foi aprovado, ou não sabe que o
+        portal existe. Depois vêm os que estão sumidos há mais tempo.
+        <br><br>
+        ⚠️ <b>Só conta login.</b> Quem deixa o portal aberto a semana inteira aparece com um
+        acesso só — é sinal de uso, não de abandono. E o registro não guarda em qual tela a
+        pessoa esteve: isto responde "entrou?", não "usou o quê?".
+      </div>
+    </div>
+
+    <!-- ============ BACKUP DE UM CLIQUE (14/09/2026) ============
+         O CLAUDE.md lista "sem backup automático" e "hospedagem com ponto
+         único de falha" como riscos abertos, e o sistema está prestes a ter
+         usuários de verdade. Não dá pra automatizar (não existe servidor neste
+         projeto), mas dá pra transformar "exportar 38 tabelas na mão pelo
+         painel do Supabase" em um clique -- o que ninguém faz porque dá
+         trabalho passa a ser feito. -->
+    <div class="req-secao">Backup</div>
+    <div class="panel">
+      <div class="cfg-barra">
+        <button class="btn btn-primary" id="cfgBackupBtn">💾 Baixar backup completo (.json)</button>
+        <span class="status-msg" id="cfgBackupMsg"></span>
+      </div>
+      <div style="padding:0 16px 16px;">
+        <div id="cfgBackupProgresso" style="font-size:12px; color:var(--muted); line-height:1.7;"></div>
+      </div>
+      <div class="cfg-nota">
+        Lê <b>todas as tabelas do portal</b>, de mil em mil linhas, e baixa um único arquivo
+        <code>.json</code> com a data no nome. Guarde fora deste computador — o ponto do backup é
+        justamente sobreviver à máquina, à conta do GitHub e ao projeto do Supabase.
+        <br><br>
+        ⚠️ <b>Tabela que volta vazia é listada no fim, e isso é de propósito.</b> Uma tabela
+        barrada pelo RLS responde <b>zero linhas sem erro nenhum</b> — igualzinho a uma tabela que
+        está vazia de verdade. O portal não tem como distinguir as duas, então mostra quais
+        vieram vazias e deixa a conferência com você. Backup que parece completo e não está é
+        pior que backup nenhum.
+        <br><br>
+        <b>É um retrato, não um histórico.</b> Salva o que está no banco agora; a estrutura das
+        tabelas continua sendo os arquivos em <code>sql/</code>. Os dois juntos refazem o banco.
+      </div>
+    </div>
+
     <!-- ---- Sugestões de melhoria: só o Robson e o Victor leem (RLS por
          eh_super_admin, ver sql/fase32-sugestoes-melhoria.sql). A seção some
          inteira para os outros admins -- ver carregarSugestoes() em
@@ -1735,6 +1882,60 @@
     </div>
   </div>
 
+  <!-- ============ BUSCA GLOBAL (14/09/2026) ============
+       Só leitura: responde ONDE o item está, em todas as telas de uma vez, e
+       manda pra tela que resolve. Ver FONTES_BUSCA em js/busca.js -- tela nova
+       no portal é uma entrada nova ali. -->
+  <!-- Histórico de inventários e acuracidade (ver js/inventario.js). -->
+  <!-- ============ LEITOR DE CÓDIGO (14/09/2026) ============
+       `BarcodeDetector` é API nativa do navegador -- sem biblioteca, sem CDN.
+       Nem todo navegador tem (funciona no Chrome do celular), e por isso o
+       campo de digitar não é enfeite: é o caminho de sempre no computador.
+       Ver js/scanner.js. -->
+  <div class="modal-overlay" id="scannerModal">
+    <div class="modal-box" style="max-width:460px;">
+      <button class="modal-close" id="scannerFechar">✕</button>
+      <h3 style="margin-top:0;">📷 Ler código</h3>
+      <div id="scannerCameraArea" style="display:none;">
+        <div class="scanner-moldura">
+          <video id="scannerVideo" playsinline muted></video>
+          <div class="scanner-mira"></div>
+        </div>
+      </div>
+      <div id="scannerAviso" class="busca-vazio"></div>
+      <div class="modal-label">Ou digite o código</div>
+      <div style="display:flex; gap:8px;">
+        <input type="text" id="scannerManualInput" placeholder="Ex.: 996613I"
+               style="flex:1; padding:10px 12px; border:1px solid var(--border); border-radius:10px;
+                      font-size:15px; background:var(--panel); color:var(--ink);">
+        <button class="btn btn-primary" id="scannerManualBtn">Procurar</button>
+      </div>
+      <div class="modal-text" style="font-size:11.5px; color:var(--muted); margin-top:10px;">
+        O que for lido cai na <b>busca global</b>: o leitor não precisa saber se aquilo é um item,
+        um lote ou um endereço — a busca procura em todas as telas de uma vez.
+      </div>
+    </div>
+  </div>
+  <div class="modal-overlay" id="inventarioModal">
+    <div class="modal-box" id="inventarioModalBox" style="max-width:860px;"></div>
+  </div>
+  <div class="modal-overlay" id="buscaGlobalModal">
+    <div class="modal-box" id="buscaGlobalBox" style="max-width:720px;">
+      <button class="modal-close" id="buscaGlobalFechar">✕</button>
+      <h3 style="margin-top:0;">🔎 Onde está este item?</h3>
+      <div class="modal-text" style="font-size:12px; color:var(--muted); margin-bottom:10px;">
+        Almoxarifado, EPI, Benchmark, expedição, doca, Catálogo EXP, aço e reservas —
+        das oito unidades, de uma vez. Digite o código (ou parte da descrição).
+      </div>
+      <div style="display:flex; gap:8px;">
+        <input type="text" id="buscaGlobalInput" placeholder="Ex.: 996613I"
+               style="flex:1; padding:10px 12px; border:1px solid var(--border); border-radius:10px;
+                      font-size:15px; background:var(--panel); color:var(--ink);">
+        <button class="btn btn-primary" id="buscaGlobalIr">Procurar</button>
+      </div>
+      <div id="buscaGlobalResultado" style="margin-top:14px;"></div>
+    </div>
+  </div>
   <div class="modal-overlay" id="ondeEstaModal">
     <div class="modal-box" id="ondeEstaModalBox" style="max-width:640px;"></div>
   </div>
@@ -1844,5 +2045,19 @@
 <!-- Depois dos outros: usa escapeHtml, rotuloUnidade e os globais de sessão. -->
 <script src="js/sugestao.js"></script>
 <script src="js/notificacoes.js"></script>
+<!-- Leitor de código: chama abrirBuscaGlobal() (js/busca.js) em tempo de execução. -->
+<script src="js/scanner.js"></script>
+<!-- Fechar inventário: lê currentData/contagemMap de js/estoque.js, em tempo
+     de execução (só quando alguém clica). -->
+<script src="js/inventario.js"></script>
+<!-- Busca global: usa normalizaCodigoItem/escapeIlike (js/estoque.js) e
+     tempoReservadoTexto (js/reservas.js), os dois só em tempo de execução. -->
+<script src="js/busca.js"></script>
+<!-- ⚠️ O Painel do Dia vai por ÚLTIMO: ele lê constantes de quase todos os
+     outros arquivos (RESERVA_DIAS_CRITICA, PERFIS, DEPOSITOS...). Carregado
+     antes deles, o `const` do topo dele avalia cedo demais e o arquivo inteiro
+     morre na carga -- aconteceu em 14/09/2026. As notas agora são avaliadas
+     tarde (js/painel.js), então isto é cinto e suspensório, não a única trava. -->
+<script src="js/painel.js"></script>
 </body>
 </html>

@@ -3,7 +3,7 @@
 Contexto do projeto para qualquer agente de IA ou pessoa que for mexer neste repositório.
 Sempre em **português do Brasil**.
 
-**Atualizado:** 14/09/2026 (reserva de aço pelo PCP)
+**Atualizado:** 14/09/2026 (Painel do Dia, busca global, inventário fechado, leitor de código, backup)
 **Mantenedores:** Robson (dono do projeto e admin geral) · Victor Dobner (colaborador)
 
 > Este arquivo é lido automaticamente pelo Claude Code ao abrir a pasta do projeto.
@@ -40,6 +40,10 @@ servidos são o próprio código-fonte. Divididos na Fase 2a (03/09/2026):
 | `js/analise.js` | Análise de Compras: demanda dos pedidos x saldo do almoxarifado (seção 14) |
 | `js/notificacoes.js` | Popup de canto: avisa o admin de cadastro pendente, em qualquer tela (seção 21) |
 | `js/reservas.js` | Reserva de bobinas de aço pelo PCP: abas Reservas e Histórico, etiqueta (seção 23) |
+| `js/painel.js` | Painel do Dia: o que está fora do lugar agora, por perfil (seção 25) |
+| `js/busca.js` | Busca global: onde o item está em todas as telas, de uma vez (seção 26) |
+| `js/inventario.js` | Fechar inventário: congela a contagem e calcula a acuracidade (seção 27) |
+| `js/scanner.js` | Leitor de código pela câmera (BarcodeDetector) e o QR das etiquetas (seção 28) |
 
 São **scripts clássicos, não módulos**, carregados nessa ordem no fim do `body`. O `let`/`const` de
 nível superior vai para o escopo lexical global, compartilhado entre os arquivos — é por isso que o
@@ -453,11 +457,9 @@ Hoje ele cria só estrutura, e o RLS é assunto dos scripts da Fase 1.
 
 **De painel — destrava o resto, e não é código:**
 
-1. **Rodar `sql/fase32-sugestoes-melhoria.sql`** no Supabase. Sondado pela API em
-   10/09/2026: a tabela `sugestoes_melhoria` **não existe** ainda, então clicar em
-   Enviar na caixa de sugestões falha (a tela já diz que o script falta). Ficou
-   mais urgente depois de 10/09: o tour agora mostra esse botão para **todos** os
-   perfis, então é a primeira coisa que um usuário novo vai tentar usar.
+1. ~~Rodar `sql/fase32-sugestoes-melhoria.sql`~~ — **feito.** Sondado de novo pela
+   API em 14/09/2026, ao montar a lista de tabelas do backup: `sugestoes_melhoria`
+   responde. O mesmo vale para `reservas_aco`, o `fase38` do item 5.
 
 2. **Rodar `sql/fase11-limpar-contagem-restrito.sql`** no Supabase. Sem ele, "Limpar tudo" está
    travado só na tela, e um inspetor de navegador contorna. O script **substitui** a política
@@ -472,10 +474,12 @@ Hoje ele cria só estrutura, e o RLS é assunto dos scripts da Fase 1.
    *(A senha de contagem, que também vivia aqui e travou a apresentação na 104, deixou
    de existir em 11/09/2026 — ver seção 22.)*
 
-5. **Rodar `sql/fase38-reservas-aco.sql`** no Supabase. Sem ele a aba **Reservas**
-   do Estoque de Aço abre, mas nenhuma reserva grava — e o que garante "um aço
-   reservado não pode ser reservado de novo" é o índice parcial que está lá
-   dentro, não a tela (seção 23).
+5. ~~Rodar `sql/fase38-reservas-aco.sql`~~ — **feito** (ver item 1).
+
+6. **Rodar `sql/fase41-inventario-fechado.sql`** no Supabase. Sem ele o botão
+   **Fechar inventário** avisa que a tabela não existe e **não apaga a contagem**
+   (falha do lado certo), mas o histórico de acuracidade não começa a existir —
+   e cada inventário continua virando pó ao ser descartado (seção 27).
 
 **De código:**
 
@@ -4062,3 +4066,441 @@ duas encerradas e diz quanto cada uma **durou**; a etiqueta sai com RESERVADO
 antes do pedido, toda em milímetros, com aço, lote e responsável, e sem QR.
 **40 de 41 checagens passaram** — a única falha foi da própria checagem, que
 lia o `<title>` da etiqueta junto com o corpo. Zero erro de console.
+
+## ⚠️ "Failed to fetch" ao salvar: rede, e nao recusa do banco (14/09/2026)
+
+O Victor: *"na tela 'conferencia EXP acessorios' aba entrada, ao tentar mudar a
+data de entrada aparece o erro 'Nao foi possivel salvar a data: TypeError:
+failed to fetch'"*.
+
+**A distincao que faltava.** `TypeError: Failed to fetch` **nao vem do banco**:
+e a excecao do `fetch` do navegador, que o supabase-js repassa como texto dentro
+de `error.message` (nao ha `code` nenhum para testar -- so o texto). A
+requisicao nao chegou a ter resposta: rede caiu, VPN dormiu, proxy ou extensao
+bloqueou, a maquina hibernou com a tela aberta. O portal tratava isso como se
+fosse recusa do banco: mostrava o texto em ingles e **apagava o que a pessoa
+tinha digitado**, devolvendo o valor antigo ao campo.
+
+Sondado na API em 14/09/2026, de fora do portal: o projeto esta acordado
+(`/auth/v1/health` responde), o preflight `OPTIONS` de `PATCH` volta 200 com
+`access-control-allow-methods` incluindo PATCH, e um `PATCH` real e aceito com
+`Access-Control-Allow-Origin` do dominio do portal. **Nao e o portal nem o
+Supabase recusando -- e o caminho entre os dois**, na maquina de quem edita.
+
+### O que mudou, nos tres campos editaveis direto na lista (aba Entrada)
+
+`gravarCampoExpControle(id, campos)` passou a ser o unico caminho de gravacao da
+Localizacao, da Quantidade e das duas datas (Entrada e Saida):
+
+1. ⚠️ **Recibo (`.select('id')`), que nao existia em nenhum dos tres.**
+   Conferido na propria API no mesmo dia: um `PATCH` que nao casa linha nenhuma
+   -- **inclusive um barrado pelo RLS** -- responde **204 No Content com
+   `error: null`**. Sem o recibo a tela pintava a borda azul, dizia que salvou, e
+   o F5 desmentia. E o item A1 da `AUDITORIA.md`, que o resto do projeto ja fecha
+   e estes tres editores tinham deixado passar. Agora, zero linha alterada vira
+   aviso ("o registro foi excluido por outra pessoa, ou seu acesso nao permite").
+2. **Uma segunda tentativa, so quando a falha e de rede.** Estes `update` sao
+   idempotentes (gravam um valor fixo numa linha), entao repetir e seguro -- e
+   uma piscada de rede deixa de custar o que a pessoa digitou. Erro de verdade do
+   banco **nao** e repetido: a mensagem dele sai na hora.
+3. **O campo nao perde mais o texto digitado.** Falhou, ele fica **vermelho**,
+   com "NAO SALVOU: ..." no tooltip e o valor digitado intacto -- mesmo principio
+   do `⚠ nao salvou` da contagem (`marcarFalhaContagem()` em
+   `js/estoque.js`). Devolver o valor antigo obrigava a redigitar tudo so para
+   tentar de novo.
+4. **Mensagem em portugues** para o caso de rede, dizendo o que conferir
+   (internet/VPN) -- "TypeError: failed to fetch" nao diz a ninguem o que fazer.
+
+O que ja funcionava continua igual: data invalida e campo em branco sao recusados
+**sem chamar o banco** (e ai devolver o valor anterior faz sentido), e editar sem
+mudar nada nao gera requisicao.
+
+**Nao reproduzi a falha original** -- a API responde normalmente daqui. Se
+voltar a acontecer com frequencia numa maquina so, o proximo passo e olhar a aba
+Rede do navegador (F12) no momento do erro: `ERR_BLOCKED_BY_CLIENT` aponta
+extensao/antivirus, `ERR_INTERNET_DISCONNECTED` ou `ERR_NAME_NOT_RESOLVED`
+apontam rede/VPN.
+
+Conferido no navegador, com a resposta do Supabase simulada nos cinco cenarios:
+sucesso (uma requisicao, sem alerta); **rede caindo uma vez** (tenta de novo e
+salva, sem nenhum alerta na cara da pessoa); **rede caindo sempre** (duas
+tentativas, mensagem em portugues sem "failed to fetch", campo vermelho com o
+texto digitado preservado, memoria nao atualizada a toa); **204 sem linha
+alterada** (avisa em vez de dizer que salvou, e nao pinta a borda azul); e erro
+de verdade do banco (mensagem crua, sem repetir). Mais Localizacao e Quantidade
+pelo listener real de `focusout`, incluindo a maiuscula do endereco. **22 de 22
+checagens na data e 3 de 3 nos outros dois campos.** Zero erro de console.
+
+## 24. Quem está usando o portal, e backup de um clique (14/09/2026)
+
+Duas telas pequenas em Configurações, das seis ideias que o Victor aprovou ao
+perguntar *"analisando o escopo do projeto como um todo, tem alguma coisa a mais
+que podemos fazer?"*.
+
+### `acessos` era escrita e nunca lida
+
+Varredura de 14/09/2026: **o único uso de `acessos` em todo o `js/` era o
+`insert` de `js/auth.js`.** Um login por linha desde o primeiro dia do projeto,
+nunca consultado por ninguém. (A mesma varredura mostrou que `log_movimentacao`
+continua assim — fica como pendência.)
+
+⚠️ **A pergunta acionável não é "quantos acessos".** É **quem foi aprovado e
+nunca entrou**: alguém foi liberado e não apareceu — ou não sabe que foi
+aprovado, ou não sabe que o portal existe. Essa é a lista que rende um
+telefonema, e a única que some sozinha quando a adoção acontece. Por isso a
+ordem da tabela é a da **ação**: nunca entrou primeiro, depois o sumido há mais
+tempo, e quem está usando por último — mesmo princípio da fila de aprovação e da
+lista de reservas.
+
+- ⚠️ **O e-mail é normalizado dos dois lados.** `acessos.email` vem do
+  `user.email` do Auth e `usuarios_permitidos.email` do cadastro; a mesma pessoa
+  pode estar gravada com caixa diferente nos dois, e aí apareceria como "nunca
+  entrou" tendo entrado hoje. É o `996613I` da seção 14 de novo, num lugar onde
+  o efeito seria um telefonema desnecessário.
+- **Só os aprovados entram na lista.** Conta pendente não entrou porque não
+  pode; misturá-la esconderia quem pode e não entra.
+- **Paginado** (`buscarTudoPaginado`): é a tabela que mais cresce do portal, uma
+  linha por login para sempre. Sem isso pararia de contar na milésima, sem avisar.
+- ⚠️ **A tabela só tem `id, user_id, email, entrou_em`** — descoberto sondando a
+  API coluna a coluna, porque `acessos` é anterior à numeração por fase e **não
+  existe script que a crie neste repositório**. Não há tela nem duração: isto
+  responde "entrou?", nunca "usou o quê?", e a nota na tela diz isso.
+- RLS já era `eh_admin()` para leitura (fase1c) — nenhuma política nova.
+
+### Backup: 38 tabelas num clique
+
+Não dá para automatizar (não existe servidor neste projeto), mas dá para tirar o
+atrito: exportar 38 tabelas à mão pelo painel do Supabase é exatamente a tarefa
+que ninguém faz duas vezes. Um botão lê tudo de mil em mil e baixa um `.json`
+datado, com `gerado_em`, `gerado_por` e um resumo.
+
+- ⚠️ **Tabela que volta vazia é dita em voz alta, na tela e no arquivo.** Uma
+  tabela barrada pelo RLS responde **zero linhas sem erro nenhum** — idêntica a
+  uma que está vazia de verdade, e o portal não tem como distinguir as duas. É o
+  item A1 da `AUDITORIA.md` na forma mais perigosa que ele assume: **um backup
+  que parece completo e não está é pior que backup nenhum.** Por isso a
+  conferência fica com a pessoa, explícita.
+- **Tabela que falha não some**: entra no arquivo com o erro anotado, e aparece
+  em vermelho no progresso.
+- ⚠️ **`TABELAS_BACKUP` é mantida à mão**, e tabela nova que não entrar nela
+  **fica de fora do backup em silêncio**. A lista foi conferida contra o banco em
+  14/09/2026 (as 38 responderam). Ao criar tabela num script de fase novo,
+  acrescente-a ali no mesmo commit.
+- `baixarArquivo()` (js/programacao.js) reaproveitado, não reescrito.
+
+⚠️ **`carregarAcessos()` é encadeado depois de `carregarUsuarios()`** (`.then()`,
+em `js/navegacao.js`), não disparado em paralelo: ele cruza o log com a lista de
+aprovados, e com a lista ainda vazia **todo mundo apareceria como "nunca
+entrou"**. Mesmo motivo do `carregarCatalogoExp().then(carregarProgramacao)`.
+
+### De quebra: duas pendências do painel já estavam resolvidas
+
+Sondando o banco para montar a lista do backup, as 38 tabelas responderam —
+inclusive **`sugestoes_melhoria` e `reservas_aco`**. Ou seja, o `fase32` e o
+`fase38` **já foram rodados**, e a seção 12 os listava como pendentes. Corrigido.
+
+Conferido no navegador com `sb.from` mockado (4 aprovados: um usando, um sumido
+há 60 dias com a caixa do e-mail diferente entre as duas tabelas, dois que nunca
+entraram, mais uma conta pendente): a lista traz só os 4 aprovados, na ordem
+nunca-entrou → sumido → usando, os quatro cards batem, e a diferença de caixa
+**não** gera um falso "nunca entrou". No backup: as 38 tabelas no arquivo, a que
+falhou anotada com o erro, a vazia no resumo, e os dois avisos na tela.
+**20 de 20 checagens.** Zero erro de console.
+
+## 25. Painel do Dia (14/09/2026)
+
+A primeira tela depois do login deixou de ser a Consulta de Itens.
+
+**Por que isto existe.** Relendo os ~40 pedidos registrados neste arquivo, quase
+todos são a mesma frase dita de outro jeito: *"o PCP esquece daquele material"*,
+*"esqueço de tirar da localização"*, *"a fila fica parada sem ninguém saber"*,
+*"não deixar faltar material"*, *"não preciso ficar tirando relatório várias
+vezes"*. **O portal já sabia todas essas coisas** — ele só esperava a pessoa
+abrir a tela certa e reparar. O painel inverte a direção.
+
+### ⚠️ Ele não calcula nada novo
+
+Cada aviso é uma pergunta que alguma tela já sabia fazer; o painel faz todas de
+uma vez. **A régua de cada um continua na origem** — `RESERVA_DIAS_CRITICA` em
+`js/reservas.js`, `estoque_minimo` no banco, a view `vw_pedidos_prioridade` (que
+calcula atrasado/urgente **no Postgres, no fuso de São Paulo** — repetir essa
+conta em JS daria dois relógios). O "estoque baixo" reusa a própria
+`itensAbaixoDoEstoqueSeguro()` da Consulta de Itens: dois jeitos de contar a
+mesma coisa dariam dois números, e o painel perderia a confiança na primeira vez
+que discordassem.
+
+| Aviso | Quem vê | Como conta |
+|---|---|---|
+| ⏳ Cadastros aguardando aprovação | admin | `usuarios_permitidos`, `aprovado = false` — da empresa, não da unidade |
+| 🔒 Aços reservados e esquecidos | estoque_aco, admin | `reservas_aco` ativas mais velhas que `RESERVA_DIAS_CRITICA` |
+| 📉 Itens abaixo do estoque seguro | estoque_alm, admin | soma do item em todos os endereços × mínimo |
+| 📍 Itens sem endereço ou em REC | estoque_alm, admin | mesma regra do botão "Sem local / REC" |
+| 🚚 Pedidos atrasados ou urgentes | estoque_alm, admin | `vw_pedidos_prioridade` |
+| 📦 Itens parados na doca | estoque_alm, admin | `na_doca` há mais de `PAINEL_DOCA_HORAS` (24h) |
+| 🗓️ Planilha do almoxarifado velha | estoque_alm, admin | dias desde o último `atualizado_em` |
+
+### Decisões que fazem o painel ser barato e honesto
+
+- **`head: true` + `count: 'exact'` em seis dos sete avisos**: o banco devolve só
+  o número, **nenhuma linha trafega**. O painel roda a cada login, então ser
+  barato é requisito, não elegância. Mesmo desenho de `iniciarAvisoCadastro()`.
+- **O sétimo (estoque seguro) não pode ser count** — "abaixo do seguro" é do
+  item somado nos endereços. Traz três colunas, só das linhas que **têm mínimo
+  cadastrado**, e pagina.
+- ⚠️ **Um aviso que falha não derruba os outros.** Cada um é uma pergunta
+  independente: uma tabela sem permissão, ou um script de fase que ainda não
+  rodou, mostra `—` naquele card com o motivo, e os outros seis continuam. Mesmo
+  cuidado da coluna Reserva na lista de aços.
+- ⚠️ **Card zerado fica apagado, mas não some.** "Não tem nada atrasado" é
+  exatamente a informação que a pessoa veio buscar; um card que desaparece
+  deixaria a dúvida de se o portal chegou a conferir. Some só o que não é do
+  perfil dela.
+- **O clique é parte do aviso**, e leva já filtrado (o "sem endereço" liga
+  `filtros.semLocal` antes de abrir a Consulta). Avisar sem dar o caminho só
+  transfere o trabalho de procurar.
+- **A moldura é desenhada antes das respostas chegarem**: esperar os sete para
+  mostrar qualquer coisa deixaria a primeira tela do portal em branco por um
+  segundo — e tela em branco no login parece portal quebrado.
+- **Trocar a unidade recarrega o painel** (`trocarUnidade()`), senão ficariam
+  números de outra fábrica na tela.
+
+### ⚠️ A armadilha de ordem de carga que isto pegou
+
+A primeira versão montava a nota do card de aço com
+`` `há mais de ${RESERVA_DIAS_CRITICA} dias` `` **dentro do `const AVISOS_PAINEL`**,
+no topo do arquivo. Aquela constante mora em `js/reservas.js`, carregado depois:
+o texto era avaliado **na carga**, antes de o outro arquivo existir, e o
+`ReferenceError` **derrubava a avaliação do arquivo inteiro** — nem os outros
+seis avisos nasciam, e o portal abria com o painel vazio.
+
+O projeto já registrava que *função* definida num arquivo posterior pode ser
+chamada por um anterior (seção 13); **o que não vale é ler o `const` dele no topo
+de outro arquivo**. Corrigido nos dois eixos, de propósito: a nota virou
+**função** (avaliada só na hora de desenhar) **e** o `js/painel.js` passou a ser
+o **último** script do `index.html`, que é o lugar dele de qualquer jeito — ele
+lê constantes de quase todos os outros.
+
+Conferido no navegador com `sb.from` mockado: admin vê os 7 avisos com os
+números certos (inclusive o estoque baixo somando os dois endereços do mesmo
+item, e a planilha em dias e não em itens); consultor não vê nenhum e
+`estoque_aco` vê só o do aço; com um aviso quebrado os 7 cards continuam e só o
+quebrado mostra `—` com o motivo; os cards de contagem realmente pedem
+`head: true`; e o clique leva à tela certa já filtrada. **18 de 18 checagens.**
+
+## 26. Busca global: uma pergunta, todas as telas (14/09/2026)
+
+O mesmo código de item vive hoje em **seis tabelas**: `estoque` (três depósitos ×
+oito unidades), `catalogo_exp_itens`, `exp_controle_itens` (expedição e doca),
+`bobinas_aco` e `reservas_aco`. Não havia como perguntar **"onde está o
+996613I?"** uma vez só — tinha de abrir tela por tela e lembrar de todas. O ⇄ já
+fazia uma fatia, mas só do almoxarifado.
+
+Botão 🔎 no cabeçalho (fica ali porque a pergunta não pertence a tela nenhuma) e
+**Ctrl+K** de qualquer lugar — o atalho que todo mundo já conhece de outros
+aplicativos; inventar um próprio só criaria uma coisa a mais para aprender.
+
+### O que ela responde
+
+Uma linha por lugar onde o item está, agrupada por fonte, dizendo unidade,
+endereço, quantidade e o que distingue aquele lugar (nº do pedido na expedição e
+na doca, lote no aço, pedido e há quanto tempo na reserva). **A expedição e a
+doca aparecem separadas**: "guardado no endereço" e "esperando o caminhão" são
+respostas diferentes para quem foi procurar o material.
+
+### Decisões
+
+- ⚠️ **Todo código passa por `normalizaCodigoItem()` no JS e `ilike` no banco.**
+  O `eq` do Postgres diferencia maiúscula de minúscula, e este projeto já perdeu
+  uma tarde com `996613I` gravado dos dois jeitos (seção 14). **Numa busca o
+  efeito seria pior que um número errado: o portal diria "não achei" sobre
+  material que está lá.** Testado digitando minúsculo contra banco maiúsculo.
+- **O código com sufixo da Trading entra junto** (`codigoTradingDoItem()`, a
+  mesma regra do comparativo entre unidades) — sem isso, item terminado em "I"
+  diria que a Trading não tem, tendo.
+- ⚠️ **Fonte que falha é nomeada e o resto da busca continua.** Cada uma é uma
+  consulta independente; uma tabela sem permissão não pode transformar "está em
+  cinco lugares" em "não achei". Mesmo princípio do Painel do Dia.
+- **Não achou como código? Procura na descrição** e devolve os códigos
+  candidatos, clicáveis. Quem não sabe o código de cabeça é justamente quem mais
+  precisa desta tela — e "não encontrado" e ponto final seria a resposta menos
+  útil possível.
+- **Sem resultado nenhum, a tela diz o que a busca cobre.** Assim a pessoa sabe
+  se o portal procurou onde ela achava que procuraria.
+- **Teto de 40 linhas por fonte**, dito quando corta: um código muito espalhado
+  encheria o modal de linha repetida e deixaria a resposta mais difícil de ler,
+  não mais fácil.
+- ⚠️ **É só leitura.** Não edita, não reserva, não conta — responde onde está e
+  manda para a tela que resolve.
+- **`FONTES_BUSCA` é a lista de onde procurar.** Tela nova no portal é uma
+  entrada nova ali (rótulo, tabela, coluna do código e como virar linha
+  legível) — não é preciso mexer em mais nada.
+
+⚠️ **As colunas do código não têm o mesmo nome entre as tabelas** — `item` em
+`estoque` e `bobinas_aco`, `codigo_item` em `catalogo_exp_itens`,
+`exp_controle_itens` e `reservas_aco` — e `exp_controle_itens` **não guarda
+descrição** (ela vem do catálogo). Conferido coluna a coluna na API antes de
+escrever, e é por isso que cada fonte declara a sua.
+
+Conferido no navegador com `sb.from` mockado (o mesmo item em 7 lugares, gravado
+maiúsculo, buscado minúsculo): acha as 7 fontes, separa almoxarifado de EPI e
+expedição de doca, traz as duas unidades do almoxarifado, mostra pedido e tempo
+na reserva; com uma fonte quebrada, ela é nomeada e as outras 6 continuam; texto
+que não é código vira busca por descrição com candidatos clicáveis; sem
+resultado, diz o que cobre; Ctrl+K abre e Esc fecha. **17 de 17 checagens.**
+
+## 27. Fechar o inventário, em vez de jogar a contagem fora (14/09/2026)
+
+Até aqui o fim de um inventário era o botão **"Limpar tudo"**: um `delete` em
+`contagem_fisica`. Sumia o que foi contado, quem contou, o que divergiu e
+quanto. **Consequência: o portal nunca conseguiu responder "qual é a nossa
+acuracidade de inventário?"** — o número que um gestor de estoque leva para a
+diretoria, e o único que mostra se contar está melhorando ou piorando. Cada
+inventário existia por algumas horas e virava pó.
+
+**"✅ Fechar inventário"** congela a contagem em `inventarios` /
+`inventario_itens` (`sql/fase41-inventario-fechado.sql`) e **só então** limpa.
+O "Limpar tudo" virou **"Descartar"** e continua existindo de propósito:
+contagem de teste ou começada errada não pode virar histórico. Só deixou de ser
+o único caminho.
+
+O botão **📊 Inventários** (ao lado de "Quem já contou") abre o histórico da
+unidade com a acuracidade de cada fechamento, a média dos listados, e o detalhe
+item a item — **com a maior divergência em cima**, que é a ordem do que precisa
+ser investigado.
+
+### ⚠️ O que "acuracidade" quer dizer aqui
+
+    acuracidade = itens que conferem ÷ itens CONTADOS × 100
+
+O denominador é o que foi contado, **não** o que existe na unidade. Item que
+ninguém contou não está errado — está **não contado**, e misturar as duas coisas
+daria uma acuracidade que despenca só porque o inventário não terminou. A tela
+repete isso em letras, para o número não ser lido como outra coisa.
+
+### Decisões
+
+- **Duas tabelas** (cabeçalho + detalhe), mesmo desenho de `requisicoes_alm` /
+  `requisicoes_alm_itens`: a lista de fechamentos só precisa dos totais; o
+  detalhe de um deles pode ter milhares de linhas.
+- ⚠️ **Os totais ficam gravados, não recalculados na leitura.** É o retrato do
+  que foi apurado naquele dia — se a régua da acuracidade mudar um dia, os
+  inventários antigos continuam mostrando o número que foi apresentado na época.
+  Recalcular reescreveria o passado.
+- ⚠️ **O detalhe guarda descrição e endereço** (retrato, como em `reservas_aco`):
+  a planilha do estoque é substituída a cada colagem e o histórico é lido meses
+  depois.
+- ⚠️ **Grava primeiro, confere, e só então apaga.** Não há transação (o portal
+  não tem servidor nem RPC para isso), então **a ordem é a defesa**: falhando no
+  meio, sobra um inventário parcial no histórico e **a contagem continua na
+  tela** — o lado certo de errar. O contrário (apagar e descobrir que não
+  gravou) não teria volta. Testado com a falha simulada nos dois pontos.
+- **O `insert` do cabeçalho pede recibo** (`.select().single()`): sem ele, um
+  insert barrado pelo RLS voltaria com `error null` e a tela apagaria a contagem
+  achando que salvou (item A1).
+- ⚠️ **Confirmação é o segundo clique no próprio botão**, não `confirm()` (seção
+  7) — e o rótulo passa a mostrar **o que vai ser gravado** (quantos itens, qual
+  acuracidade), porque é isso que a pessoa precisa conferir antes de a contagem
+  ser apagada. Mexer na contagem cancela a confirmação: o número que ela leu
+  deixou de valer.
+- **Permissão reusa `pode_atualizar_estoque()`** — é exatamente quem já podia
+  apagar a contagem. A decisão ("este inventário acabou") é a mesma; o que mudou
+  é que agora ela guarda.
+- **Sem política de UPDATE nem DELETE** nas duas tabelas: histórico que pode ser
+  reescrito não serve de histórico. Fechamento errado se corrige fechando outro.
+
+### ⚠️ Um corte silencioso que isto desenterrou: `loadData()` não era paginada
+
+A consulta da Consulta de Itens era um `select` simples — e **o PostgREST corta
+em 1.000 linhas sem avisar** (`error: null`, resposta com cara de completa).
+Como há **uma linha por item POR ENDEREÇO**, uma unidade cheia passa disso com
+folga: a tela mostrava as primeiras mil e ninguém tinha como perceber. É o mesmo
+corte que já havia mordido as bobinas (seção 9) e a aba Conferir (seção 20), e
+que ninguém tinha procurado aqui.
+
+Apareceu porque **o retrato do inventário sai de `currentData`**: o histórico
+nasceria pela metade, numa tela que existe justamente para ser prova do que foi
+contado. Corrigido com `buscarTudoPaginado()`, e conferido com 2.500 linhas
+simuladas — 4 páginas pedidas, 2.500 carregadas.
+
+Conferido no navegador com `sb.from` mockado: só o que foi contado entra (3 de 4
+itens), a acuracidade dá 66,7%, o primeiro clique não grava e mostra o que será
+gravado, o detalhe leva sistema/físico/diferença mais o retrato, a contagem só é
+apagada depois de tudo gravado, **falha no detalhe e falha no cabeçalho não
+apagam nada** e dizem isso, o histórico explica a conta, e o detalhe traz a maior
+divergência em cima. **29 de 29 checagens.**
+
+## 28. O celular virou leitor — e aí o QR passou a valer (14/09/2026)
+
+Quando a etiqueta de reserva de aço foi feita (seção 23), o QR foi **recusado**,
+com o motivo escrito: *"não existe leitor no portal nem rota de link profundo que
+abra uma reserva a partir de um código. Um QR que ninguém escaneia é tinta gasta
+e uma promessa falsa na etiqueta. Se um dia a câmera do módulo de OCR virar
+leitor de reserva..."*. Este é esse dia — e a ordem importou: **o leitor veio
+primeiro, o QR depois.**
+
+Botão 📷 no cabeçalho, ao lado da busca: é a mesma pergunta, feita com a câmera
+em vez do teclado.
+
+### ⚠️ Sem biblioteca, por uma vez
+
+`BarcodeDetector` é **API nativa do navegador** — zero dependência, zero CDN, o
+que combina com o "sem etapa de build" do projeto. O preço é que **nem todo
+navegador tem** (funciona no Chrome do Android, ChromeOS e macOS; no Windows
+quase nunca), e por isso **o campo de digitar não é enfeite: é o caminho de
+sempre no computador**. A tela diz onde a câmera funciona em vez de só falhar.
+
+### O que ele faz com o código lido: a coisa mais simples possível
+
+**Joga na busca global** (seção 26). O leitor não tem como saber se aquilo é um
+item, um lote ou um endereço — e a busca já procura em todas as telas de uma vez.
+Uma rota especial por tipo de código seria uma segunda regra para manter em
+sincronia com aquela.
+
+### Detalhes que só aparecem no galpão
+
+- **Câmera de trás** (`facingMode: environment`): a frontal é inútil para ler
+  etiqueta colada numa bobina.
+- ⚠️ **A câmera é desligada de verdade** ao ler e ao fechar (`track.stop()`). Um
+  `<video>` escondido com a trilha aberta mantém a luzinha de gravação acesa e
+  come bateria — do celular do conferente, que é justamente a máquina onde esta
+  tela existe para rodar. Testado nos dois caminhos.
+- **Vibra ao ler** (60 ms): com luva e barulho, o retorno tátil é o que diz "leu"
+  sem a pessoa precisar olhar a tela de perto.
+- **250 ms entre tentativas**: instantâneo na mão, sem fritar o processador.
+- ⚠️ **Tudo depois do `getUserMedia` vai dentro de um `try`.** `srcObject` recusa
+  valor que não seja `MediaStream`, `play()` pode ser bloqueado pela política de
+  autoplay e o `BarcodeDetector` recusa formato não suportado — cada um desses
+  estourava como **rejeição não tratada**, deixando a tela parada em "Abrindo a
+  câmera..." **com a câmera ligada por trás**. Agora falhar termina em mensagem e
+  câmera desligada.
+
+### O QR na etiqueta de reserva
+
+- ⚠️ **Carrega só o código do item** — nada de URL nem de id interno. Quem
+  escaneia quer saber "que material é este e onde ele está", que é exatamente o
+  que a busca global responde com o código; e um id interno numa etiqueta
+  impressa vira lixo no dia em que a tabela mudar, enquanto o código do item é a
+  linguagem que o galpão inteiro já fala.
+- ⚠️ **Gerado ANTES de abrir a aba e embutido como `data:` URL.** A etiqueta é
+  outro documento, que vai para a impressora e às vezes para um computador sem
+  internet: pendurar um `<script>` de CDN lá dentro faria a folha depender da
+  rede no pior momento possível.
+- ⚠️ **Se o gerador não baixar, a etiqueta sai igual, só sem o QR.** A folha
+  sempre funcionou sem ele; deixar de imprimir por causa de um enfeite seria
+  trocar um problema pequeno por um grande.
+- **22 mm, ao lado do RESERVADO** (não acima nem abaixo): a palavra continua
+  sendo o que se lê de longe, e o QR só precisa ser alcançável pela câmera de
+  perto. Medido em milímetros, como o resto da folha.
+
+⚠️ **`qrcode-generator`, e não o pacote `qrcode` do npm**: aquele só publica
+build de módulo, que precisaria de bundler — e este projeto não tem etapa de
+build. Este é MIT, sem dependência, e expõe a fábrica global num `<script>`
+comum. Conferido no CDN antes de escrever (o caminho "óbvio" do outro pacote
+responde 404).
+
+Conferido no navegador: sem a API, o leitor se declara indisponível, abre mesmo
+assim e manda digitar; digitar cai na busca global; com a API, pede a câmera de
+trás, procura QR e os lineares, o que é lido vai para a busca, **a câmera é
+desligada ao ler e ao fechar no ✕**; permissão negada vira mensagem com o nome do
+erro; o QR sai como `data:` URL e a etiqueta sai igual sem ele. **20 de 20
+checagens.**

@@ -823,7 +823,19 @@ document.getElementById('tableBody').addEventListener('keydown', (e) => {
 });
 
 async function loadData() {
-  const { data, error } = await sb.from('estoque').select('*').eq('unidade', unidadeAtual).order('id', { ascending: true }).eq('deposito', depositoAtual);
+  // ⚠️ PAGINADO desde 14/09/2026, e isto era um defeito silencioso: a consulta
+  // era um `select` simples, e o PostgREST corta em 1.000 linhas **sem avisar**
+  // (`error: null`, resposta com cara de completa). Uma unidade com mais de mil
+  // linhas de estoque -- e há uma linha por item POR ENDEREÇO -- mostrava só as
+  // primeiras mil, e ninguém tinha como perceber. É o mesmo corte que já havia
+  // mordido as bobinas (seção 9) e a aba Conferir (seção 20).
+  //
+  // Achado ao escrever o fechamento de inventário (seção 27): o retrato do
+  // inventário sai de `currentData`, então ele herdaria o corte -- e o histórico
+  // nasceria pela metade, numa tela que existe para ser prova do que foi contado.
+  const { data, error } = await buscarTudoPaginado((de, ate) => sb.from('estoque')
+    .select('*').eq('unidade', unidadeAtual).eq('deposito', depositoAtual)
+    .order('id', { ascending: true }).range(de, ate));
   if (error) {
     document.getElementById('loadingMsg').textContent = 'Erro ao carregar dados: ' + error.message;
     return;
@@ -1310,6 +1322,10 @@ async function salvarContagemItem(input) {
   if (error) return marcarFalhaContagem(input, diffSlot, error.message);
 
   contagemMap[chave] = valor;
+  // O rótulo do "Fechar inventário" mostra quantos itens e qual acuracidade vão
+  // ser gravados; mexer na contagem depois de ler aquele número o torna mentira,
+  // então a confirmação pendente cai. Mesma regra do aviso de folhas da etiqueta.
+  if (typeof cancelarConfirmacaoInventario === 'function') { cancelarConfirmacaoInventario(); atualizarBotaoFecharInventario(); }
   if (clearBtn) clearBtn.style.display = 'inline-block';
   if (caixasSlot) caixasSlot.innerHTML = formatarCaixas(valor, itemCode);
   // Compara com a quantidade do sistema (dessa linha específica) e mostra o resultado da conta
@@ -2169,6 +2185,8 @@ async function ativarModoContagem() {
   document.querySelectorAll('.col-acoes').forEach(el => el.style.display = 'none');
   contagemBtn.classList.add('active-toggle');
   document.getElementById('quemContouBtn').style.display = 'inline-block';
+  document.getElementById('inventarioHistoricoBtn').style.display = 'inline-block';
+  if (typeof atualizarBotaoFecharInventario === 'function') atualizarBotaoFecharInventario();
   // Quem não pode limpar não vê o botão. Esconder é cortesia; a trava é a
   // checagem em limparTodasAsContagens() e o RLS de DELETE no banco.
   const limpar = document.getElementById('limparContagemBtn');
@@ -2186,6 +2204,9 @@ function desativarModoContagem() {
   document.querySelectorAll('.col-acoes').forEach(el => el.style.display = '');
   contagemBtn.classList.remove('active-toggle');
   document.getElementById('quemContouBtn').style.display = 'none';
+  document.getElementById('inventarioHistoricoBtn').style.display = 'none';
+  document.getElementById('inventarioMsg').textContent = '';
+  if (typeof cancelarConfirmacaoInventario === 'function') cancelarConfirmacaoInventario();
   applyFilterAndSort();
   pararTempoReal();
 }
@@ -2578,6 +2599,9 @@ async function trocarUnidade(cod) {
   // Trocar a unidade tem de recarregar a tela ABERTA, nao so o estoque geral.
   // Sem isto, quem estava no Estoque de Aco trocava de unidade e continuava
   // vendo as bobinas da anterior (bug de 08/09/2026).
+  // O painel é todo recortado pela unidade (menos a fila de aprovação), então
+  // trocar no topo sem recarregar deixaria números de outra fábrica na tela.
+  if (paginaAtual === 'painel') await carregarPainel();
   if (paginaAtual === 'bobinas') await loadBobinas();
   if (paginaAtual === 'analise') await carregarAnalise();
   if (paginaAtual === 'requisicao') await carregarRequisicao();

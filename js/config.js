@@ -82,6 +82,11 @@ const CDN_TESSERACT = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesserac
 const CDN_XLSX = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
 // Só o "Compartilhar imagem" do modal de comparação usa -- ver js/estoque.js.
 const CDN_HTML2CANVAS = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+// QR das etiquetas (js/scanner.js). `qrcode-generator` é MIT, sem
+// dependência nenhuma, e expõe a fábrica global `qrcode()` num <script>
+// comum -- o pacote `qrcode` do npm não serve aqui: só publica build de
+// módulo, que precisaria de bundler (e este projeto não tem etapa de build).
+const CDN_QRCODE = 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js';
 
 const bibliotecasPedidas = {};
 
