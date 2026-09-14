@@ -1232,6 +1232,89 @@
   </div>
   <!-- ================= FIM CONTROLE EXP ACESSÓRIOS ================= -->
 
+  <!-- ==================== PAINEL DE DOCAS (fase39) ====================
+       Robson, 14/09/2026: "Queremos uma nova aba/painel (Dashboard em
+       Tempo Real) focado na gestão das 3 Docas de Carregamento da
+       fábrica" -- conferente alimenta na linha de frente, gerência olha
+       de qualquer lugar. Fase 1: quadro das docas, cronômetro e barra de
+       progresso automática. O progresso NÃO é digitado: sai das baixas
+       que o conferente já faz na aba DOCA do Controle EXP (ver
+       sql/fase39-painel-docas.sql e js/docas.js). -->
+  <div id="docasContent" style="display:none;">
+    <div class="panel">
+      <div class="cfg-barra">
+        <h2 style="margin:0;">🚛 Painel de Docas</h2>
+        <span class="status-msg" id="docasMsg"></span>
+        <button class="btn" id="docasAtualizarBtn" style="margin-left:auto;">Atualizar</button>
+      </div>
+
+      <!-- Chegada: o veículo entra na FILA do pátio, ainda sem doca. O
+           tempo de fila (chegada -> chamada) é indicador separado do
+           tempo de carregamento -- ver fase39. -->
+      <div class="cfg-barra" style="flex-wrap:wrap;">
+        <input type="text" id="docaPlaca" placeholder="Placa" maxlength="10"
+               style="width:120px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px; text-transform:uppercase; font-weight:700;">
+        <select id="docaTipoVeiculo"
+                style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <option value="Truck">Truck</option>
+          <option value="Carreta" selected>Carreta</option>
+          <option value="Container">Container</option>
+          <option value="Bitrem">Bitrem</option>
+          <option value="Outro">Outro</option>
+        </select>
+        <input type="text" id="docaTransportadora" placeholder="Transportadora"
+               style="flex:1; min-width:150px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+        <input type="text" id="docaMotorista" placeholder="Motorista"
+               style="flex:1; min-width:140px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+        <input type="text" id="docaPedidos" placeholder="Nº do(s) pedido(s) — separe por vírgula"
+               style="flex:2; min-width:210px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+        <button class="btn btn-primary" id="docaChegadaBtn">Registrar chegada</button>
+      </div>
+
+      <!-- O quadro: uma coluna por doca cadastrada nesta unidade -->
+      <div id="docasQuadro" style="padding:4px 16px 16px;"></div>
+      <div class="empty-msg" id="docasVazio" style="display:none;">
+        Nenhuma doca cadastrada para esta unidade. Rode sql/fase39-painel-docas.sql no Supabase.
+      </div>
+
+      <!-- Fila do pátio: chegou e ainda não foi chamado pra nenhuma doca -->
+      <div style="border-top:1px solid var(--border); margin-top:10px;">
+        <div class="cfg-barra">
+          <strong>Fila do pátio</strong>
+          <span style="font-size:12px; color:var(--muted);" id="docasFilaContagem"></span>
+        </div>
+        <div id="docasFilaBody" style="padding:0 16px 12px;"></div>
+        <div class="empty-msg" id="docasFilaVazio" style="display:none;">
+          Nenhum veículo esperando no pátio.
+        </div>
+      </div>
+
+      <!-- Carregamentos fechados hoje -- a leitura de "como foi o dia"
+           sem esperar o relatório analítico da fase 2. -->
+      <div style="border-top:1px solid var(--border); margin-top:10px;">
+        <div class="cfg-barra">
+          <strong>Carregados hoje</strong>
+          <span style="font-size:12px; color:var(--muted);" id="docasHojeContagem"></span>
+        </div>
+        <div class="scroll-area">
+          <table>
+            <thead>
+              <tr>
+                <th>Placa</th><th>Veículo</th><th>Transportadora</th><th>Pedidos</th>
+                <th>Doca</th><th>Início</th><th>Fim</th><th>Duração</th><th>Conferente</th><th>Ação</th>
+              </tr>
+            </thead>
+            <tbody id="docasHojeBody"></tbody>
+          </table>
+        </div>
+        <div class="empty-msg" id="docasHojeVazio" style="display:none;">
+          Nenhum carregamento finalizado hoje ainda.
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- ==================== FIM PAINEL DE DOCAS ==================== -->
+
   <div id="configContent" style="display:none;">
     <div class="stat-cards">
       <div class="stat-card">
@@ -1747,6 +1830,9 @@
 <script src="js/configuracoes.js"></script>
 <script src="js/requisicao.js"></script>
 <script src="js/programacao.js"></script>
+<!-- Depois de programacao.js: o Painel de Docas usa helpers de lá
+     (formatarDataHoraBR, normalizaCodigoItem) em tempo de execução. -->
+<script src="js/docas.js"></script>
 <script src="js/analise.js"></script>
 <script src="js/tour.js"></script>
 <!-- Depois dos outros: usa escapeHtml, rotuloUnidade e os globais de sessão. -->

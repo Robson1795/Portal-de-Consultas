@@ -3012,6 +3012,96 @@ grupo; busca por pedido continua funcionando; item retirado na mesma
 localização continua fora, mesmo buscando por ela. Zero erro de
 console.
 
+## Painel de Docas — fase 1 (14/09/2026)
+
+O Robson pediu uma página nova **no menu lateral**, logo abaixo de
+Controle EXP Acessórios (*"crie uma nova aba debaixo do controle exp"*,
+com a seta apontando a posição), e descreveu o módulo inteiro: *"Queremos
+uma nova aba/painel (Dashboard em Tempo Real) focado na gestão das 3
+Docas de Carregamento da fábrica... que conferentes e o encarregado
+alimentem o sistema na linha de frente, enquanto gerentes e diretores
+visualizam o status de qualquer lugar."* A proposta completa (telas,
+fluxo, SLA, KPIs, modelo de dados) virou uma página à parte, aprovada
+antes de começar; **esta é a fase 1** dela: quadro, cronômetro e
+progresso automático.
+
+### A regra que sustenta o módulo
+
+O conferente **não digita nada a mais durante o carregamento**. Ele
+continua clicando "✓ Carregou" na aba DOCA do Controle EXP, como sempre.
+O que mudou é que essa baixa agora carimba *em qual caminhão* o item
+subiu (`exp_controle_itens.doca_carregamento_id`), e é só isso que faz a
+barra de progresso andar. Se a alimentação dependesse de digitação extra
+no meio do carregamento, ela não aconteceria e o painel viraria ficção —
+foi a primeira decisão de desenho, e o resto saiu dela.
+
+### O que faltava (e era só isso)
+
+O Controle EXP já sabia que o item saiu do endereço e está "na doca"
+(fase36), quem levou e quando. Não sabia **em qual doca** nem **de qual
+caminhão** — "na doca" era um lugar só, abstrato. As tabelas novas
+(`sql/fase39-painel-docas.sql`) dão nome e dono a esse lugar.
+
+### Decisões de modelagem que valem lembrar
+
+- **`sla_minutos` é cópia, não link.** Se a meta mudar em dezembro, o
+  carregamento de setembro continua medido pela meta de setembro — senão
+  o histórico se reescreve sozinho toda vez que alguém ajusta um número.
+  Nasce nulo na fase 1 (ainda não existe cadastro de SLA), mas a coluna
+  já veio, pra não mexer na tabela de fatos depois.
+- **Quatro carimbos de tempo, não dois.** `chegada→chamado` é fila de
+  pátio; `inicio→fim` é carregamento. São gargalos diferentes, com donos
+  diferentes; um "tempo total" esconderia qual dos dois é o problema.
+- **`doca_carregamento_id` sem foreign key, de propósito.**
+  `log_movimentacao` tem FK NOT NULL pra `pedidos` e isso já obrigou um
+  remendo ("só loga se achar o pedido de verdade"). Uma FK aqui faria a
+  BAIXA DO ITEM — a operação principal, a que não pode falhar — depender
+  de um registro acessório existir.
+- **Pedidos em tabela N:N.** Um caminhão leva vários pedidos (confirmado
+  pelo Robson) e um pedido grande sai em dois caminhões. Coluna de texto
+  separada por vírgula quebraria "quais embarques levaram o KV876431".
+- **Mapa `pedido → carregamento aberto` carregado uma vez**
+  (`carregarCarregamentosAbertos()`), não uma consulta por clique: "Todo
+  pedido carregou" marca item por item em laço, e uma ida ao banco por
+  item deixaria o botão lento justo quando o conferente está com pressa.
+  Chave normalizada (maiúscula, sem espaço) dos dois lados — o pedido é
+  digitado na chegada por uma pessoa e na Entrada por outra.
+- **Cancelar/desfazer nunca apaga.** Cancelamento é status; desfazer uma
+  retirada limpa o vínculo com o carregamento (o item não subiu naquele
+  caminhão, não pode seguir contando na barra dele).
+- **Reabrir preserva `inicio_em`.** Fechou por engano, reabre e o tempo
+  continua de onde estava — zerar faria o indicador mentir a favor da
+  operação.
+
+### Tempo real
+
+Supabase Realtime, o mesmo mecanismo já usado na contagem física, nas
+bobinas e nas atribuições — **não** um servidor de WebSocket próprio: o
+portal é site estático + Supabase, não existe servidor nosso rodando, e
+criar um traria infra pra manter e custo mensal pra resolver o que já
+está resolvido. Duas tabelas na publicação: `doca_carregamentos` e
+`exp_controle_itens` (é a baixa do item que faz a barra andar). A
+assinatura de `exp_controle_itens` filtra por carregamento na tela antes
+de recarregar — a aba Entrada atualiza esse mesmo registro a cada tecla
+digitada, e reagir a tudo seria desperdício.
+
+### Fases 2 e 3 (ainda não feitas)
+
+SLA por tipo de veículo, catálogo de motivos, justificativa travando o
+fechamento, perfil `diretoria` só-leitura e relatório analítico ficam pra
+fase 2 — nada disso adianta antes de existir tempo medido. Fila do pátio
+já entrou nesta fase; QR na ficha, Modo TV e alerta automático são fase 3.
+
+Conferido no navegador com dados simulados: as 3 docas renderizam nos
+três estados (livre / encostado / carregando), barra em 31 de 50 = 62%,
+cronômetro, fila do pátio e "carregados hoje" com duração; iniciar,
+finalizar, chamar e registrar chegada mandam os payloads certos;
+finalizar com item faltando avisa antes ("faltam 19 item(ns)"); placa e
+pedidos entram em maiúscula e aceitam vírgula ou espaço como separador;
+"✓ Carregou" carimba o carregamento certo mesmo com o pedido digitado
+como " kv876431 ", não carimba nada quando não há carregamento aberto, e
+desfazer limpa o vínculo. Zero erro de console.
+
 ## Nova aba "⏰ Parados" + aviso formal pro PCP (14/09/2026)
 
 O Robson: *"quero também uma aba de pedidos que estao a mais de 05 dias

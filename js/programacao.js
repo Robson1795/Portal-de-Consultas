@@ -169,6 +169,11 @@ async function carregarProgramacao() {
     // nada, então recalcula sempre que os dados forem recarregados, não só
     // ao trocar pra esta sub-aba.
     renderParadosExp();
+    // Painel de Docas: mantém fresco o mapa "pedido -> caminhão que está
+    // carregando agora", usado pelo "✓ Carregou" da aba DOCA. Não bloqueia
+    // a tela (sem await): o Controle EXP tem de aparecer mesmo que o
+    // fase39 ainda não tenha rodado no Supabase.
+    carregarCarregamentosAbertos();
   }
 }
 
@@ -1260,6 +1265,45 @@ function aindaNoEndereco(status) {
   return status !== 'retirado' && status !== 'na_doca';
 }
 
+// ---- Ponte com o Painel de Docas (fase39) --------------------------------
+// Qual carregamento está EM CURSO para cada nº de pedido. Um mapa só,
+// carregado junto com o resto do Controle EXP, em vez de uma consulta a
+// cada clique em "✓ Carregou": "Todo pedido carregou" marca item por item
+// em laço, e uma ida ao banco por item deixaria o botão lento justamente
+// na hora em que o conferente está com pressa.
+//
+// Chave normalizada (sem espaço, maiúscula) dos dois lados: o pedido é
+// digitado na chegada do caminhão por uma pessoa e na Entrada do EXP por
+// outra, e "kv876431 " não pode deixar de casar com "KV876431".
+let carregamentoAbertoPorPedido = new Map();
+
+function chavePedidoCarregamento(numeroPedido) {
+  return String(numeroPedido == null ? '' : numeroPedido).trim().toUpperCase();
+}
+
+function carregamentoAbertoDoPedido(numeroPedido) {
+  const chave = chavePedidoCarregamento(numeroPedido);
+  return chave ? (carregamentoAbertoPorPedido.get(chave) || null) : null;
+}
+
+async function carregarCarregamentosAbertos() {
+  carregamentoAbertoPorPedido = new Map();
+  const { data, error } = await sb.from('doca_carregamento_pedidos')
+    .select('numero_pedido, carregamento_id, doca_carregamentos!inner(status, unidade)')
+    .eq('doca_carregamentos.status', 'carregando')
+    .eq('doca_carregamentos.unidade', unidadeAtual);
+  if (error) {
+    // Silencioso de propósito (mesmo padrão de carregarConferirExpNotas):
+    // se o fase39 ainda não rodou no Supabase, o Controle EXP continua
+    // funcionando inteiro -- só não carimba o caminhão.
+    console.warn('Não foi possível carregar os carregamentos abertos:', error.message);
+    return;
+  }
+  (data || []).forEach(r => {
+    carregamentoAbertoPorPedido.set(chavePedidoCarregamento(r.numero_pedido), r.carregamento_id);
+  });
+}
+
 // Rótulo/classe do badge de status do Controle EXP -- usado onde quer que
 // se mostre a situação do item (tabela da Entrada, exportação/ordenação).
 // Um lugar só pros três nomes: escrever "Na doca"/"st-atencao" em mais de
@@ -1929,15 +1973,28 @@ async function gravarEtiquetaEmLote(linhas) {
 // carregar" assim que a segunda etapa acontecesse.
 async function marcarSaidaExpControle(id, conferente, novoStatus) {
   const status = novoStatus || 'retirado';
+  const linha = progExpControle.find(l => l.id === id);
   let patch;
   if (status === 'na_doca') {
     patch = { status, na_doca_por: conferente, na_doca_em: new Date().toISOString() };
   } else if (status === 'retirado') {
     patch = { status, retirado_por: conferente, retirado_em: new Date().toISOString() };
+    // Painel de Docas (fase39): carimba em QUAL caminhão este item subiu,
+    // se o pedido dele estiver num carregamento em curso. É isto -- e só
+    // isto -- que faz a barra de progresso do painel andar sozinha: o
+    // conferente continua clicando "✓ Carregou" como sempre, sem tela
+    // nova nem digitação a mais. Sem carregamento aberto pro pedido, a
+    // coluna fica nula e a baixa acontece igual (a coluna não tem FK
+    // justamente pra baixa nunca depender de registro acessório).
+    const carregamentoId = carregamentoAbertoDoPedido(linha && linha.numero_pedido);
+    if (carregamentoId) patch.doca_carregamento_id = carregamentoId;
   } else {
     // "desfazer": volta pra na_expedicao, limpa os dois carimbos -- não
     // interessa de qual dos dois estados de saída ele estava desfazendo.
-    patch = { status, na_doca_por: null, na_doca_em: null, retirado_por: null, retirado_em: null };
+    // O vínculo com o carregamento sai junto: o item não subiu naquele
+    // caminhão, então não pode continuar contando na barra dele.
+    patch = { status, na_doca_por: null, na_doca_em: null, retirado_por: null, retirado_em: null,
+              doca_carregamento_id: null };
   }
   const { error } = await sb.from('exp_controle_itens').update(patch).eq('id', id);
   if (error) { alert('Não foi possível salvar: ' + error.message); return false; }
@@ -1946,7 +2003,7 @@ async function marcarSaidaExpControle(id, conferente, novoStatus) {
   // so guarda o NUMERO do pedido (texto), entao so loga se achar o pedido de
   // verdade na grade carregada agora. Log e so rastreabilidade: sem achar,
   // a acao principal (que ja aconteceu, linha acima) nao e desfeita por isso.
-  const item = progExpControle.find(l => l.id === id);
+  const item = linha;
   const pedido = item ? pedidoDoNumero(item.numero_pedido) : null;
   if (item && pedido) {
     const evento = status === 'retirado' ? 'item_saiu_expedicao'

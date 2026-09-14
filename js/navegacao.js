@@ -20,9 +20,9 @@
 // da Requisicao (que e so pedir). Quem faz esse fluxo e o ALM da unidade.
 const PERFIS = {
   consultor:   { rotulo: 'Consultor',   paginas: ['estoque'] },
-  estoque_alm: { rotulo: 'Estoque ALM', paginas: ['estoque', 'sesmt', 'requisicao', 'programacao', 'expacessorios', 'expbenchmark', 'analise'] },
+  estoque_alm: { rotulo: 'Estoque ALM', paginas: ['estoque', 'sesmt', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'analise'] },
   estoque_aco: { rotulo: 'Estoque Aço', paginas: ['bobinas', 'requisicao'] },
-  admin:       { rotulo: 'Admin',       paginas: ['estoque', 'sesmt', 'bobinas', 'requisicao', 'programacao', 'expacessorios', 'expbenchmark', 'analise', 'config'] }
+  admin:       { rotulo: 'Admin',       paginas: ['estoque', 'sesmt', 'bobinas', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'analise', 'config'] }
 };
 
 const PAGINAS = {
@@ -38,6 +38,12 @@ const PAGINAS = {
   // -- não depende das planilhas da Programação, o item pode ser digitado
   // direto no app (ver "Entrada" em js/programacao.js).
   expacessorios: { rotulo: 'Controle EXP Acessórios', icone: '🔄', elemento: 'expAcessoriosContent' },
+  // Painel de Docas fica LOGO ABAIXO do Controle EXP no menu (Robson,
+  // 14/09/2026: "crie uma nova aba debaixo do controle exp") -- a ordem
+  // do menu é a ordem desta lista em PERFIS, não a daqui. É a mesma
+  // operação, um passo depois: o Controle EXP diz que o item saiu do
+  // endereço, o Painel diz em qual doca e em qual caminhão ele entrou.
+  docas: { rotulo: 'Painel de Docas', icone: '🚛', elemento: 'docasContent' },
   // Depósito Benchmark usava a MESMA tela do Controle EXP Acessórios
   // (exp_controle_itens, filtrada por `setor` -- ver sql/fase18-deposito-
   // benchmark.sql), com pedido/etiqueta/status. O Robson pediu pra trocar
@@ -162,6 +168,18 @@ function mostrarPagina(id) {
     atualizarTituloSetorExp();
     trocarAbaExpAcessorios('entrada');
     carregarCatalogoExp().then(carregarProgramacao);
+  }
+  // Painel de Docas: o tempo real fica ligado só enquanto a tela está
+  // aberta (mesmo padrão da contagem física em js/estoque.js) -- assinatura
+  // e cronômetro rodando em página fechada gastam conexão e bateria do
+  // celular do conferente sem nada pra mostrar.
+  if (id === 'docas') {
+    carregarPainelDocas();
+    iniciarTempoRealDocas();
+    iniciarRelogioDocas();
+  } else if (typeof pararTempoRealDocas === 'function') {
+    pararTempoRealDocas();
+    pararRelogioDocas();
   }
   if (id === 'analise') { carregarAnalise(); }
   if (id === 'config')  { carregarUsuarios(); carregarConfigUnidades(); carregarLote(); carregarSugestoes(); }
