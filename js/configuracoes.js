@@ -1001,3 +1001,241 @@ function carregarLote() {
   });
   if (mostrar) { trocarAbaLote(loteAba); carregarDatasLote(); }
 }
+
+
+// ===========================================================================
+// QUEM ESTÁ USANDO O PORTAL (14/09/2026)
+// ===========================================================================
+//
+// `acessos` grava uma linha por login **desde o primeiro dia do projeto** e
+// nunca foi lida por ninguém -- a varredura de 14/09/2026 achou um único uso
+// em todo o js/: o `insert` de js/auth.js. Junto com `log_movimentacao`, era a
+// única tabela do portal que só escrevia.
+//
+// Depois do rollout, a pergunta nº 1 não é "o portal funciona" -- é "as
+// pessoas estão entrando?". E a resposta acionável não é a contagem de
+// acessos: é **quem foi aprovado e nunca entrou**. Alguém foi liberado e não
+// apareceu: ou não sabe que foi aprovado, ou não sabe que o portal existe.
+// Essa lista é a única que some sozinha quando a adoção acontece de verdade.
+//
+// ⚠️ A tabela tem só `id, user_id, email, entrou_em` (conferido na API, porque
+// ela é anterior à numeração por fase e não existe script que a crie neste
+// repositório). Não há tela nem duração: isto responde "entrou?", nunca
+// "usou o quê?" -- e a tela diz isso em vez de deixar alguém supor.
+let acessosCarregados = [];
+
+function periodoAcessosDias() {
+  const sel = document.getElementById('cfgAcessosPeriodo');
+  return sel ? parseInt(sel.value, 10) || 0 : 30;
+}
+
+async function carregarAcessos() {
+  const msg = document.getElementById('cfgAcessosMsg');
+  if (!msg) return;
+  msg.textContent = 'Carregando...';
+  msg.className = 'status-msg';
+
+  const dias = periodoAcessosDias();
+  const desde = dias > 0 ? new Date(Date.now() - dias * 864e5).toISOString() : null;
+
+  // ⚠️ Paginado: `acessos` cresce um registro por login, para sempre -- é a
+  // tabela que mais cresce do portal. Sem isto ela pararia de contar na
+  // milésima linha sem avisar (o corte silencioso do PostgREST, seção 9).
+  // `.order()` estável é obrigatório, senão a página 2 repete linha da 1.
+  const { data, error } = await buscarTudoPaginado((de, ate) => {
+    let q = sb.from('acessos').select('email, entrou_em').order('entrou_em', { ascending: false });
+    if (desde) q = q.gte('entrou_em', desde);
+    return q.range(de, ate);
+  });
+
+  if (error) {
+    acessosCarregados = [];
+    msg.textContent = 'Não foi possível ler o log de acessos: ' + error.message;
+    msg.className = 'status-msg status-err';
+    renderAcessos();
+    return;
+  }
+  acessosCarregados = data || [];
+  msg.textContent = '';
+  renderAcessos();
+}
+
+function renderAcessos() {
+  const corpo = document.getElementById('cfgAcessosCorpo');
+  if (!corpo) return;
+
+  // Normaliza o e-mail dos DOIS lados: `acessos.email` vem do `user.email` do
+  // Auth e `usuarios_permitidos.email` do cadastro -- a mesma pessoa pode ter
+  // sido gravada com caixa diferente nos dois, e aí ela apareceria como "nunca
+  // entrou" tendo entrado hoje. Mesma lição do 996613I (seção 14).
+  const chave = (e) => String(e || '').trim().toLowerCase();
+
+  const porPessoa = new Map();
+  acessosCarregados.forEach(a => {
+    const k = chave(a.email);
+    if (!k) return;
+    const atual = porPessoa.get(k) || { entradas: 0, ultimo: null };
+    atual.entradas++;
+    if (!atual.ultimo || a.entrou_em > atual.ultimo) atual.ultimo = a.entrou_em;
+    porPessoa.set(k, atual);
+  });
+
+  // A lista é dos APROVADOS -- conta pendente não entrou porque não pode, e
+  // misturá-la aqui esconderia quem pode e não entrou, que é o item de ação.
+  const aprovados = usuariosCarregados.filter(u => u.aprovado);
+  const trintaDiasAtras = Date.now() - 30 * 864e5;
+
+  const linhas = aprovados.map(u => {
+    const info = porPessoa.get(chave(u.email)) || { entradas: 0, ultimo: null };
+    const nunca = !info.ultimo;
+    const sumido = !nunca && new Date(info.ultimo).getTime() < trintaDiasAtras;
+    return {
+      nome: u.nome || '—', email: u.email || '', unidade: u.unidade, perfil: u.perfil,
+      entradas: info.entradas, ultimo: info.ultimo, nunca, sumido
+    };
+  });
+
+  // ⚠️ A ordem é a da AÇÃO, não a alfabética: nunca entrou primeiro (é o
+  // telefonema a dar), depois o sumido há mais tempo, e quem está usando por
+  // último -- sobre esse não há nada a fazer. Mesmo princípio da lista de
+  // reservas (a esquecida em cima) e da fila de aprovação.
+  linhas.sort((a, b) => {
+    if (a.nunca !== b.nunca) return a.nunca ? -1 : 1;
+    if (a.nunca && b.nunca) return String(a.nome).localeCompare(String(b.nome), 'pt-BR');
+    return new Date(a.ultimo) - new Date(b.ultimo);
+  });
+
+  document.getElementById('cfg-ac-ativos').textContent = porPessoa.size;
+  document.getElementById('cfg-ac-nunca').textContent = linhas.filter(l => l.nunca).length;
+  document.getElementById('cfg-ac-sumidos').textContent = linhas.filter(l => l.sumido).length;
+  document.getElementById('cfg-ac-total').textContent = acessosCarregados.length;
+
+  const vazio = document.getElementById('cfgAcessosVazio');
+  vazio.style.display = linhas.length ? 'none' : 'block';
+  vazio.textContent = usuariosCarregados.length
+    ? 'Nenhuma conta aprovada ainda — aprove alguém na lista acima primeiro.'
+    : 'A lista de usuários ainda não carregou. Clique em "Recarregar lista" na seção de usuários.';
+
+  corpo.innerHTML = linhas.map(l => {
+    const selo = l.nunca
+      ? '<span class="cfg-status st-atrasado">Nunca entrou</span>'
+      : (l.sumido ? '<span class="cfg-status st-atencao">Sumido</span>'
+                  : '<span class="cfg-status st-ativo">Usando</span>');
+    return `
+    <tr${l.nunca ? ' style="background:var(--erro-fundo);"' : ''}>
+      <td>${selo}</td>
+      <td><b>${escapeHtml(l.nome)}</b></td>
+      <td class="loc">${escapeHtml(l.email)}</td>
+      <td class="loc">${escapeHtml(l.unidade || '—')}</td>
+      <td>${escapeHtml((PERFIS[l.perfil] || {}).rotulo || l.perfil || '—')}</td>
+      <td class="loc">${l.ultimo ? escapeHtml(formatarDataHoraBR(l.ultimo)) : '—'}</td>
+      <td class="num">${l.entradas || '—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+document.getElementById('cfgAcessosRecarregar').addEventListener('click', carregarAcessos);
+document.getElementById('cfgAcessosPeriodo').addEventListener('change', carregarAcessos);
+
+// ===========================================================================
+// BACKUP DE UM CLIQUE (14/09/2026)
+// ===========================================================================
+//
+// O CLAUDE.md lista "sem backup automático" e "hospedagem com ponto único de
+// falha" entre os riscos abertos -- e o sistema está prestes a receber
+// usuários de verdade. Não existe servidor neste projeto, então automatizar
+// está fora de alcance; o que dá pra fazer é tirar o ATRITO: exportar 38
+// tabelas à mão pelo painel do Supabase é exatamente o tipo de tarefa que
+// ninguém faz duas vezes.
+//
+// ⚠️ ESTA LISTA É MANTIDA À MÃO, e tabela que nascer depois e não entrar aqui
+// **não vai no backup, em silêncio**. Conferida contra o banco em 14/09/2026
+// (as 38 responderam). Ao criar tabela nova num script de fase, acrescente-a
+// aqui no mesmo commit.
+const TABELAS_BACKUP = [
+  'acessos', 'analise_compras_acesso', 'analise_demanda', 'analise_item_notas',
+  'atribuicoes_corredor', 'bobinas_aco', 'catalogo_exp_itens', 'centros_custo',
+  'conferir_exp_notas', 'config_unidade', 'contagem_bobinas', 'contagem_bobinas_ocr',
+  'contagem_fisica', 'doca_carregamento_pedidos', 'doca_carregamentos', 'doca_eventos',
+  'docas', 'editores_bobinas', 'estoque', 'estoque_localizacao_historico',
+  'exp_acessorios', 'exp_conferencia_fisica', 'exp_controle_itens',
+  'exp_pedido_faturamento_confirmado', 'exp_pedido_status', 'fichas_tecnicas', 'fotos',
+  'gerentes_unidade', 'itens_requisicao', 'log_movimentacao', 'pedido_itens', 'pedidos',
+  'registro_saida', 'requisicoes_alm', 'requisicoes_alm_itens', 'reservas_aco',
+  'sugestoes_melhoria', 'usuarios_permitidos'
+];
+
+async function baixarBackupCompleto() {
+  const botao = document.getElementById('cfgBackupBtn');
+  const msg = document.getElementById('cfgBackupMsg');
+  const prog = document.getElementById('cfgBackupProgresso');
+
+  botao.disabled = true;
+  msg.textContent = '';
+  msg.className = 'status-msg';
+  prog.innerHTML = '';
+
+  const backup = {
+    gerado_em: new Date().toISOString(),
+    gerado_por: nomeUsuarioAtual || emailUsuarioAtual || '(desconhecido)',
+    projeto: SUPABASE_URL,
+    aviso: 'Retrato dos DADOS. A estrutura das tabelas está nos arquivos sql/ do repositório -- os dois juntos refazem o banco.',
+    tabelas: {}
+  };
+  const vazias = [];
+  const falhas = [];
+  let totalLinhas = 0;
+
+  for (let i = 0; i < TABELAS_BACKUP.length; i++) {
+    const nome = TABELAS_BACKUP[i];
+    msg.textContent = `Lendo ${i + 1} de ${TABELAS_BACKUP.length}: ${nome}...`;
+
+    // Sem filtro de unidade: backup é do banco inteiro. O que o RLS não
+    // deixar ler simplesmente não vem -- e é por isso que a tabela vazia
+    // aparece na conferência abaixo em vez de passar batida.
+    const { data, error } = await buscarTudoPaginado((de, ate) =>
+      sb.from(nome).select('*').range(de, ate));
+
+    if (error) {
+      falhas.push(nome + ': ' + error.message);
+      backup.tabelas[nome] = { erro: error.message, linhas: 0, dados: [] };
+      prog.innerHTML += `<div style="color:var(--erro-borda);">✗ ${escapeHtml(nome)} — ${escapeHtml(error.message)}</div>`;
+      continue;
+    }
+    const linhas = (data || []).length;
+    totalLinhas += linhas;
+    backup.tabelas[nome] = { linhas, dados: data || [] };
+    if (linhas === 0) vazias.push(nome);
+    prog.innerHTML += `<div>${linhas === 0 ? '·' : '✓'} ${escapeHtml(nome)} — ${linhas.toLocaleString('pt-BR')} linha(s)</div>`;
+  }
+
+  backup.resumo = {
+    tabelas: TABELAS_BACKUP.length,
+    linhas: totalLinhas,
+    vazias,     // ⚠️ pode ser tabela vazia de verdade OU barrada pelo RLS
+    falhas
+  };
+
+  const nomeArquivo = 'backup-portal-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.json';
+  baixarArquivo(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }), nomeArquivo);
+
+  botao.disabled = false;
+  msg.textContent = `Pronto: ${totalLinhas.toLocaleString('pt-BR')} linhas de ${TABELAS_BACKUP.length} tabelas.`;
+  msg.className = falhas.length ? 'status-msg status-err' : 'status-msg status-ok';
+
+  // ⚠️ A tabela vazia é dita em voz alta de propósito: uma barrada pelo RLS
+  // responde zero linhas SEM ERRO NENHUM, exatamente como uma que está vazia
+  // de verdade. O portal não tem como distinguir as duas -- e um backup que
+  // parece completo e não está é pior que backup nenhum.
+  if (vazias.length) {
+    prog.innerHTML += `<div style="margin-top:10px; color:var(--aviso-texto); font-weight:700;">
+      ⚠️ ${vazias.length} tabela(s) vieram vazias: ${escapeHtml(vazias.join(', '))}.
+      Confira se é isso mesmo — tabela barrada pelo seu acesso responde zero linhas sem dar erro.</div>`;
+  }
+  if (falhas.length) {
+    prog.innerHTML += `<div style="margin-top:6px; color:var(--erro-borda); font-weight:700;">
+      ✗ ${falhas.length} tabela(s) falharam e estão no arquivo com o erro anotado.</div>`;
+  }
+}
+
+document.getElementById('cfgBackupBtn').addEventListener('click', baixarBackupCompleto);

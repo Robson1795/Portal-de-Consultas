@@ -16,6 +16,7 @@
 // Uma frase por página: o que ela responde, não o que ela é. "Consulta de
 // Itens" já está escrito no menu; o que a pessoa não sabe é para que serve.
 const TOUR_EXPLICACAO = {
+  painel: 'A primeira tela depois do login: o que está fora do lugar <b>agora</b> — material parado, pedido atrasado, planilha velha. Cada card leva direto pra tela onde se resolve. Card apagado quer dizer que está tudo certo naquele ponto.',
   estoque: 'Todo o estoque do almoxarifado desta unidade. A busca aceita item, descrição, localização — e formatos especiais como <b>corredor A-B</b> ou <b>CANT A-G</b> para sair um corredor inteiro na impressão.',
   sesmt: 'A mesma tela da Consulta de Itens, mas mostrando o depósito de <b>EPI</b> desta unidade. Depósito é uma coisa, unidade é outra: o seletor de unidade continua valendo aqui.',
   bobinas: 'Auditoria das bobinas de aço no pátio: saldo do sistema, saldo físico e a divergência na hora. Dá para conferir a etiqueta pela foto, no próprio celular.',
