@@ -2757,6 +2757,80 @@ document.getElementById('expCtrlBody').addEventListener('click', async (e) => {
 
 // Localização editável direto na lista -- pra quando o item muda de lugar
 // depois de já registrado, sem precisar excluir e digitar tudo de novo.
+// ---- Gravação dos campos editáveis direto na lista (aba Entrada) ---------
+//
+// O Victor, 14/09/2026: *"ao tentar mudar a data de entrada aparece o erro
+// 'Não foi possível salvar a data: TypeError: failed to fetch'"*.
+//
+// ⚠️ "Failed to fetch" NÃO é recusa do banco. É a exceção do `fetch` do
+// navegador, que o supabase-js repassa como texto dentro de `error.message`:
+// a requisição não chegou a ter resposta -- rede caiu, VPN dormiu, proxy ou
+// extensão bloqueou, a máquina hibernou com a tela aberta. Sondado em
+// 14/09/2026 direto na API (projeto acordado, preflight de PATCH liberado,
+// PATCH aceito com os cabeçalhos de CORS certos), então não é o portal nem o
+// Supabase recusando: é o caminho entre os dois.
+//
+// Três coisas que estas gravações precisavam e não tinham:
+//
+//  1. ⚠️ RECIBO (`.select('id')`). Conferido na API no mesmo dia: um PATCH que
+//     não casa linha nenhuma -- inclusive um barrado pelo RLS -- responde
+//     **204 No Content com `error: null`**. Sem o recibo a tela pintava a
+//     borda azul, dizia que salvou, e o F5 desmentia. É o item A1 da
+//     AUDITORIA.md, que o resto do projeto já fecha e estes três editores
+//     tinham deixado passar.
+//  2. UMA SEGUNDA TENTATIVA quando a falha é de rede. Um `update` destes é
+//     idempotente (grava um valor fixo numa linha), então repetir é seguro --
+//     e uma piscada de rede deixa de custar o que a pessoa digitou.
+//  3. MENSAGEM EM PORTUGUÊS pro caso de rede. "TypeError: failed to fetch" não
+//     diz a ninguém o que fazer.
+function falhaDeRedeSupabase(error) {
+  // Não há `code` para testar: numa exceção do fetch o supabase-js monta o
+  // erro com a exceção convertida em texto, e só. Então é pelo texto mesmo.
+  return !!error && /failed to fetch|networkerror|network error|load failed/i.test(error.message || '');
+}
+
+async function gravarCampoExpControle(id, campos) {
+  for (let tentativa = 1; tentativa <= 2; tentativa++) {
+    const { data, error } = await sb.from('exp_controle_itens')
+      .update(campos).eq('id', id).select('id');
+
+    if (!error) {
+      if (data && data.length) return { ok: true };
+      return { ok: false, mensagem: 'o banco não alterou nenhuma linha — ou o '
+        + 'registro foi excluído por outra pessoa, ou seu acesso não permite '
+        + 'editar. Clique em Atualizar e confira antes de digitar de novo.' };
+    }
+
+    if (!falhaDeRedeSupabase(error)) return { ok: false, mensagem: error.message };
+
+    if (tentativa === 2) {
+      console.error('Falha de rede ao gravar em exp_controle_itens:', error.message);
+      return { ok: false, rede: true, mensagem: 'o navegador não conseguiu falar '
+        + 'com o banco de dados (tentei duas vezes). Confira a internet e a VPN '
+        + 'e tente de novo — o que você digitou continua no campo.' };
+    }
+    await new Promise(f => setTimeout(f, 700));
+  }
+}
+
+// Campo que não salvou fica VERMELHO e continua com o texto digitado, em vez
+// de voltar sozinho pro valor antigo: numa falha de rede o que está na tela é
+// a única cópia que existe, e apagar obriga a pessoa a digitar tudo de novo só
+// pra tentar outra vez. Mesmo princípio do "⚠ não salvou" da contagem
+// (marcarFalhaContagem em js/estoque.js).
+function marcarCampoExpNaoSalvou(input, mensagem) {
+  input.style.borderColor = 'var(--erro-borda)';
+  input.style.background = 'var(--erro-fundo)';
+  input.title = 'NÃO SALVOU: ' + mensagem;
+}
+
+function marcarCampoExpSalvou(input) {
+  input.style.background = '';
+  input.title = '';
+  input.style.borderColor = 'var(--blue)';
+  setTimeout(() => { input.style.borderColor = ''; }, 1200);
+}
+
 // 'focusout' (não 'blur') porque bubbla até o <tbody> delegado. Não
 // recarrega a tela toda: só atualiza o registro em memória, senão o campo
 // perderia o foco a cada edição.
@@ -2775,19 +2849,18 @@ document.getElementById('expCtrlBody').addEventListener('focusout', async (e) =>
   if (novaLocalizacao === (item.localizacao || null)) { input.value = novaLocalizacao || ''; return; }
 
   input.disabled = true;
-  const { error } = await sb.from('exp_controle_itens').update({ localizacao: novaLocalizacao }).eq('id', item.id);
+  const res = await gravarCampoExpControle(item.id, { localizacao: novaLocalizacao });
   input.disabled = false;
 
-  if (error) {
-    alert('Não foi possível salvar a localização: ' + error.message);
-    input.value = item.localizacao || '';
+  if (!res.ok) {
+    alert('Não foi possível salvar a localização: ' + res.mensagem);
+    marcarCampoExpNaoSalvou(input, res.mensagem);
     return;
   }
   item.localizacao = novaLocalizacao;
   input.value = novaLocalizacao || '';
   input.size = Math.max(8, (novaLocalizacao || '').length + 2);
-  input.style.borderColor = 'var(--blue)';
-  setTimeout(() => { input.style.borderColor = ''; }, 1200);
+  marcarCampoExpSalvou(input);
 });
 
 // Quantidade editável direto na lista -- pra corrigir sem excluir e
@@ -2803,17 +2876,16 @@ document.getElementById('expCtrlBody').addEventListener('focusout', async (e) =>
   if (novaQtd === (item.quantidade != null ? parseQtd(item.quantidade) : null)) return; // nada mudou
 
   input.disabled = true;
-  const { error } = await sb.from('exp_controle_itens').update({ quantidade: novaQtd }).eq('id', item.id);
+  const res = await gravarCampoExpControle(item.id, { quantidade: novaQtd });
   input.disabled = false;
 
-  if (error) {
-    alert('Não foi possível salvar a quantidade: ' + error.message);
-    input.value = item.quantidade != null ? item.quantidade : '';
+  if (!res.ok) {
+    alert('Não foi possível salvar a quantidade: ' + res.mensagem);
+    marcarCampoExpNaoSalvou(input, res.mensagem);
     return;
   }
   item.quantidade = novaQtd;
-  input.style.borderColor = 'var(--blue)';
-  setTimeout(() => { input.style.borderColor = ''; }, 1200);
+  marcarCampoExpSalvou(input);
 });
 
 // Data de Entrada/Saída editáveis -- pra quando o registro é digitado
@@ -2845,18 +2917,17 @@ async function salvarDataExpControle(input, campo, obrigatorio) {
   if (novaData === item[campo]) { input.value = formatarDataHoraBR(item[campo]); return; } // nada mudou
 
   input.disabled = true;
-  const { error } = await sb.from('exp_controle_itens').update({ [campo]: novaData }).eq('id', item.id);
+  const res = await gravarCampoExpControle(item.id, { [campo]: novaData });
   input.disabled = false;
 
-  if (error) {
-    alert('Não foi possível salvar a data: ' + error.message);
-    input.value = formatarDataHoraBR(item[campo]);
+  if (!res.ok) {
+    alert('Não foi possível salvar a data: ' + res.mensagem);
+    marcarCampoExpNaoSalvou(input, res.mensagem);
     return;
   }
   item[campo] = novaData;
   input.value = formatarDataHoraBR(novaData);
-  input.style.borderColor = 'var(--blue)';
-  setTimeout(() => { input.style.borderColor = ''; }, 1200);
+  marcarCampoExpSalvou(input);
 }
 
 document.getElementById('expCtrlBody').addEventListener('focusout', (e) => {
