@@ -1232,3 +1232,15 @@ td.col-acoes { white-space: nowrap; text-align: center; }
   padding: 6px 8px; border: 1px solid var(--border); border-radius: 7px;
   font-size: 12.5px; background: var(--panel); color: var(--ink);
 }
+
+/* Destino e telefone do motorista no cartão da doca (fase40). O destino
+   é o que a operação fala ("essa carreta é pra Joinville"), então tem
+   peso próprio -- não é mais uma linha cinza de detalhe. */
+.doca-destino { font-size: 12.5px; font-weight: 700; color: var(--ink); }
+/* Telefone é link de ligar: no celular do conferente, um toque chama o
+   motorista que sumiu com o caminhão parado na doca. */
+.doca-telefone {
+  font-size: 12.5px; font-weight: 600; color: var(--blue-texto);
+  text-decoration: none; white-space: nowrap; width: fit-content;
+}
+.doca-telefone:hover { text-decoration: underline; }

@@ -3012,6 +3012,37 @@ grupo; busca por pedido continua funcionando; item retirado na mesma
 localização continua fora, mesmo buscando por ela. Zero erro de
 console.
 
+## Destino e telefone do motorista no Painel de Docas (14/09/2026)
+
+Com o painel já rodando em produção, o Robson: *"preciso que coloque
+tambem destino e numero do telefone do motorista"*.
+
+Duas colunas novas em `doca_carregamentos` (`sql/fase40-doca-destino-
+telefone.sql`), e não texto solto em `observacao`: **destino** vira
+indicador depois (tempo médio por rota, carregamento por destino), e
+dentro de um campo livre isso nunca seria agrupável.
+
+O **telefone é link de ligar** (`tel:`), não texto: o caso real do pátio
+é o motorista sumir com o caminhão ocupando a doca, e a chegada é
+registrada no celular do conferente — um toque no número já chama. Só os
+dígitos vão pro `href` (nem todo aparelho aceita parênteses e hífen no
+`tel:`); na tela continua aparecendo com a formatação digitada, que é
+como se confere se o número está certo. Guardado como **texto**, não
+número: tem DDD, parênteses, hífen e às vezes ramal, e virar número
+perderia o zero à esquerda. O campo usa `type="tel"`, que abre o teclado
+numérico no celular.
+
+Destino aparece no cartão da doca, na fila do pátio e como coluna nova em
+"Carregados hoje"; telefone aparece no cartão e na fila (no histórico não
+entra — a coluna só faria a tabela crescer para um dado que já não serve
+depois que o caminhão foi embora).
+
+Conferido no navegador: destino e telefone gravam na chegada e aparecem
+nos três lugares; "(47) 99123-4567" vira `tel:47991234567` mantendo a
+formatação na tela; telefone só com texto ("não informado") não vira link
+quebrado; campo vazio não renderiza nada; texto com HTML é escapado.
+Zero erro de console.
+
 ## Painel de Docas — fase 1 (14/09/2026)
 
 O Robson pediu uma página nova **no menu lateral**, logo abaixo de

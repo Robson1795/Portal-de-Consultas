@@ -1264,8 +1264,14 @@
         </select>
         <input type="text" id="docaTransportadora" placeholder="Transportadora"
                style="flex:1; min-width:150px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+        <input type="text" id="docaDestino" placeholder="Destino"
+               style="flex:1; min-width:140px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
         <input type="text" id="docaMotorista" placeholder="Motorista"
                style="flex:1; min-width:140px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+        <!-- type="tel" abre o teclado numérico no celular do conferente,
+             que é onde a chegada é registrada na prática. -->
+        <input type="tel" id="docaTelefone" placeholder="Telefone do motorista"
+               style="width:170px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
         <input type="text" id="docaPedidos" placeholder="Nº do(s) pedido(s) — separe por vírgula"
                style="flex:2; min-width:210px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
         <button class="btn btn-primary" id="docaChegadaBtn">Registrar chegada</button>
@@ -1300,7 +1306,7 @@
           <table>
             <thead>
               <tr>
-                <th>Placa</th><th>Veículo</th><th>Transportadora</th><th>Pedidos</th>
+                <th>Placa</th><th>Veículo</th><th>Transportadora</th><th>Destino</th><th>Pedidos</th>
                 <th>Doca</th><th>Início</th><th>Fim</th><th>Duração</th><th>Conferente</th><th>Ação</th>
               </tr>
             </thead>

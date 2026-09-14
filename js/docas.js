@@ -95,6 +95,20 @@ function pedidosDoCarregamento(id) {
   return docaPedidosMap.get(id) || [];
 }
 
+// Telefone vira link de ligar -- Robson, 14/09/2026: "preciso que coloque
+// tambem destino e numero do telefone do motorista". O caso real do pátio
+// é o motorista sumir com o caminhão ocupando a doca: no celular do
+// conferente, um toque no número já liga. Só os dígitos vão pro href
+// (tel: não aceita parênteses e hífen em todo aparelho); na tela continua
+// aparecendo do jeito que foi digitado, que é como se confere se está certo.
+function telefoneHtml(numero) {
+  const texto = String(numero || '').trim();
+  if (!texto) return '';
+  const digitos = texto.replace(/\D/g, '');
+  if (!digitos) return `<span class="doca-sub">${escapeHtml(texto)}</span>`;
+  return `<a class="doca-telefone" href="tel:${escapeHtml(digitos)}" title="Ligar para o motorista">📞 ${escapeHtml(texto)}</a>`;
+}
+
 function minutosEntre(inicioIso, fimIso) {
   if (!inicioIso) return 0;
   const fim = fimIso ? new Date(fimIso).getTime() : Date.now();
@@ -178,7 +192,9 @@ function renderQuadroDocas() {
       <div class="doca-veiculo">
         <span class="doca-placa">${escapeHtml(c.placa)}</span>
         <span class="doca-sub">${escapeHtml(c.tipo_veiculo || '—')}${c.transportadora ? ' · ' + escapeHtml(c.transportadora) : ''}</span>
+        ${c.destino ? `<span class="doca-destino">📍 ${escapeHtml(c.destino)}</span>` : ''}
         ${c.motorista ? `<span class="doca-sub">Motorista: ${escapeHtml(c.motorista)}</span>` : ''}
+        ${telefoneHtml(c.telefone_motorista)}
         <span class="doca-pedidos">${pedidos.length ? escapeHtml(pedidos.join(' + ')) : 'sem pedido informado'}</span>
       </div>
 
@@ -233,6 +249,8 @@ function renderFilaDocas() {
     <div class="doca-fila-linha">
       <span class="doca-placa">${escapeHtml(c.placa)}</span>
       <span class="doca-sub">${escapeHtml(c.tipo_veiculo || '—')}${c.transportadora ? ' · ' + escapeHtml(c.transportadora) : ''}</span>
+      ${c.destino ? `<span class="doca-destino">📍 ${escapeHtml(c.destino)}</span>` : ''}
+      ${telefoneHtml(c.telefone_motorista)}
       <span class="doca-pedidos">${pedidos.length ? escapeHtml(pedidos.join(' + ')) : '—'}</span>
       <span class="doca-sub">esperando ${espera}</span>
       ${opcoesDocas
@@ -266,6 +284,7 @@ function renderCarregadosHoje() {
       <td class="item">${escapeHtml(c.placa)}</td>
       <td>${escapeHtml(c.tipo_veiculo || '—')}</td>
       <td>${escapeHtml(c.transportadora || '—')}</td>
+      <td>${escapeHtml(c.destino || '—')}</td>
       <td class="loc">${escapeHtml(pedidosDoCarregamento(c.id).join(' + ') || '—')}</td>
       <td class="loc">${escapeHtml(nomeDoca(c.doca_id))}</td>
       <td class="loc">${c.inicio_em ? escapeHtml(formatarDataHoraBR(c.inicio_em)) : '—'}</td>
@@ -376,7 +395,9 @@ document.getElementById('docaChegadaBtn').addEventListener('click', async () => 
     setor: typeof setorExpAtual !== 'undefined' ? setorExpAtual : 'exp',
     placa,
     motorista: document.getElementById('docaMotorista').value.trim() || null,
+    telefone_motorista: document.getElementById('docaTelefone').value.trim() || null,
     transportadora: document.getElementById('docaTransportadora').value.trim() || null,
+    destino: document.getElementById('docaDestino').value.trim() || null,
     tipo_veiculo: document.getElementById('docaTipoVeiculo').value,
     meta_itens: meta,
     criado_por: nomeUsuarioAtual
@@ -397,7 +418,7 @@ document.getElementById('docaChegadaBtn').addEventListener('click', async () => 
   }
   await registrarEventoDoca(data.id, 'chegou', { placa, pedidos, meta_itens: meta });
 
-  ['docaPlaca', 'docaMotorista', 'docaTransportadora', 'docaPedidos'].forEach(id => {
+  ['docaPlaca', 'docaMotorista', 'docaTelefone', 'docaTransportadora', 'docaDestino', 'docaPedidos'].forEach(id => {
     document.getElementById(id).value = '';
   });
   // A confirmação vem DEPOIS de recarregar: carregarPainelDocas() limpa a
