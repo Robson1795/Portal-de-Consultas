@@ -1396,3 +1396,17 @@ td.col-acoes { white-space: nowrap; text-align: center; }
 .doca-chamado-carregando {
   background: var(--ok-fundo); color: var(--ok-texto); border-color: var(--ok-borda);
 }
+
+/* Card "Pedidos avisados pra preparar" pulsa quando tem pendência --
+   Robson, 15/09/2026: "quero que envie uma alerta bem chamativo".
+   Escopado pelo id (só este card, não os outros seis avisos do Painel do
+   Dia, que usam .painel-card-alerta sem animação nenhuma). */
+@media (prefers-reduced-motion: no-preference) {
+  #painel-card-avisoprep.painel-card-alerta {
+    animation: avisoPrepPulsar 1.6s ease-in-out infinite;
+  }
+}
+@keyframes avisoPrepPulsar {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(214, 69, 51, 0.35); }
+  50% { box-shadow: 0 0 0 7px rgba(214, 69, 51, 0); }
+}

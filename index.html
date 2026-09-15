@@ -795,6 +795,13 @@
         <div id="expAbas" style="display:flex; gap:8px; flex-wrap:wrap;">
           <button class="btn btn-primary" data-exp-aba="entrada">Entrada</button>
           <button class="btn" data-exp-aba="saida">Saída / Conferência</button>
+          <!-- Robson, 15/09/2026: "o encarregado da expedição quando
+               receber a lista do pcp, coloca o numero do pedido que a
+               gente tem que deixar na doca... abre um aviso para que a
+               gente entenda que devemos deixar o material preparado ja"
+               -- aviso ANTES do caminhão chegar (Painel de Docas é
+               depois, quando o caminhão já está no pátio). -->
+          <button class="btn" data-exp-aba="avisoprep" title="Avisa a equipe que um pedido da lista do PCP precisa ser separado e deixado pronto">🔔 Preparar</button>
           <!-- Robson, 11/09/2026: "quero uma aba só de DOCA, aí quando eu
                marcar na aba de saída da localização automaticamente o
                material é transferido pra lá" -- estado intermediário entre
@@ -1019,6 +1026,48 @@
           <div class="empty-msg" id="confHistVazio" style="display:none;">
             Nenhuma retirada registrada ainda.
           </div>
+        </div>
+      </div>
+
+      <!-- ---- Preparar: aviso da expedição pro EXP antes do caminhão chegar
+           Robson, 15/09/2026: "o encarregado da expedição quando receber
+           a lista do pcp, coloca o numero do pedido que a gente tem que
+           deixar na doca... abre um aviso para que a gente entenda que
+           devemos deixar o material preparado ja, ai faz o mesmo esquema
+           quando ele colocar o numero do pedido aparece os itens e as
+           localiçaões, tambem pode fazer o mesmo esquema de imprimir,
+           quero que envie uma alerta bem chamativo, pode colocar o
+           alerta nesse painel que o victor criou". Fluxo simples,
+           confirmado: avisado -> preparado (sem status intermediário,
+           sem "assumir tarefa"). Ver renderAvisoPreparo() e o card novo
+           em js/painel.js. -->
+      <div id="expAvisoPrepAba" class="prog-aba" style="display:none;">
+        <div class="modal-text" style="padding:0 16px 12px;">
+          Recebeu a lista do PCP? Digite o(s) nº de pedido aqui pra avisar a equipe que o
+          material precisa ser separado e deixado pronto antes do caminhão chegar.
+        </div>
+        <div class="cfg-barra" style="flex-wrap:wrap;">
+          <input type="text" id="avisoPrepPedidos" placeholder="Nº do(s) pedido(s) — separe por vírgula"
+                 style="flex:1; min-width:230px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <button class="btn btn-primary" id="avisoPrepAvisarBtn">🔔 Avisar equipe</button>
+        </div>
+        <div class="status-msg" id="avisoPrepMsg" style="padding:0 16px 8px;"></div>
+
+        <div class="cfg-barra">
+          <strong>Pendente de preparar</strong>
+          <span style="font-size:12px; color:var(--muted);" id="avisoPrepContagem"></span>
+        </div>
+        <div id="avisoPrepBody" style="padding:0 16px 16px;"></div>
+        <div class="empty-msg" id="avisoPrepVazio" style="display:none;">
+          Nenhum pedido avisado no momento. 🎉
+        </div>
+
+        <div style="border-top:1px solid var(--border); margin-top:10px;">
+          <div class="cfg-barra">
+            <strong>Já preparados</strong>
+            <button class="btn" id="avisoPrepHistToggle" style="margin-left:auto;">Mostrar</button>
+          </div>
+          <div id="avisoPrepHistBody" style="padding:0 16px 16px; display:none;"></div>
         </div>
       </div>
 

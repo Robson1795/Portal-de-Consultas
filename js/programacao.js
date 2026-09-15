@@ -221,7 +221,7 @@ function trocarAbaExpAcessorios(aba) {
   // a outra é o confronto entre as duas pontas. Registrar movimentação a partir
   // de uma tela de conferência seria mexer no que se está medindo.
   document.getElementById('expRegistroContainer').style.display =
-    (aba === 'catalogo' || aba === 'conferir' || aba === 'auditoria' || aba === 'doca' || aba === 'parados') ? 'none' : 'block';
+    (aba === 'catalogo' || aba === 'conferir' || aba === 'auditoria' || aba === 'doca' || aba === 'parados' || aba === 'avisoprep') ? 'none' : 'block';
   document.getElementById('expEntradaAba').style.display = aba === 'entrada' ? 'block' : 'none';
   document.getElementById('progConferencia').style.display = aba === 'saida' ? 'block' : 'none';
   document.getElementById('expCatalogoAba').style.display = aba === 'catalogo' ? 'block' : 'none';
@@ -229,6 +229,7 @@ function trocarAbaExpAcessorios(aba) {
   document.getElementById('expAuditoriaAba').style.display = aba === 'auditoria' ? 'block' : 'none';
   document.getElementById('expDocaAba').style.display = aba === 'doca' ? 'block' : 'none';
   document.getElementById('expParadosAba').style.display = aba === 'parados' ? 'block' : 'none';
+  document.getElementById('expAvisoPrepAba').style.display = aba === 'avisoprep' ? 'block' : 'none';
   if (aba === 'saida') renderConferencia();
   if (aba === 'conferir') {
     renderConferirExp(); // mostra rápido com o que já tem em memória (a 1ª vez, sem observação/exclusão ainda)
@@ -251,6 +252,9 @@ function trocarAbaExpAcessorios(aba) {
   if (aba === 'parados') {
     renderParadosExp(); // mostra rápido com o que já tem em memória
     carregarProgramacao(); // mesma lógica do DOCA: busca de novo ao abrir
+  }
+  if (aba === 'avisoprep') {
+    carregarAvisosPreparo().then(renderAvisosPreparo);
   }
 }
 
@@ -4345,6 +4349,232 @@ document.getElementById('avisoParadosGerarBtn').addEventListener('click', async 
   if (!resultado.ok) return;
 
   window.location.href = resultado.href;
+});
+
+// ---- Aba Preparar: aviso da expedição pro EXP antes do caminhão chegar ----
+// Robson, 15/09/2026: "o encarregado da expedição quando receber a lista
+// do pcp, coloca o numero do pedido... abre um aviso para que a gente
+// entenda que devemos deixar o material preparado ja". É ANTES do Painel
+// de Docas: lá o caminhão já está no pátio; aqui é só a lista do PCP
+// avisando o que vai precisar sair, pra dar tempo de separar com calma.
+//
+// Fluxo simples, confirmado pelo Robson: avisado -> preparado. Sem status
+// intermediário, sem "assumir tarefa" -- é uma anotação reversível, mesmo
+// espírito de conferir_exp_notas/exp_pedido_faturamento_confirmado.
+let avisosPreparoMap = new Map();      // numero_pedido (normalizado) -> registro
+let avisoPrepHistVisivel = false;
+
+async function carregarAvisosPreparo() {
+  avisosPreparoMap = new Map();
+  const { data, error } = await sb.from('exp_pedido_aviso_preparo')
+    .select('*').eq('unidade', unidadeAtual);
+  if (error) {
+    // Silencioso de propósito (mesmo padrão de carregarConferirExpNotas):
+    // se o fase45 ainda não rodou, a aba abre vazia em vez de travar o
+    // resto do Controle EXP.
+    console.warn('Não foi possível carregar os avisos de preparo:', error.message);
+    return;
+  }
+  (data || []).forEach(r => avisosPreparoMap.set(chavePedidoCarregamento(r.numero_pedido), r));
+}
+
+function avisosPendentes() {
+  return [...avisosPreparoMap.values()].filter(a => a.status === 'pendente')
+    .sort((a, b) => new Date(a.avisado_em) - new Date(b.avisado_em)); // mais antigo primeiro -- é o que espera há mais tempo
+}
+
+function avisosJaPreparados() {
+  return [...avisosPreparoMap.values()].filter(a => a.status === 'preparado')
+    .sort((a, b) => new Date(b.preparado_em || 0) - new Date(a.preparado_em || 0));
+}
+
+// Itens + localização de um pedido no Controle EXP -- mesma pergunta feita
+// pelo preview do Painel de Docas (itensDosPedidosDigitados em
+// js/docas.js), aqui reaproveitada com sua própria fonte (linhasDoSetorAtual).
+function itensDoPedidoAvisado(numeroPedido) {
+  const chave = chavePedidoCarregamento(numeroPedido);
+  return linhasDoSetorAtual().filter(l => chavePedidoCarregamento(l.numero_pedido) === chave);
+}
+
+function tabelaItensPedidoHtml(numeroPedido) {
+  const itens = itensDoPedidoAvisado(numeroPedido);
+  if (!itens.length) {
+    return `<div style="padding:8px 0; color:var(--muted); font-size:12.5px;">Nenhum item deste pedido no Controle EXP desta unidade.</div>`;
+  }
+  return `
+  <div class="scroll-area">
+    <table>
+      <thead><tr><th>Item</th><th>Descrição</th><th>Qtd</th><th>Localização</th><th>Status</th></tr></thead>
+      <tbody>
+        ${itens.map(l => {
+          const desc = expCtrlDescMap.get(normalizaCodigoItem(l.codigo_item));
+          return `
+          <tr>
+            <td class="item">${escapeHtml(l.codigo_item)}</td>
+            <td>${desc && desc.descricao ? escapeHtml(desc.descricao) : '—'}</td>
+            <td class="num">${l.quantidade != null ? escapeHtml(l.quantidade) : '—'}</td>
+            <td class="loc">${escapeHtml(l.localizacao || '—')}</td>
+            <td>${rotuloStatusExp(l.status).rotulo}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+function renderAvisosPreparo() {
+  const pendentes = avisosPendentes();
+  const corpo = document.getElementById('avisoPrepBody');
+  const vazio = document.getElementById('avisoPrepVazio');
+  const contagem = document.getElementById('avisoPrepContagem');
+
+  contagem.textContent = pendentes.length ? `${pendentes.length} pedido(s)` : '';
+  vazio.style.display = pendentes.length ? 'none' : 'block';
+
+  corpo.innerHTML = pendentes.map(a => `
+    <div style="border:1px solid var(--erro-borda); border-radius:10px; margin-top:12px; overflow:hidden;">
+      <div class="cfg-barra" style="background:var(--erro-fundo);">
+        <span class="loc-chip">Pedido ${escapeHtml(a.numero_pedido)}</span>
+        <span style="font-size:12px; color:var(--erro-texto);" title="${a.avisado_por ? escapeHtml(a.avisado_por) : ''}">
+          avisado ${escapeHtml(formatarDataHoraBR(a.avisado_em))}${a.avisado_por ? ' por ' + escapeHtml(a.avisado_por) : ''}
+        </span>
+        <span style="margin-left:auto; display:flex; gap:6px;">
+          <button class="btn avisoprep-imprimir" data-pedido="${escapeHtml(a.numero_pedido)}">🖨️ Imprimir</button>
+          <button class="btn btn-primary avisoprep-preparado" data-pedido="${escapeHtml(a.numero_pedido)}">✓ Preparado</button>
+        </span>
+      </div>
+      ${tabelaItensPedidoHtml(a.numero_pedido)}
+    </div>`).join('');
+
+  renderAvisosPreparoHistorico();
+}
+
+function renderAvisosPreparoHistorico() {
+  const corpo = document.getElementById('avisoPrepHistBody');
+  const preparados = avisosJaPreparados();
+  if (!preparados.length) {
+    corpo.innerHTML = '<div style="color:var(--muted); font-size:12.5px; padding:6px 0;">Nenhum pedido preparado ainda.</div>';
+    return;
+  }
+  corpo.innerHTML = `
+  <div class="scroll-area">
+    <table>
+      <thead><tr><th>Pedido</th><th>Avisado</th><th>Preparado</th><th>Ação</th></tr></thead>
+      <tbody>
+        ${preparados.map(a => `
+        <tr>
+          <td class="item">${escapeHtml(a.numero_pedido)}</td>
+          <td class="loc">${a.avisado_por ? escapeHtml(a.avisado_por) + ' — ' : ''}${escapeHtml(formatarDataHoraBR(a.avisado_em))}</td>
+          <td class="loc">${a.preparado_por ? escapeHtml(a.preparado_por) + ' — ' : ''}${a.preparado_em ? escapeHtml(formatarDataHoraBR(a.preparado_em)) : '—'}</td>
+          <td class="col-acoes">
+            <button class="acao-btn avisoprep-reabrir" data-pedido="${escapeHtml(a.numero_pedido)}" title="Avisar de novo -- volta pra pendente">↺</button>
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+document.getElementById('avisoPrepHistToggle').addEventListener('click', (e) => {
+  avisoPrepHistVisivel = !avisoPrepHistVisivel;
+  document.getElementById('avisoPrepHistBody').style.display = avisoPrepHistVisivel ? 'block' : 'none';
+  e.target.textContent = avisoPrepHistVisivel ? 'Esconder' : 'Mostrar';
+});
+
+// "coloca o numero do pedido... abre um aviso" -- upsert por (unidade,
+// numero_pedido): avisar de novo um pedido já preparado volta ele pra
+// pendente (pode ter chegado item novo, ou foi engano marcar preparado).
+document.getElementById('avisoPrepAvisarBtn').addEventListener('click', async () => {
+  const msg = document.getElementById('avisoPrepMsg');
+  const btn = document.getElementById('avisoPrepAvisarBtn');
+  const campo = document.getElementById('avisoPrepPedidos');
+
+  const pedidos = campo.value.split(/[,;\s]+/).map(p => p.trim().toUpperCase()).filter(Boolean);
+  if (!pedidos.length) {
+    msg.textContent = 'Informe o(s) nº de pedido da lista do PCP.';
+    msg.className = 'status-msg status-err';
+    return;
+  }
+
+  btn.disabled = true;
+  msg.textContent = 'Avisando a equipe...';
+  msg.className = 'status-msg';
+
+  const { error } = await sb.from('exp_pedido_aviso_preparo').upsert(
+    pedidos.map(numero_pedido => ({
+      unidade: unidadeAtual, numero_pedido, status: 'pendente',
+      avisado_por: nomeUsuarioAtual, avisado_em: new Date().toISOString(),
+      preparado_por: null, preparado_em: null
+    })),
+    { onConflict: 'unidade,numero_pedido' }
+  );
+
+  btn.disabled = false;
+
+  if (error) {
+    msg.textContent = 'Não foi possível avisar: ' + error.message
+      + (/does not exist|relation/i.test(error.message) ? ' — rode sql/fase45-aviso-preparo-pedido.sql no Supabase.' : '');
+    msg.className = 'status-msg status-err';
+    return;
+  }
+
+  campo.value = '';
+  await carregarAvisosPreparo();
+  renderAvisosPreparo();
+  msg.textContent = `${pedidos.length} pedido(s) avisado(s) -- vai aparecer no Painel do Dia pra quem cuida do EXP.`;
+  msg.className = 'status-msg status-ok';
+});
+
+document.getElementById('avisoPrepBody').addEventListener('click', async (e) => {
+  const btnPreparado = e.target.closest('.avisoprep-preparado');
+  const btnImprimir = e.target.closest('.avisoprep-imprimir');
+
+  if (btnPreparado) {
+    const pedido = btnPreparado.dataset.pedido;
+    btnPreparado.disabled = true;
+    const { error } = await sb.from('exp_pedido_aviso_preparo').update({
+      status: 'preparado', preparado_por: nomeUsuarioAtual, preparado_em: new Date().toISOString()
+    }).eq('unidade', unidadeAtual).eq('numero_pedido', pedido);
+    if (error) { alert('Não foi possível marcar como preparado: ' + error.message); btnPreparado.disabled = false; return; }
+    await carregarAvisosPreparo();
+    renderAvisosPreparo();
+    return;
+  }
+
+  if (btnImprimir) {
+    const pedido = btnImprimir.dataset.pedido;
+    const itens = itensDoPedidoAvisado(pedido);
+    if (!itens.length) { alert('Nenhum item deste pedido no Controle EXP.'); return; }
+
+    const aba = window.open('', '_blank');
+    if (!aba) { alert('O navegador bloqueou a nova aba. Libere pop-ups pra este site e tente de novo.'); return; }
+    const linhas = itens.map(l => {
+      const desc = expCtrlDescMap.get(normalizaCodigoItem(l.codigo_item));
+      return [l.codigo_item, desc && desc.descricao ? desc.descricao : '',
+               l.quantidade != null ? l.quantidade : '', l.localizacao || '', rotuloStatusExp(l.status).rotulo];
+    });
+    const html = montarHtmlTabelaGenerica({
+      titulo: `Separar material — Pedido ${pedido} — ${rotuloUnidade(unidadeAtual)}`,
+      cabecalho: ['Item', 'Descrição', 'Qtd', 'Localização', 'Status'],
+      linhas,
+      imprimir: true
+    });
+    aba.document.write(html);
+    aba.document.close();
+  }
+});
+
+document.getElementById('avisoPrepHistBody').addEventListener('click', async (e) => {
+  const btn = e.target.closest('.avisoprep-reabrir');
+  if (!btn) return;
+  const pedido = btn.dataset.pedido;
+  btn.disabled = true;
+  const { error } = await sb.from('exp_pedido_aviso_preparo').update({
+    status: 'pendente', preparado_por: null, preparado_em: null
+  }).eq('unidade', unidadeAtual).eq('numero_pedido', pedido);
+  if (error) { alert('Não foi possível reabrir: ' + error.message); btn.disabled = false; return; }
+  await carregarAvisosPreparo();
+  renderAvisosPreparo();
 });
 
 // ---- Aba Auditoria: caminhada física pela expedição --------------------

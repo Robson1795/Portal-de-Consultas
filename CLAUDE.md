@@ -3016,6 +3016,86 @@ grupo; busca por pedido continua funcionando; item retirado na mesma
 localização continua fora, mesmo buscando por ela. Zero erro de
 console.
 
+## Aba "🔔 Preparar": aviso da expedição pro EXP (15/09/2026)
+
+O Robson: *"o encarregado da expedição quando receber a lista do pcp,
+coloca o numero do pedido que a gente tem que deixar na doca que os
+conferentes pegam o material, e por esse numero abre um aviso para que a
+gente entenda que devemos deixar o material preparado ja, ai faz o mesmo
+esquema quando ele colocar o numero do pedido aparece os itens e as
+localiçaões, tambem pode fazer o mesmo esquema de imprimir, quero que
+envie uma alerta bem chamativo, pode colocar o alerta nesse painel que o
+victor criou"*.
+
+### Por que é diferente do Painel de Docas
+
+O Painel de Docas começa quando o caminhão JÁ ESTÁ no pátio. Esta aba é
+o passo ANTES: o PCP manda a lista, o encarregado avisa, e a equipe tem
+tempo de separar com calma — em vez de descobrir o que precisa quando o
+caminhão encosta.
+
+### O que NÃO foi feito (e por quê)
+
+O Robson colou junto uma proposta gerada por outra IA, com leitor de
+código de barras na separação, kanban de 3 status (aguardando / em
+separação / pronto) com conferente "assumindo" tarefa pra outro não
+pegar o mesmo, e bip sonoro a cada 5s em todo dispositivo. Perguntado
+diretamente, ele escolheu o fluxo simples — **avisado → preparado** — e
+**só alerta visual, sem som**.
+
+Sobre o som, vale registrar o motivo técnico: navegador bloqueia áudio
+automático enquanto a pessoa não tiver clicado em algo na página, então
+"bip tocando sozinho em todo tablet/coletor com o painel aberto" não é
+implementável de forma confiável — é limitação do navegador, não escolha
+de escopo. Prometer isso seria entregar algo que falha justamente no
+dispositivo esquecido de lado, que é o caso que o alerta existiria pra
+resolver.
+
+### Como ficou
+
+Tabela `exp_pedido_aviso_preparo` (`sql/fase45-aviso-preparo-pedido.sql`),
+chave `(unidade, numero_pedido)`, dois estados. Mesmo padrão de anotação
+reversível de sempre (`conferir_exp_notas`,
+`exp_pedido_faturamento_confirmado`): **não mexe em `exp_controle_itens`**,
+só anota que aquele pedido foi avisado.
+
+Aba nova entre "Saída / Conferência" e "DOCA" — a ordem da barra conta a
+história do fluxo: registra → prepara → vai pra doca → carrega. Dentro
+dela: campo de pedido(s), botão "🔔 Avisar equipe", e cada pendência vira
+um cartão vermelho com a **tabela de itens e localizações embutida**
+(mesma pergunta do preview do Painel de Docas, aqui com fonte própria em
+`itensDoPedidoAvisado()`), botão 🖨️ Imprimir (reaproveita
+`montarHtmlTabelaGenerica({ imprimir: true })`) e "✓ Preparado".
+
+Avisar de novo um pedido já preparado devolve ele pra pendente (upsert
+limpando `preparado_por`/`preparado_em`): pode ter chegado item novo, ou
+alguém marcou preparado por engano. O histórico "Já preparados" tem ↺ pra
+mesma coisa.
+
+### O alerta no Painel do Dia
+
+`AVISOS_PAINEL` (js/painel.js, do Victor) é uma lista declarativa de
+cartões — adicionar um aviso é **acrescentar um objeto**, sem tocar na
+renderização, no estado de carregamento nem no try/catch por cartão.
+Entrou o `avisoprep` entre "Pedidos atrasados" e "Itens parados na doca".
+
+O "bem chamativo" virou CSS escopada **por id**
+(`#painel-card-avisoprep.painel-card-alerta`): pulsa em vermelho quando
+tem pendência, enquanto os outros seis continuam só com o fundo amarelo
+estático de sempre. Dentro de `@media (prefers-reduced-motion:
+no-preference)` — quem configurou o sistema pra não animar não recebe a
+animação. Card zerado não pulsa (nem ganha a classe de alerta).
+
+Conferido no navegador: aba aparece na ordem certa da barra; avisar grava
+o upsert certo e o cartão vermelho renderiza com itens e localizações;
+🖨️ Imprimir abre a folha com o script de auto-impressão e os itens
+certos; "✓ Preparado" tira da lista, zera a contagem e move pro
+histórico; ↺ devolve pra pendente; o cartão novo aparece na posição certa
+do Painel do Dia **sem derrubar os outros seis** mesmo com a tabela ainda
+não criada no Supabase (é o try/catch por cartão do Victor funcionando);
+a CSS de pulsar existe, escopada só a esse id, e o cartão zerado não a
+recebe.
+
 ## Mais duas "docas": Benchmark e Sem doca definida (14/09/2026)
 
 O Robson: *"coloque aqui tambem, SEM DOCA DEFINIDA, BENCHMARK"* -- e, sobre
