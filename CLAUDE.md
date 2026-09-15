@@ -3074,6 +3074,36 @@ provando a normalização) num `delete().in('id', [...])` só; recusar a
 confirmação não chama nada. Zero erro de console (o 404 de `reservas_aco`
 que aparece nos testes é falta de tabela do Victor, não deste código).
 
+## "✓ Preparado" já manda o pedido pra doca (15/09/2026)
+
+O Robson, olhando a aba Preparar em uso: *"depois daqui de preparado o
+pedido vai para aba doca"*. Confirmado: é automático, não só descrição do
+fluxo -- quem prepara o material fisicamente já está confirmando que foi
+levado pra doca, não faz sentido repetir o mesmo clique no 🚚 DOCA da
+Entrada/Saída-Conferência logo em seguida.
+
+"✓ Preparado" agora, além de marcar `exp_pedido_aviso_preparo`, também
+chama `marcarSaidaExpControle(id, nomeUsuarioAtual, 'na_doca')` pra cada
+item do pedido que ainda estiver `na_expedicao` -- item que já está
+`na_doca` ou `retirado` não regride nem duplica carimbo (só os
+`na_expedicao` entram no laço). Só recarrega o Controle EXP
+(`carregarProgramacao()`) quando teve item pra mover -- pedido avisado
+sem nenhum item ainda registrado no Controle EXP (caso real: PCP manda a
+lista antes da Entrada ser digitada) marca preparado sem tentar mover
+nada.
+
+Isso só foi seguro de fazer AUTOMÁTICO por causa da correção anterior:
+desde que "qual doca física" virou um seletor **por pedido dentro da
+própria aba DOCA** (não mais obrigatório no momento da transição pra
+`na_doca`), marcar vários itens como `na_doca` de uma vez não trava
+esperando ninguém escolher doca — a escolha acontece depois, com calma,
+olhando o que já chegou.
+
+Conferido no navegador: pedido com um item `na_expedicao` e outro já
+`na_doca` move só o primeiro, sem tocar no segundo; pedido sem nenhum
+item no Controle EXP marca preparado sem chamar `carregarProgramacao()`
+à toa. Zero erro de console.
+
 ## Prazo e cancelar na aba Preparar (15/09/2026)
 
 Com a aba "🔔 Preparar" já em uso (ver seção seguinte), o Robson: *"quero

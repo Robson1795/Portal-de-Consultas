@@ -4617,6 +4617,19 @@ document.getElementById('avisoPrepBody').addEventListener('click', async (e) => 
       status: 'preparado', preparado_por: nomeUsuarioAtual, preparado_em: new Date().toISOString()
     }).eq('unidade', unidadeAtual).eq('numero_pedido', pedido);
     if (error) { alert('Não foi possível marcar como preparado: ' + error.message); btnPreparado.disabled = false; return; }
+
+    // Robson, 15/09/2026: "depois daqui de preparado o pedido vai para aba
+    // doca" -- confirmado que é automático: quem prepara o material
+    // fisicamente já está confirmando que foi levado pra doca, não faz
+    // sentido repetir o mesmo clique no 🚚 DOCA da Entrada/Saída-Conferência
+    // logo em seguida. Só move quem ainda está `na_expedicao` -- item já
+    // na_doca ou retirado não regride nem duplica carimbo.
+    const itensParaDoca = itensDoPedidoAvisado(pedido).filter(l => l.status === 'na_expedicao');
+    for (const item of itensParaDoca) {
+      await marcarSaidaExpControle(item.id, nomeUsuarioAtual, 'na_doca');
+    }
+    if (itensParaDoca.length) await carregarProgramacao(); // atualiza a aba DOCA com o que acabou de entrar
+
     await carregarAvisosPreparo();
     renderAvisosPreparo();
     return;
