@@ -1406,10 +1406,6 @@
           📂 Arquivo completo do MFG
         </label>
         <input type="file" id="mfgArquivoInput" accept=".xlsx,.xlsm,.xls" multiple style="display:none;">
-        <button class="btn" id="mfgSemApontamentoBtn"
-                title="OPs que baixaram matéria-prima e nunca apontaram produção — o MFG da empresa não mostra estas">
-          🚨 Consumo sem OP
-        </button>
         <button class="btn" id="mfgSalvarBtn" style="display:none;"
                 title="Guarda o resultado desta análise para comparar com as próximas semanas">
           💾 Guardar esta análise
@@ -1427,6 +1423,19 @@
         o cadastro fica guardado neste navegador e, daí em diante, só Acabado e Consumo bastam.
         <br>Nada é enviado para fora — a leitura e a conta acontecem no seu próprio navegador.
         <span id="mfgCadastroInfo"></span>
+      </div>
+
+      <div class="cfg-barra" id="mfgAbas">
+        <button class="btn btn-primary" data-mfg-aba="resumo"
+                title="Os dois juntos: é o que a fábrica ganhou ou perdeu de verdade">📊 Resumo</button>
+        <button class="btn" data-mfg-aba="quimico"
+                title="Densidade da espuma: POLIOL, MDI, catalisador e pentano">🧪 Químico</button>
+        <button class="btn" data-mfg-aba="material"
+                title="Aço, filme e alumínio: corte, refile e sobra">🔩 Aço e filme</button>
+        <button class="btn" data-mfg-aba="comparar"
+                title="O mesmo produto em fábricas diferentes — onde os índices discordam">⚖️ Comparar unidades</button>
+        <button class="btn" data-mfg-aba="semop"
+                title="OPs que baixaram matéria-prima e nunca apontaram produção — o MFG da empresa não mostra estas">🚨 Consumo sem OP</button>
       </div>
 
       <div class="stat-cards" id="mfgCards"></div>
@@ -1450,6 +1459,26 @@
         </select>
       </div>
 
+      <div class="cfg-barra" id="mfgCompararControles" style="display:none;">
+        <label for="mfgIndice" style="font-size:13px; color:var(--muted);">Índice</label>
+        <select id="mfgIndice" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <option value="quimico">Químico — densidade (kg/m³)</option>
+          <option value="aco">Aço (kg/m²)</option>
+          <option value="filme">Filme (kg/m²)</option>
+        </select>
+        <label for="mfgCompararPor" style="font-size:13px; color:var(--muted);">Agrupar por</label>
+        <select id="mfgCompararPor" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <option value="classe">Classe do produto</option>
+          <option value="item">Código do item</option>
+        </select>
+        <label for="mfgM2Minimo" style="font-size:13px; color:var(--muted);"
+               title="Esconde produtos com pouco volume, onde um desvio grande costuma ser de uma OP só. Zero mostra tudo.">
+          m² mínimo
+        </label>
+        <input type="number" id="mfgM2Minimo" value="0" min="0" step="100"
+               style="width:90px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+      </div>
+
       <div class="cfg-barra">
         <label for="mfgTolerancia" style="font-size:13px; color:var(--muted);"
                title="Abaixo desta faixa a diferença é ruído de balança, não divergência">
@@ -1468,26 +1497,17 @@
         <span id="mfgResumo" style="font-size:13px; color:var(--muted);"></span>
       </div>
 
-      <div class="scroll-area">
-        <table class="data-table" id="mfgTabela">
-          <thead>
-            <tr>
-              <th>OP</th>
-              <th>Unid.</th>
-              <th>Classe</th>
-              <th>Item</th>
-              <th class="mfg-num">m²</th>
-              <th class="mfg-num" title="Quanto a receita previa de POLIOL + MDI + CATALIZADOR + PENTANO">Teórico (kg)</th>
-              <th class="mfg-num" title="Quanto foi realmente baixado no Consumo">Reportado (kg)</th>
-              <th class="mfg-num" title="Teórico menos reportado. Negativo = consumiu a mais">Diferença</th>
-              <th class="mfg-num" title="Químico + aço + filme + alumínio, ao preço desta unidade">Resultado R$</th>
-              <th>Situação</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="mfgBody"></tbody>
-        </table>
+      <div id="mfgTabelaArea">
+        <div class="scroll-area">
+          <!-- O cabeçalho é montado em JS: cada aba mostra as colunas da sua
+               dimensão (ver COLUNAS em js/mfg.js). -->
+          <table class="data-table" id="mfgTabela">
+            <thead><tr></tr></thead>
+            <tbody id="mfgBody"></tbody>
+          </table>
+        </div>
       </div>
+      <div id="mfgCompararCorpo" style="display:none;"></div>
       <div class="empty-msg" id="mfgVazio">Escolha o arquivo do MFG acima para começar.</div>
 
       <div id="mfgHistorico"></div>

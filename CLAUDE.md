@@ -3,7 +3,7 @@
 Contexto do projeto para qualquer agente de IA ou pessoa que for mexer neste repositório.
 Sempre em **português do Brasil**.
 
-**Atualizado:** 15/09/2026 (Análise MFG: por unidade, e as planilhas soltas)
+**Atualizado:** 15/09/2026 (Análise MFG: abas aço/químico e comparador de índices)
 **Mantenedores:** Robson (dono do projeto e admin geral) · Victor Dobner (colaborador)
 
 > Este arquivo é lido automaticamente pelo Claude Code ao abrir a pasta do projeto.
@@ -4787,3 +4787,119 @@ aponta a tela (R$ −159.898,60) e move o destaque; clicar em "Todas as unidades
 volta ao consolidado; `trocarUnidade('101')` de verdade reaponta o filtro sem
 reler o arquivo. **Zero texto abaixo de 4,5:1 nos dois temas**, e no celular nada
 estoura a largura. Zero erro de console.
+
+### Aço e químico em abas separadas, e o comparador de índices (15/09/2026)
+
+O Victor: *"Separar aço e quimico. Pode manter o valor em reais de perca e ganho
+somando os dois, porém para analises, separe o aço e o quimico."* E: *"Percebi
+que a unidade 105 teve ganho no quimico, enquanto a unidade 106 teve uma perca
+enorme. Ambas unidades trabalham com a robor. Preciso descobrir pq a unidade 106
+ta tendo tanta perca e com isso, quero comparar os indices e descobrir se tem
+algum errado."*
+
+A tela ganhou cinco abas: **📊 Resumo · 🧪 Químico · 🔩 Aço e filme · ⚖️ Comparar
+unidades · 🚨 Consumo sem OP** (esta última era um botão de alternância e virou
+aba, para o padrão ser um só).
+
+#### Por que separar muda a análise
+
+São problemas de naturezas diferentes, e misturá-los esconde os dois. O
+**químico é processo** — densidade da espuma, proporção MDI/poliol,
+temperatura; quem resolve é a produção. O **aço é corte e sobra** — largura de
+bobina, refile, ponta perdida; quem resolve é o planejamento. Uma OP pode estar
+ótima num e péssima no outro.
+
+O **dinheiro continua somado** no Resumo (a fábrica não tem dois caixas), mas
+cada aba mede a **sua** divergência: `mfgSituacaoDim(l, tol, dim)` decide se a
+OP diverge olhando só a dimensão da aba, e as colunas da tabela são montadas em
+JS por aba (no Químico aparece densidade teórica × realizada; no Aço, os
+índices de aço e filme). Conferido no arquivo real: **químico −R$ 177.340,27 +
+aço/filme +R$ 17.587,32 = −R$ 159.752,95**, exatamente o total do Resumo.
+
+⚠️ E a separação já respondeu meia pergunta: **a perda do período é inteirinha
+do químico** — o aço, somado, está positivo.
+
+#### ⚠️ A descoberta que mudou para onde a investigação da 106 aponta
+
+**A largura útil se CANCELA na fórmula do químico.** O MFG calcula
+`(m² ÷ largura) × largura × altura × densidade × 1,01` — a largura entra e sai.
+
+Consequência direta: **PM × RB não explica diferença nenhuma no químico.** A
+máquina só muda a largura, e a largura não está na conta. Sobram três causas
+possíveis, e é isto que a aba separa:
+
+1. a densidade **realizada** é de fato maior (processo);
+2. a densidade **cadastrada** está errada para os produtos daquela fábrica;
+3. o **m² apontado** está a menos (todo o químico dividido por um denominador
+   menor).
+
+#### O comparador
+
+Índice = **quanto de material por unidade de produto**: químico em kg/m³
+(densidade), aço e filme em kg/m². Os dois lados usam o **mesmo denominador**,
+então a comparação é honesta mesmo com volumes muito diferentes. A média é
+**ponderada pelo volume** — somar densidades de OP e dividir por N daria o mesmo
+peso a uma OP de 20 m² e a uma de 2.000.
+
+- ⚠️ **O teórico é do cadastro e é o MESMO para todas as fábricas.** Quem muda é
+  o realizado. Por isso a coluna que importa é a **Discordância**: a distância,
+  em pontos percentuais, entre a fábrica que mais gasta e a que menos gasta *no
+  mesmo produto*. **A lista é ordenada por ela**, não alfabeticamente — é ela
+  que aponta índice errado ou processo fora de controle.
+- **Só entra o que foi feito em duas ou mais unidades**: com uma só não há
+  comparação.
+- Agrupa por **classe** ou por **código do item**, e a célula da fábrica que mais
+  gasta fica marcada — é onde a conversa começa.
+
+**Dois defeitos meus que o próprio comparador mostrou, no arquivo real:**
+
+1. ⚠️ **Índice real NEGATIVO existe de verdade**: no período, uma unidade
+   devolveu mais material do que consumiu daquele produto. Não é índice de
+   processo, é artefato do corte de datas — e comparar `−4,76 kg/m²` com um
+   índice normal dava 166 pp de discordância, jogando lixo para o topo da lista.
+   Agora aparece marcado como "devolução líq." e fica **fora** da conta da
+   discordância.
+2. **O m² de cada fábrica entra na célula.** Um desvio de +138% em 396 m² é uma
+   OP só; +9% em 8.000 m² é dinheiro. Sem o volume ao lado, os dois se parecem
+   na tela — e o de cima rouba a atenção.
+
+⚠️ **O piso de m² tem padrão ZERO, e isso é decisão.** Era tentador filtrar o
+volume pequeno de saída, mas **101 kg/m³ de espuma PIR é fisicamente
+impossível** — ou seja, aquela linha é o achado mais grave do arquivo (químico
+lançado em OP errada, ou m² muito subapontado), não ruído. Esconder por padrão
+tiraria da tela justamente o pior caso. Quem quer olhar só o que move o mês
+levanta o piso, e a tela diz **quantas linhas saíram**.
+
+#### O que o comparador respondeu sobre a 106
+
+Com o arquivo real, 105 e 106 (as duas Robor):
+
+| | densidade teórica | realizada | desvio | R$ químico |
+|---|---|---|---|---|
+| 105 | 32,02 | **30,90** | −3,5% | +47.472 |
+| 106 | 32,24 | **34,72** | +7,7% | −126.070 |
+
+As teóricas são praticamente iguais (32,02 × 32,24), então **o mix de produtos
+não explica**. E a 106 está pior em **todas** as classes que as duas fazem
+(Painel Frigo +15% × +3%, Isotelha PRE/Filme +9% × −6%, Isotelha PRE/PRE +8% ×
+−16%, Painel SL +15% × +3%, Placa de PIR +14% × +4%). **Um desvio uniforme em
+todas as classes não é índice errado** — índice errado apareceria em produtos
+específicos. Aponta para algo sistêmico na 106.
+
+⚠️ E o comparador levanta a suspeita inversa também: a Isotelha PRE/PRE da 105
+realizou **25,6 kg/m³ contra 30,4 de receita (−16%, em 22.919 m²)**. Espuma PIR
+16% abaixo da densidade nominal é improvável fisicamente — parte do "ganho" da
+105 pode ser consumo subapontado ou m² superapontado, e não ganho de verdade.
+Os dois extremos merecem conferência de chão de fábrica.
+
+Conferido no navegador com o arquivo real: as cinco abas trocam sem erro; as
+colunas mudam por aba; **químico + aço fecham com o Resumo ao centavo**; a
+contagem de divergentes é diferente em cada aba (654 no químico, 741 no aço, 878
+no combinado), que é o ponto de separar; o comparador monta uma coluna por
+fábrica com a máquina no cabeçalho, ordena por discordância, marca a pior
+célula, tira a devolução líquida do topo e do cálculo; o piso de 1.000 m² reduz
+de 9 para 4 classes **dizendo que 5 saíram**; a exportação segue a aba (14
+colunas na comparação, 36 na planilha completa); o detalhe da OP abre nas três
+abas de lista; `trocarUnidade()` continua reapontando o filtro. **Zero texto
+abaixo de 4,5:1 nos dois temas** e nada estoura a largura no celular, nas cinco
+abas. Zero erro de console.

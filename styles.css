@@ -1409,3 +1409,19 @@ td.col-acoes { white-space: nowrap; text-align: center; }
 .btn-mini {
   padding: 2px 8px; font-size: 13px; line-height: 1.5;
 }
+
+/* Comparador de indices: a celula da unidade que mais gasta naquele produto.
+   E o ponto de partida da investigacao ("por que a 106 gasta mais que a 105
+   no mesmo painel?"), entao ela e marcada -- mas com um filete e um fundo
+   suave, nao com vermelho cheio: a linha inteira ja tem numero vermelho, e
+   mais uma mancha forte competiria com ele em vez de guiar o olho. */
+.mfg-celula-pior {
+  background: var(--erro-fundo);
+  box-shadow: inset 0 -2px 0 var(--erro-texto);
+}
+/* A primeira coluna (produto) e a segunda (teorico) ficam visiveis ao rolar
+   a tabela pro lado -- sem elas, as colunas das unidades viram numeros soltos
+   sem dizer de que produto sao. */
+.mfg-tabela-comparar td:first-child, .mfg-tabela-comparar th:first-child {
+  position: sticky; left: 0; background: var(--panel); z-index: 1;
+}
