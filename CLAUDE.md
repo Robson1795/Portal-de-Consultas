@@ -518,7 +518,7 @@ Entraram em 08/09/2026, vivem em `js/programacao.js` e não estavam neste
 documento até 08/09. **Só `estoque_alm` e `admin` veem essas duas páginas**: elas
 movem material de verdade, diferente da Requisição, que é só pedir.
 
-### Programação de Separação (três sub-abas)
+### Programação de Separação (duas sub-abas — Endereçamento removido em 15/09/2026)
 
 Cruza as **duas planilhas manuais do PCP** pelo `numero_pedido`:
 Programação de Acessórios (os itens) e Pedidos Programados (o agendamento do
@@ -527,8 +527,11 @@ caminhão).
 | Sub-aba | Para quê |
 |---|---|
 | **Separação** | Item a item, ordenado pelo caminhão que sai primeiro — não pela ordem em que a planilha foi digitada. É a razão de a aba existir |
-| **Endereçamento** | Onde cada item ficou guardado na expedição |
 | **Carregamento** | Agrupado por veículo (CARRETA, TRUCK, TRUCK 8,5M) e horário, com o aviso da planilha em destaque e o botão de registrar saída |
+
+Havia uma terceira sub-aba, **Endereçamento** (onde cada item ficou guardado
+na expedição) — removida; ver "Fim do Endereçamento na Programação de
+Separação" no fim deste arquivo.
 
 Tabelas: `pedidos`, `pedido_itens`, `exp_acessorios`, `registro_saida`,
 `log_movimentacao`, e a view **`vw_pedidos_prioridade`**, que calcula no banco
@@ -5136,3 +5139,63 @@ etiqueta da Trading recebe o QR mantendo endereço em 40mm e item em 32mm; a
 ficha do EXP recebe um por ficha **sem tocar na linha medida do topo**; as três
 folhas saem **iguais** sem QR; e a aba abre antes de gerar (`abriu → gerou →
 escreveu`). **18 de 18 checagens.**
+
+## Fim do Endereçamento na Programação de Separação (15/09/2026)
+
+O Robson, vendo a tela em produção: *"remova o endereçamento, aqui vou deixar
+mais simples só a aba de horarios de veiculos e a aba de separação"*. A
+Programação de Separação (seção 13) tinha três sub-abas — Separação,
+Endereçamento, Carregamento — e passou a ter só as duas primeiras.
+
+**Antes de apagar, o obstáculo real:** a sub-aba Carregamento tinha o botão
+"Registrar saída" travado por `p.status_geral === 'pronto'`, e **o único
+código que gravava esse valor era o formulário de Endereçamento** (a pessoa
+digitava o endereço, clicava "Confirmar", e aí sim `pedidos.status_geral`
+virava `'pronto'`). Apagar a aba sem mexer no gate deixaria o botão travado
+**para sempre**, em todo pedido, sem ninguém perceber até o caminhão não sair.
+Perguntei como o botão deveria liberar sem o endereço — resposta: *"Libera
+direto quando a separação terminar"*.
+
+- **`p.status_geral === 'pronto'` virou `st.chave === 'total' || st.chave ===
+  'sem'`** em `cardPedidoCarregamento()` (`js/programacao.js`), reusando
+  `statusConsolidado(p)` que a própria função já calculava. `st.chave ===
+  'sem'` entrou por um caso que passaria despercebido testando só o caminho
+  feliz: pedido **sem nenhum item de acessório na Planilha A** nunca chega a
+  `'total'` (não há o que separar), e sem essa segunda condição ficaria
+  travado igual ao bug que a mudança deveria corrigir.
+- `renderExp()` inteira saiu de `js/programacao.js` — a linha do formulário
+  (`<input class="prog-endereco">` / `<button class="prog-enderecar">`), o
+  cálculo de `podeEnderecar` e o handler de clique que gravava em
+  `exp_acessorios`, atualizava `pedidos.status_geral = 'pronto'` e registrava
+  `endereco_definido` no log. `renderExp();` saiu da cadeia de render de
+  `carregarProgramacao()`, e o botão/`<div id="progExp">` saíram do
+  `index.html`.
+- **A tabela `exp_acessorios` não foi apagada** — só ficou sem quem escreva
+  nela daqui para frente. Não há ganho em derrubar uma tabela com histórico
+  para economizar uma migração que este código não precisava.
+- Testado localmente (servidor estático em `Portal-de-Consultas`, com
+  `progPedidos`/`progItens` preenchidos à mão pelo console, sem depender de
+  login): pedido sem acessório libera o botão, pedido com item pendente fica
+  desabilitado com o texto "Ainda faltam itens sendo separados", pedido
+  totalmente separado libera — e a barra de abas passou a mostrar só
+  Carregamento e Separação, sem erro no console.
+
+### Planilha de Carregamento com só 4 colunas (15/09/2026)
+
+Junto da mudança acima, o Robson: *"na aba de carregamento só vou colocar
+esses dados"*, com um print de planilha com só **Veículo, Horário, Pedidos,
+Cliente** — bem menos que as 13 colunas que o layout documentado em
+`js/programacao.js` (`COL_B`, conferido com a planilha de 08/09) previa
+(Cidade, UF, Modalidade, Descrição, Quantidade, Valor, Sim/Não, Observação,
+Vendedor).
+
+**Não precisou de nenhuma mudança de lógica.** `importarPlanilhaB()` já lê
+cada coluna por índice com `col[indice] || null`: numa linha colada com só 4
+células, `col[4]` em diante vem `undefined`, e o `|| null` absorve isso sem
+erro — testado colando linhas de 4 colunas (inclusive o forward-fill de
+bloco/horário) e conferindo que o upsert em `pedidos` sai com `cidade`, `uf`,
+`modalidade_frete` e `observacao_carregamento` como `null`, sem exceção. Só o
+**texto de ajuda do modal de importação** (`trocarAbaImport()`) e o
+comentário acima de `COL_B` foram atualizados, para não continuar orientando
+"cole exatamente como está, sem tirar colunas" quando agora só as 4 primeiras
+são obrigatórias.

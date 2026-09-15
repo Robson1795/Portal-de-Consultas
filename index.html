@@ -610,15 +610,14 @@
   <!-- ================= FIM REQUISIÇÃO ALM ================= -->
 
   <!-- ================= PROGRAMAÇÃO DE SEPARAÇÃO ================= -->
-  <!-- Três telas do mesmo fluxo (separar -> endereçar -> carregar) em
-       sub-abas, para não ocupar três lugares no menu lateral. -->
+  <!-- Duas telas do mesmo fluxo (separar -> carregar) em sub-abas, para não
+       ocupar dois lugares no menu lateral. -->
   <div id="programacaoContent" style="display:none;">
     <div class="panel">
       <div class="cfg-barra">
         <div id="progAbas" style="display:flex; gap:8px; flex-wrap:wrap;">
           <button class="btn" data-prog-aba="carregamento">Carregamento</button>
           <button class="btn btn-primary" data-prog-aba="separacao">Separação</button>
-          <button class="btn" data-prog-aba="exp">Endereçamento</button>
         </div>
         <button class="btn" id="progImportarBtn" style="margin-left:auto;">Importar planilhas</button>
         <button class="btn" id="progAtualizarBtn">Atualizar</button>
@@ -677,25 +676,7 @@
         </div>
       </div>
 
-      <!-- ---- Aba 2: EXP Acessórios (visão cruzada por pedido) ---- -->
-      <div id="progExp" class="prog-aba" style="display:none;">
-        <div class="scroll-area">
-          <table>
-            <thead>
-              <tr>
-                <th>Pedido</th><th>Cliente / Destino</th><th>Carregamento</th><th>Urgência</th>
-                <th>Itens</th><th>Status consolidado</th><th>Endereço</th><th>Ação</th>
-              </tr>
-            </thead>
-            <tbody id="progExpBody"></tbody>
-          </table>
-        </div>
-        <div class="empty-msg" id="progExpVazio" style="display:none;">
-          Nenhum pedido na grade de carregamento ainda.
-        </div>
-      </div>
-
-      <!-- ---- Aba 3: Carregamento (grade por bloco e horário) ---- -->
+      <!-- ---- Aba 2: Carregamento (grade por bloco e horário) ---- -->
       <div id="progCarregamento" class="prog-aba" style="display:none;">
         <div id="progGrade" style="padding:14px 16px;"></div>
         <div class="empty-msg" id="progGradeVazio" style="display:none;">

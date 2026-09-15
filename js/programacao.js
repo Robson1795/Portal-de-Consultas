@@ -154,7 +154,6 @@ async function carregarProgramacao() {
   }
 
   renderSeparacao();
-  renderExp();
   renderCarregamento();
   renderExpControle(expCtrl.error ? expCtrl.error.message : null);
   if (!expCtrl.error) {
@@ -197,7 +196,6 @@ function trocarAbaProgramacao(aba) {
     b.className = b.dataset.progAba === aba ? 'btn btn-primary' : 'btn';
   });
   document.getElementById('progSeparacao').style.display = aba === 'separacao' ? 'block' : 'none';
-  document.getElementById('progExp').style.display = aba === 'exp' ? 'block' : 'none';
   document.getElementById('progCarregamento').style.display = aba === 'carregamento' ? 'block' : 'none';
 }
 
@@ -454,75 +452,6 @@ function statusConsolidado(pedido) {
   return { chave: 'total', rotulo: 'Totalmente separado', classe: 'st-ativo' };
 }
 
-function renderExp() {
-  // Só os pedidos que estão na grade de carregamento (vieram da Planilha B).
-  // Ordenado pelo mesmo criterio da Separacao: caminhao que sai antes, primeiro.
-  const naGrade = progPedidos
-    .filter(p => p.horario_carregamento || p.tipo_veiculo)
-    .sort(compararPorUrgencia);
-  const corpo = document.getElementById('progExpBody');
-  const vazio = document.getElementById('progExpVazio');
-  vazio.style.display = naGrade.length ? 'none' : 'block';
-
-  corpo.innerHTML = naGrade.map(p => {
-    const st = statusConsolidado(p);
-    const itens = itensDoPedido(p.id);
-    const feitos = itens.filter(itemConcluido).length;
-    const destino = [p.cidade, p.uf].filter(Boolean).join('/');
-    const podeEnderecar = st.chave === 'total' && p.status_geral !== 'pronto' && p.status_geral !== 'carregado';
-    return `
-    <tr>
-      <td class="item">${escapeHtml(p.numero_pedido)}</td>
-      <td>${escapeHtml(p.cliente || '—')}${destino ? `<div class="cad-desc">${escapeHtml(destino)}</div>` : ''}</td>
-      <td class="loc">${dataCurta(p.data_carregamento)} ${horaCurta(p.horario_carregamento)}
-        <div class="cad-desc">${escapeHtml(p.tipo_veiculo || '—')}</div></td>
-      <td>${tagPrioridade(p)}</td>
-      <td class="num">${itens.length ? `${feitos} de ${itens.length}` : '—'}</td>
-      <td><span class="cfg-status ${st.classe}">${st.rotulo}</span></td>
-      <td>
-        <input type="text" class="prog-endereco" data-id="${escapeHtml(p.id)}"
-               placeholder="Doca 3, Pallet 12..." style="width:150px;">
-      </td>
-      <td class="col-acoes">
-        <button class="btn prog-enderecar" data-id="${escapeHtml(p.id)}" ${podeEnderecar ? '' : 'disabled'}>
-          Confirmar endereço
-        </button>
-      </td>
-    </tr>`;
-  }).join('');
-}
-
-document.getElementById('progExpBody').addEventListener('click', async (e) => {
-  const btn = e.target.closest('.prog-enderecar');
-  if (!btn) return;
-  const id = btn.dataset.id;
-  const campo = document.querySelector(`.prog-endereco[data-id="${CSS.escape(id)}"]`);
-  const endereco = campo ? campo.value.trim() : '';
-  const msg = document.getElementById('progMsg');
-
-  if (!endereco) {
-    msg.textContent = 'Informe o endereço na expedição antes de confirmar.';
-    msg.className = 'status-msg status-err';
-    return;
-  }
-
-  btn.disabled = true;
-  // Duas escritas: o endereçamento em si e o status do pedido. O unique em
-  // exp_acessorios.pedido_id impede duplicata se clicarem duas vezes.
-  const { error: erroExp } = await sb.from('exp_acessorios').upsert({
-    pedido_id: id, endereco, responsavel_id: userIdAtual, status: 'pronto_para_carregamento'
-  }, { onConflict: 'pedido_id' });
-  if (erroExp) { btn.disabled = false; return falhaEscrita(erroExp.message); }
-
-  const { error: erroPedido } = await sb.from('pedidos').update({ status_geral: 'pronto' }).eq('id', id);
-  if (erroPedido) { btn.disabled = false; return falhaEscrita(erroPedido.message); }
-
-  await registrarLogProgramacao(id, 'endereco_definido', { endereco });
-  msg.textContent = 'Endereço confirmado — o pedido foi para a aba Carregamento.';
-  msg.className = 'status-msg status-ok';
-  await carregarProgramacao();
-});
-
 function falhaEscrita(mensagem) {
   const msg = document.getElementById('progMsg');
   msg.textContent = 'NÃO SALVOU: ' + mensagem;
@@ -572,6 +501,9 @@ function renderCarregamento() {
 
 function cardPedidoCarregamento(p) {
   const st = statusConsolidado(p);
+  // 'sem' = pedido não tem nenhum acessório da Planilha A pra separar --
+  // não há o que esperar, libera a saída direto. 'total' = tudo separado.
+  const podeSair = st.chave === 'total' || st.chave === 'sem';
   const destino = [p.cidade, p.uf].filter(Boolean).join('/');
   const critica = observacaoCritica(p.observacao_carregamento);
   const carregado = p.status_geral === 'carregado';
@@ -593,8 +525,8 @@ function cardPedidoCarregamento(p) {
         ${carregado
           ? '<span class="cfg-status st-inativo">Saída registrada</span>'
           : `<button class="btn prog-saida" data-id="${escapeHtml(p.id)}"
-                     ${p.status_geral === 'pronto' ? '' : 'disabled'}
-                     title="${p.status_geral === 'pronto' ? '' : 'Confirme o endereço na aba EXP Acessórios primeiro'}">
+                     ${podeSair ? '' : 'disabled'}
+                     title="${podeSair ? '' : 'Ainda faltam itens sendo separados'}">
                Registrar saída
              </button>`}
       </div>
@@ -681,7 +613,7 @@ function trocarAbaImport(aba) {
   });
   document.getElementById('progImportFormato').innerHTML = aba === 'A'
     ? 'Colunas, nesta ordem: <b>Nº Pedido, Cliente, Seq, Item, Descrição, UM, Qtde, Nº OS/OP, Observação, Status</b>. Linha em branco entre pedidos é ignorada.'
-    : 'Colunas, nesta ordem: <b>Bloco do veículo, Horário, Nº Pedido, Cliente, Cidade, UF, Modalidade, Descrição, Quantidade, Valor, Sim/Não, Observação, Vendedor</b>. As duas primeiras (bloco e horário) só vêm preenchidas na primeira linha de cada grupo — cole exatamente como está na planilha, sem tirar essas colunas.';
+    : 'Colunas, nesta ordem: <b>Veículo, Horário, Nº Pedido, Cliente</b> (Cidade, UF, Modalidade, Descrição, Quantidade, Valor, Sim/Não, Observação e Vendedor continuam aceitas se vierem, mas não são obrigatórias). As duas primeiras (veículo e horário) só vêm preenchidas na primeira linha de cada grupo — cole exatamente como está na planilha.';
   document.getElementById('progImportTexto').value = '';
   document.getElementById('progImportPrevia').innerHTML = '';
   document.getElementById('progImportMsg').textContent = '';
@@ -916,6 +848,11 @@ async function importarPlanilhaA(linhas, dataRef) {
 //   col 10 Sim/Nao                     "Não"
 //   col 11 observacao                  "Engenharia" / "Avulso" / vazio
 //   col 12 vendedor/representante       "RACHEL RUBIANE STOCK"
+//
+// A partir de 2026-09-15 o Robson simplificou a planilha que ele mesmo
+// preenche pra so ter as 4 primeiras colunas (Veiculo, Horario, Pedido,
+// Cliente) -- as demais colunas (4 a 12) ficam undefined nesse caso, e o
+// codigo abaixo ja trata isso: `col[indice] || null` vira null sem quebrar.
 const COL_B = {
   bloco: 0, horario: 1, pedido: 2, cliente: 3, cidade: 4, uf: 5,
   frete: 6, produto: 7, quantidade: 8, valor: 9, flag: 10,
