@@ -99,7 +99,10 @@ create table if not exists pedido_itens (
   -- bobinas ja faz.
 
   -- 'falta_reporte' e a coluna STATUS da planilha com "FALTA REPORTE":
-  -- estado proprio, nem vazio nem separado. Nao conta como concluido.
+  -- estado proprio, nem vazio nem separado.
+  -- ATUALIZACAO 15/09/2026: passou a contar como concluido (material ja
+  -- separado, so falta o registro no sistema) -- o Robson ganhou um botao
+  -- na tela pra marcar isso a mao, ver itemConcluido() em js/programacao.js.
   constraint pedido_itens_status_valido check (status_separacao in
     ('aguardando','separado','reportado','falta_reporte'))
 );

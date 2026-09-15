@@ -262,12 +262,34 @@ function trocarAbaExpAcessorios(aba) {
 document.getElementById('expAtualizarBtn').addEventListener('click', () => carregarCatalogoExp().then(carregarProgramacao));
 
 // ---- Helpers ----------------------------------------------------------------
-// 'separado' e 'reportado' contam os dois como concluído: a planilha A traz o
-// status como o rótulo único "SEPARADO/REPORTADO". Se um dia "reportado" virar
-// um estágio anterior, é só tirar daqui e do gatilho no SQL.
+// 'separado', 'reportado' e 'falta_reporte' contam os três como concluído.
+// Os dois primeiros vêm da planilha A com o rótulo único "SEPARADO/REPORTADO".
+// 'falta_reporte' entrou em 15/09/2026 como estado marcável à mão na tela
+// (antes só vinha da planilha) -- o Robson: material já separado, só falta o
+// registro no sistema, então o caminhão pode sair igual. Se um dia
+// "reportado" ou "falta_reporte" virarem estágio anterior de verdade, é só
+// tirar daqui e do gatilho em sql/programacao-02 (`recalcular_status_pedido`).
 function itemConcluido(item) {
-  return item.status_separacao === 'separado' || item.status_separacao === 'reportado';
+  return item.status_separacao === 'separado' || item.status_separacao === 'reportado'
+    || item.status_separacao === 'falta_reporte';
 }
+
+// Ciclo do botão manual da Separação (15/09/2026): Pendente -> Separado/
+// Reportado -> Falta reporte -> Pendente de novo. 'reportado' (só chega por
+// importação da planilha) avança pra 'falta_reporte' igual a 'separado' --
+// não tem um quarto clique só pra ele.
+function proximoStatusSeparacao(atual) {
+  if (atual === 'aguardando') return 'separado';
+  if (atual === 'separado' || atual === 'reportado') return 'falta_reporte';
+  return 'aguardando';
+}
+
+const ROTULO_BOTAO_SEPARACAO = {
+  aguardando: 'Marcar separado/reportado',
+  separado: 'Marcar falta reporte',
+  reportado: 'Marcar falta reporte',
+  falta_reporte: 'Reabrir (pendente)'
+};
 
 function pedidoDoNumero(numero) {
   return progPedidos.find(p => p.numero_pedido === numero);
@@ -365,9 +387,7 @@ function renderSeparacao() {
   const ROTULO_STATUS_ITEM = { aguardando: 'Pendente', separado: 'Separado', reportado: 'Separado', falta_reporte: 'Falta reporte' };
   const CLASSE_STATUS_ITEM = { aguardando: 'st-pendente', separado: 'st-ativo', reportado: 'st-ativo', falta_reporte: 'st-atencao' };
 
-  corpo.innerHTML = linhas.map(({ item, pedido }) => {
-    const feito = itemConcluido(item);
-    return `
+  corpo.innerHTML = linhas.map(({ item, pedido }) => `
     <tr>
       <td class="item">${escapeHtml(pedido ? pedido.numero_pedido : '—')}</td>
       <td>${escapeHtml(pedido && pedido.cliente ? pedido.cliente : '—')}</td>
@@ -381,11 +401,10 @@ function renderSeparacao() {
       <td><span class="cfg-status ${CLASSE_STATUS_ITEM[item.status_separacao] || 'st-pendente'}">${escapeHtml(ROTULO_STATUS_ITEM[item.status_separacao] || 'Pendente')}</span></td>
       <td class="col-acoes">
         <button class="btn prog-alternar" data-id="${escapeHtml(item.id)}">
-          ${feito ? 'Desmarcar' : 'Marcar separado'}
+          ${escapeHtml(ROTULO_BOTAO_SEPARACAO[item.status_separacao] || ROTULO_BOTAO_SEPARACAO.aguardando)}
         </button>
       </td>
-    </tr>`;
-  }).join('');
+    </tr>`).join('');
 }
 
 document.getElementById('progBusca').addEventListener('input', renderSeparacao);
@@ -401,8 +420,8 @@ async function alternarItemSeparado(itemId, botao) {
   const item = progItens.find(i => String(i.id) === String(itemId));
   if (!item) return;
   const msg = document.getElementById('progMsg');
-  const novo = itemConcluido(item) ? 'aguardando' : 'separado';
-  const concluindo = novo === 'separado';
+  const novo = proximoStatusSeparacao(item.status_separacao);
+  const concluindo = novo !== 'aguardando';
 
   botao.disabled = true;
   const { error } = await sb.from('pedido_itens').update({

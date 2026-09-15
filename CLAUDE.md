@@ -5199,3 +5199,48 @@ bloco/horário) e conferindo que o upsert em `pedidos` sai com `cidade`, `uf`,
 comentário acima de `COL_B` foram atualizados, para não continuar orientando
 "cole exatamente como está, sem tirar colunas" quando agora só as 4 primeiras
 são obrigatórias.
+
+## Botão manual de "falta reporte" na Separação (15/09/2026)
+
+O Robson: *"essa tela so vou usar pra separaçao de material no almoxarifado,
+entao só quero botao que eu coloque separado/reportado, ou separado, falata
+reporte e vice versa"*. Até aqui o botão da aba Separação só alternava entre
+dois estados (Pendente / Separado); `falta_reporte` existia no banco
+(`sql/programacao-01`) mas só chegava pela planilha importada, nunca por ação
+manual na tela.
+
+**Formato escolhido, entre três opções perguntadas:** um botão só, que roda
+os três estados sempre na mesma ordem — Pendente → Separado/Reportado →
+Falta reporte → Pendente de novo (`proximoStatusSeparacao()`,
+`js/programacao.js`). O rótulo do botão muda conforme o estado atual
+(`ROTULO_BOTAO_SEPARACAO`): "Marcar separado/reportado" → "Marcar falta
+reporte" → "Reabrir (pendente)".
+
+**"Falta reporte" conta como concluído** — pergunta feita antes de mexer,
+porque o botão de liberar o caminhão (`statusConsolidado`/`itemConcluido`)
+já decide sozinho se o pedido pode sair. Perguntado se "separado, falta
+reporte" significa material já separado fisicamente (só falta o papel no
+sistema) ou ainda não pronto pra sair: **já está pronto** — só falta o
+registro. Por isso:
+
+- `itemConcluido(item)` passou a contar três status como concluído
+  (`separado`, `reportado`, `falta_reporte`), não mais dois.
+- `sql/fase49-falta-reporte-conta-concluido.sql` alinha o banco com a mesma
+  regra: o gatilho `recalcular_status_pedido()` e a view
+  `vw_pedidos_prioridade` (ambos de `sql/programacao-02`) contavam só
+  `separado`/`reportado` como concluído — sem essa fase, um pedido todo em
+  `falta_reporte` ficaria com `status_geral` travado em `em_separacao` e
+  continuaria aparecendo como urgente/atrasado no painel de prioridade,
+  mesmo já podendo embarcar de verdade. A fase também faz um backfill de
+  `status_geral` pros pedidos que já estavam nessa situação antes de rodar.
+- ⚠️ **O botão "Registrar saída" (Carregamento) não lê `status_geral`** —
+  calcula direto de `pedido_itens` a cada render, então já funcionava certo
+  mesmo antes do SQL rodar. A fase 49 corrige o que o *banco* acha que é
+  verdade (status_geral, painel de prioridade), não o gate em si.
+
+Testado localmente (mesmo servidor estático, sem depender de login): o ciclo
+`aguardando → separado → falta_reporte → aguardando` se repete
+corretamente clicando quatro vezes seguidas, o rótulo do botão muda a cada
+clique, e `reportado` (vindo de planilha) avança pra `falta_reporte` igual a
+`separado` — sem passar por um quarto estado só pra ele. Sem erro no
+console.
