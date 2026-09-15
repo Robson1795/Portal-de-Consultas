@@ -1576,6 +1576,10 @@
         <select id="mfgFiltroClasse" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
           <option value="">Todas as classes</option>
         </select>
+        <select id="mfgFiltroFornecedor" title="Fornecedor do sistema químico, pelo código do poliol que a OP consumiu"
+                style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <option value="">Todos os fornecedores</option>
+        </select>
         <select id="mfgFiltroSituacao" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
           <option value="">Todas as situações</option>
           <option value="a_mais">Consumiu a MAIS (perda)</option>
@@ -1603,14 +1607,16 @@
       <div class="cfg-barra" id="mfgCompararControles2" style="display:none;">
         <label for="mfgIndice" style="font-size:13px; color:var(--muted);">Índice</label>
         <select id="mfgIndice" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
-          <option value="quimico">Químico — densidade (kg/m³)</option>
+          <option value="quimico">Químico (kg/m²) — consumo ÷ metragem</option>
           <option value="aco">Aço (kg/m²)</option>
           <option value="filme">Filme (kg/m²)</option>
+          <option value="quimicoDens">Químico — densidade (kg/m³)</option>
         </select>
         <label for="mfgCompararPor" style="font-size:13px; color:var(--muted);">Agrupar por</label>
         <select id="mfgCompararPor" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
           <option value="classe">Classe do produto</option>
           <option value="item">Código do item</option>
+          <option value="fornecedor">Sistema químico (fornecedor)</option>
         </select>
         <label for="mfgM2Minimo" style="font-size:13px; color:var(--muted);"
                title="Esconde produtos com pouco volume, onde um desvio grande costuma ser de uma OP só. Zero mostra tudo.">

@@ -93,13 +93,41 @@ const MFG_FAMILIA_FILME = '2997 - FILMES - ALUMINIO/ PVC';
 const MFG_FAMILIA_ALUMINIO = '2998 - MATERIA-PRIMA BOBINA ALUMINIO';
 const MFG_FAMILIA_QUIMICO = '2999 - MATERIA PRIMA QUIMICO PIR/EPS';
 
+// ---- Fornecedor do sistema químico, pelo código do POLIOL -------------------
+//
+// O Victor: *"divida também por 'grupo de quimico'. Se baseie no Poliol usado"*,
+// com os quatro códigos abaixo.
+//
+// ⚠️ É o POLIOL que identifica o sistema, não o MDI nem o catalisador -- foi o
+// critério dado, e faz sentido: o poliol é a parte formulada, o resto acompanha.
+//
+// Conferido no arquivo real: **nenhuma OP mistura dois códigos de poliol** (964
+// OPs, zero mistas), então um código por OP identifica o fornecedor sem ambiguidade.
+//
+// ⚠️ A Base de Dados tem 18 itens classificados como POLIOL, e só estes quatro
+// estão mapeados. Código fora do mapa NÃO vira "sem fornecedor" em silêncio:
+// aparece como `Outro (código)`, porque é assim que o próximo código a cadastrar
+// se anuncia. No arquivo de setembro são 6 OPs com `141831I`.
+// ⚠️ Repare que existe `123469` (BASF) **e** `123469I` -- códigos diferentes, e o
+// segundo NÃO foi mapeado de propósito: adivinhar que o sufixo "I" é o mesmo
+// fornecedor importado é chute, e chute aqui vira número errado num comparativo
+// de fornecedor. Quando ele aparecer, a tela pede o cadastro pelo nome.
+const MFG_POLIOL_FORNECEDOR = {
+  '123469':  'BASF',
+  '141828I': 'WANHUA',
+  '123488':  'NANOPIR',
+  '141830I': 'SYNTHESIA'
+};
+
+const MFG_SEM_FORNECEDOR = 'Sem poliol no consumo';
+
 const MFG_TETO_LINHAS = 300;
 
 let mfgLinhas = [];          // uma por OP analisada
 let mfgSemApontamento = [];  // OPs que consumiram e não apontaram produção
 let mfgArquivo = '';
 let mfgFiltros = {
-  est: '', classe: '', situacao: '', busca: '', tolerancia: MFG_TOLERANCIA_PADRAO,
+  est: '', classe: '', fornecedor: '', situacao: '', busca: '', tolerancia: MFG_TOLERANCIA_PADRAO,
   // Só da aba Comparar unidades: qual índice e agrupado por quê.
   indice: 'quimico', compararPor: 'classe', m2Minimo: 0,
   // Com as DUAS preenchidas e diferentes, a aba vira confronto cara a cara
@@ -474,9 +502,14 @@ function mfgCalcular(fontes) {
     const valor = cC.valor != null ? mfgNum(L[cC.valor]) : 0;
 
     if (op) {
-      const c = consumoPorOp[op] || (consumoPorOp[op] = { grupos: {}, aco: 0, filme: 0, aluminio: 0 });
+      const c = consumoPorOp[op] || (consumoPorOp[op] = { grupos: {}, poliois: {}, aco: 0, filme: 0, aluminio: 0 });
       const grupo = base.quimicos[normalizaCodigoItem(L[cC.item])];
       if (grupo) c.grupos[grupo] = (c.grupos[grupo] || 0) + qtd;
+      // O CÓDIGO do poliol, não só o grupo: é ele que diz o fornecedor.
+      if (grupo === 'POLIOL') {
+        const cod = normalizaCodigoItem(L[cC.item]);
+        c.poliois[cod] = (c.poliois[cod] || 0) + qtd;
+      }
       if (familia === MFG_FAMILIA_ACO) c.aco += qtd;
       else if (familia === MFG_FAMILIA_FILME) c.filme += qtd;
       else if (familia === MFG_FAMILIA_ALUMINIO) c.aluminio += qtd;
@@ -534,11 +567,26 @@ function mfgCalcular(fontes) {
 
     const teorico = motivos.length ? 0 : m2 * altura * prod.densidade * 1.01;
 
-    const c = consumoPorOp[op] || { grupos: {}, aco: 0, filme: 0, aluminio: 0 };
+    const c = consumoPorOp[op] || { grupos: {}, poliois: {}, aco: 0, filme: 0, aluminio: 0 };
     const grupos = {};
     Object.keys(c.grupos).forEach(g => { grupos[g] = -c.grupos[g]; });
     const reportado = MFG_GRUPOS_ESPUMA.reduce((s, g) => s + (grupos[g] || 0), 0);
     const adesivo = grupos.ADESIVO || 0;
+
+    // ---- Qual sistema químico esta OP usou ---------------------------------
+    // O código com MAIOR consumo em módulo, e não o primeiro que aparecer: se um
+    // dia uma OP misturar (não acontece no arquivo real, mas troca de lote no
+    // meio do turno pode), o que define o sistema é o que formou a espuma, não
+    // um resíduo de 2 kg. `poliolCodigo` fica na linha para a tela poder pedir o
+    // cadastro do código quando ele não estiver no mapa.
+    const codigosPoliol = Object.keys(c.poliois || {})
+      .filter(k => Math.abs(c.poliois[k]) > 0.0001)
+      .sort((x, y) => Math.abs(c.poliois[y]) - Math.abs(c.poliois[x]));
+    const poliolCodigo = codigosPoliol[0] || '';
+    const fornecedor = !poliolCodigo ? MFG_SEM_FORNECEDOR
+      : (MFG_POLIOL_FORNECEDOR[poliolCodigo] || ('Outro (' + poliolCodigo + ')'));
+    // Mais de um código na mesma OP é fato digno de nota, não de silêncio.
+    const poliolMisturado = codigosPoliol.length > 1;
 
     const denominador = m2 * altura;
     const densidadeRealizada = denominador ? reportado / denominador : 0;
@@ -581,6 +629,7 @@ function mfgCalcular(fontes) {
       densidadeTeorica: prod ? prod.densidade : 0,
       densidadeRealizada, mdiPorPoliol,
       teorico, reportado, adesivo, grupos, diferenca, percentual,
+      fornecedor, poliolCodigo, poliolMisturado,
       diferencaMaterial, percentualMaterial,
       acoTeorico, acoReal, filmeTeorico, filmeReal, aluTeorico, aluReal,
       totalTeorico: acoTeorico + filmeTeorico + aluTeorico,
@@ -832,6 +881,19 @@ function mfgMontarFiltros() {
   selClasse.innerHTML = '<option value="">Todas as classes</option>'
     + classes.map(c => '<option value="' + escapeHtml(c) + '">' + escapeHtml(c) + '</option>').join('');
 
+  // ⚠️ Montado de quem REALMENTE aparece no arquivo, não de MFG_POLIOL_FORNECEDOR:
+  // um código novo de poliol precisa aparecer no filtro (como "Outro (...)") para
+  // alguém notar que falta cadastrar. Uma lista fixa esconderia exatamente isso.
+  // A ordem é por VOLUME de OPs -- o sistema principal da fábrica primeiro.
+  const contaForn = {};
+  mfgLinhas.forEach(l => { contaForn[l.fornecedor] = (contaForn[l.fornecedor] || 0) + 1; });
+  const forns = Object.keys(contaForn).sort((a, b) => contaForn[b] - contaForn[a]);
+  const selForn = document.getElementById('mfgFiltroFornecedor');
+  selForn.innerHTML = '<option value="">Todos os fornecedores</option>'
+    + forns.map(f => '<option value="' + escapeHtml(f) + '">' + escapeHtml(f)
+        + ' (' + contaForn[f] + ')</option>').join('');
+  selForn.value = mfgFiltros.fornecedor = '';
+
   // ⚠️ ABRE NA UNIDADE DO CABEÇALHO, e não no consolidado. O arquivo do MFG traz
   // as cinco fábricas juntas, e quem abre a tela quer ver a sua — é o idioma de
   // todo o portal (o seletor do topo manda em todas as outras telas). O
@@ -860,6 +922,7 @@ function mfgFiltradas(ignorarUnidade) {
   const busca = mfgFiltros.busca.trim().toLowerCase();
   return mfgLinhas.filter(l => {
     if (!ignorarUnidade && mfgFiltros.est && l.est !== mfgFiltros.est) return false;
+    if (mfgFiltros.fornecedor && l.fornecedor !== mfgFiltros.fornecedor) return false;
     if (mfgFiltros.classe && l.classe !== mfgFiltros.classe) return false;
     if (mfgFiltros.situacao && mfgSituacao(l, mfgFiltros.tolerancia) !== mfgFiltros.situacao) return false;
     if (busca) {
@@ -988,7 +1051,8 @@ function mfgRender() {
   if (ehComparar) {
     vazio.style.display = 'none';
     resumo.textContent = 'Comparando o índice de ' + MFG_INDICES[mfgFiltros.indice].rotulo.toLowerCase()
-      + ' entre as unidades, por ' + (mfgFiltros.compararPor === 'item' ? 'item' : 'classe') + '.';
+      + ' entre as unidades, por ' + (mfgFiltros.compararPor === 'item' ? 'item'
+          : mfgFiltros.compararPor === 'fornecedor' ? 'sistema químico' : 'classe') + '.';
     mfgRenderComparar();
     return;
   }
@@ -1044,7 +1108,8 @@ function mfgRender() {
       ['Situação', ''], ['', '']
     ],
     quimico: [
-      ['OP', ''], ['Unid.', ''], ['Classe', ''], ['Item', ''], ['m²', 'n'],
+      ['OP', ''], ['Unid.', ''], ['Sistema', '', 'Fornecedor do poliol que a OP consumiu'],
+      ['Classe', ''], ['Item', ''], ['m²', 'n'],
       ['Dens. teór.', 'n', 'Densidade do cadastro, em kg/m³'],
       ['Dens. realiz.', 'n', 'Reportado ÷ volume, em kg/m³ — sem o +1%'],
       ['Teórico (kg)', 'n'], ['Reportado (kg)', 'n'],
@@ -1077,6 +1142,12 @@ function mfgRender() {
     const inicio = '<tr>'
       + '<td><b>' + escapeHtml(l.op) + '</b><div class="mfg-sub">' + escapeHtml(l.data || '') + '</div></td>'
       + '<td>' + escapeHtml(l.est) + '<div class="mfg-sub">' + escapeHtml(l.maquina) + '</div></td>'
+      // A coluna do sistema químico só na aba Químico: no Aço ela não explica nada.
+      + (dim === 'quimico'
+          ? '<td>' + escapeHtml(l.fornecedor)
+            + (l.poliolMisturado ? '<div class="mfg-sub mfg-bad">⚠ mais de um poliol</div>' : '')
+            + '</td>'
+          : '')
       + '<td>' + escapeHtml(l.classe || '—') + '</td>'
       + '<td>' + escapeHtml(l.item) + '<div class="mfg-sub">' + escapeHtml(String(l.descricao || '').slice(0, 38)) + '</div></td>'
       + num(l.m2, 1);
@@ -1147,7 +1218,28 @@ function mfgRender() {
 // média honesta é `Σ real ÷ Σ teórico`, não a média dos índices de cada
 // produto -- ver a nota em mfgRenderDuelo().
 const MFG_INDICES = {
-  quimico:  { rotulo: 'Químico (densidade)', unidade: 'kg/m³',
+  // ⚠️ O ÍNDICE DO QUÍMICO É kg/m² — consumo dividido pela metragem (pedido do
+  // Victor, 15/09/2026). É a mesma régua do aço e do filme, e é como a fábrica
+  // pensa: "quanto de químico eu gasto por m² produzido".
+  //
+  // ⚠️ E o divisor NÃO altera o desvio. `desvio = (real − teórico) ÷ teórico`, e
+  // os dois lados são divididos pela MESMA base — ela se cancela:
+  //     (real/base − teor/base) ÷ (teor/base) = (real − teor) ÷ teor
+  // Então trocar m³ por m² muda só o número absoluto na célula. Desvio,
+  // discordância, ordenação e custo da diferença saem idênticos. Conferido no
+  // navegador contra os valores de antes da troca.
+  quimico:  { rotulo: 'Químico (kg/m²)', unidade: 'kg/m²',
+              teor: a => a.m2 ? a.quimicoTeorico / a.m2 : 0,
+              real: a => a.m2 ? a.quimicoReal / a.m2 : 0,
+              temBase: a => a.quimicoTeorico > 0,
+              kgTeor: a => a.quimicoTeorico, kgReal: a => a.quimicoReal,
+              base: a => a.m2, preco: a => a.precoQuimico },
+  // A densidade fica como segunda opção, e não foi jogada fora: ela é a única
+  // que dá para comparar entre ESPESSURAS diferentes. O kg/m² de um painel de
+  // 100 mm é mais que o dobro do de uma isotelha de 30 mm sem nenhum desperdício
+  // -- então o número absoluto em kg/m² só se compara no MESMO produto, e é por
+  // isso que a tela avisa isso quando o agrupamento é por classe.
+  quimicoDens: { rotulo: 'Químico — densidade (kg/m³)', unidade: 'kg/m³',
               teor: a => a.volume ? a.quimicoTeorico / a.volume : 0,
               real: a => a.volume ? a.quimicoReal / a.volume : 0,
               temBase: a => a.quimicoTeorico > 0,
@@ -1171,11 +1263,14 @@ const MFG_INDICES = {
 // somar as densidades de cada OP e dividir por N daria o mesmo peso a uma OP de
 // 20 m² e a uma de 2.000, e é justamente a grande que move o resultado do mês.
 function mfgAgruparIndices(porItem) {
+  const por = mfgFiltros.compararPor;
   const mapa = new Map();
   mfgFiltradas(true).forEach(l => {
     if (l.motivos.length) return;
-    const chave = porItem ? l.item : (l.classe || '(sem classe)');
-    const rotulo = porItem ? (l.item + ' · ' + String(l.descricao || '').slice(0, 30)) : chave;
+    const chave = por === 'item' ? l.item
+                : por === 'fornecedor' ? l.fornecedor
+                : (l.classe || '(sem classe)');
+    const rotulo = por === 'item' ? (l.item + ' · ' + String(l.descricao || '').slice(0, 30)) : chave;
     const g = mapa.get(chave) || mapa.set(chave, { chave, rotulo, unidades: {} }).get(chave);
     const a = g.unidades[l.est] || (g.unidades[l.est] = {
       est: l.est, maquina: l.maquina, ops: 0, m2: 0, volume: 0,
@@ -1213,6 +1308,22 @@ function mfgAgruparIndices(porItem) {
 // fica **neutra ao mix**: cada produto é comparado com o teórico DELE, então a
 // proporção entre produtos não entra na conta. É o número que responde "quem
 // roda mais apertado", que é a pergunta.
+// Como a linha do comparador se chama, conforme o agrupamento escolhido.
+function mfgRotuloGrupo() {
+  return mfgFiltros.compararPor === 'item' ? 'Item'
+       : mfgFiltros.compararPor === 'fornecedor' ? 'Sistema químico'
+       : 'Classe';
+}
+
+// O mesmo rótulo na forma de contagem ("4 classe(s) em comum"). Fica à parte
+// porque o plural em português não sai de um "(s)" grudado no singular --
+// "item(s)" e "sistema químico(s)" saem errados.
+function mfgRotuloGrupoPlural() {
+  return mfgFiltros.compararPor === 'item' ? 'item(ns)'
+       : mfgFiltros.compararPor === 'fornecedor' ? 'sistema(s) químico(s)'
+       : 'classe(s)';
+}
+
 function mfgRenderDuelo(alvo, indice, porItem, grupos, maquinaDe) {
   const A = mfgFiltros.unidadeA, B = mfgFiltros.unidadeB;
   const piso = mfgFiltros.m2Minimo || 0;
@@ -1224,14 +1335,23 @@ function mfgRenderDuelo(alvo, indice, porItem, grupos, maquinaDe) {
     const ia = indice.real(a), ib = indice.real(b);
     // Devolução líquida não é índice de processo -- fora do confronto.
     if (ia < 0 || ib < 0) return null;
-    const t = indice.teor(a);
-    const da = t ? ((ia - t) / t) * 100 : 0;
-    const db = t ? ((ib - t) / t) * 100 : 0;
-    return { rotulo: g.rotulo, teorico: t, a, b, ia, ib, da, db, diferenca: da - db };
+    // ⚠️ CADA LADO CONTRA O SEU PRÓPRIO TEÓRICO. A primeira versão media o desvio
+    // de B contra o teórico de A, e isso passava desapercebido agrupando por
+    // ITEM -- ali o cadastro é o mesmo e os dois teóricos coincidem. Por CLASSE
+    // e por FORNECEDOR não: o teórico do grupo é a média ponderada do MIX de cada
+    // fábrica, e os mixes são diferentes. No arquivo real isso fazia a BASF na 106
+    // aparecer com +138% (o certo é +8,9%) e a WANHUA com −43,6% (o certo é
+    // +6,8%) -- número inventado, e no lugar mais perigoso possível: um
+    // comparativo de fornecedor. Pego conferindo contra um cálculo independente.
+    const ta = indice.teor(a), tb = indice.teor(b);
+    const da = ta ? ((ia - ta) / ta) * 100 : 0;
+    const db = tb ? ((ib - tb) / tb) * 100 : 0;
+    return { rotulo: g.rotulo, teoricoA: ta, teoricoB: tb, a, b, ia, ib, da, db,
+             diferenca: da - db };
   }).filter(Boolean);
 
   if (!comuns.length) {
-    alvo.innerHTML = '<div class="empty-msg">Não há ' + (porItem ? 'item' : 'classe')
+    alvo.innerHTML = '<div class="empty-msg">Não há ' + mfgRotuloGrupo().toLowerCase()
       + ' feito nas DUAS unidades com índice de ' + escapeHtml(indice.rotulo.toLowerCase())
       + ' neste recorte' + (piso ? ' e com pelo menos ' + mfgFmt(piso, 0) + ' m² em cada' : '')
       + '. Tente agrupar por classe, baixar o piso de m², ou escolher outro par.</div>';
@@ -1276,8 +1396,16 @@ function mfgRenderDuelo(alvo, indice, porItem, grupos, maquinaDe) {
             + ' · ' + escapeHtml(maquinaDe[est] || '') + '</div>'
           + '<div class="mfg-duelo-indice">' + mfgFmt(m.indice, 2)
             + '<span class="mfg-sub"> ' + escapeHtml(indice.unidade) + '</span></div>'
+          // ⚠️ O TEÓRICO DE CADA LADO VAI JUNTO, e isto não é enfeite. Em kg/m² o
+          // índice absoluto depende da espessura: no arquivo real a 105 marca
+          // 1,72 kg/m² contra 1,26 da 106 -- parece que a 105 gasta MAIS, quando
+          // na verdade ela roda 4,4% ABAIXO da receita e a 106 10,6% acima (a 105
+          // faz painel mais grosso). O número grande sozinho contradizia o
+          // veredito escrito embaixo dele. Com o teórico ao lado, o par se
+          // explica: 1,72 contra 1,80 é abaixo; 1,26 contra 1,14 é acima.
           + '<div class="' + (m.desvio > 0 ? 'mfg-bad' : 'mfg-good') + '"><b>'
-            + (m.desvio > 0 ? '+' : '') + mfgFmt(m.desvio, 1) + '%</b> vs o teórico</div>'
+            + (m.desvio > 0 ? '+' : '') + mfgFmt(m.desvio, 1) + '%</b> vs o teórico de '
+            + mfgFmt(m.teorico, 2) + '</div>'
           + '<div class="mfg-sub">' + m.ops + ' OPs · ' + mfgFmt(m.m2, 0) + ' m² nos itens em comum</div>'
           + '</div>';
       }).join('')
@@ -1312,10 +1440,14 @@ function mfgRenderDuelo(alvo, indice, porItem, grupos, maquinaDe) {
   // elas mais discordam -- é por onde a investigação começa.
   comuns.sort((x, y) => Math.abs(y.diferenca) - Math.abs(x.diferenca));
 
-  const celula = (ind, desvio, m2, marcar) =>
+  // O teórico vai DENTRO da célula, ao lado do realizado: agrupado por classe ou
+  // fornecedor ele é diferente em cada fábrica (mix diferente), e uma coluna
+  // "Teórico" única no meio da tabela daria a impressão de referência comum.
+  const celula = (ind, teor, desvio, m2, marcar) =>
     '<td class="mfg-num' + (marcar ? ' mfg-celula-pior' : '') + '">' + mfgFmt(ind, 2)
     + '<div class="mfg-sub ' + (desvio > 0 ? 'mfg-bad' : 'mfg-good') + '">'
     + (desvio > 0 ? '+' : '') + mfgFmt(desvio, 1) + '%</div>'
+    + '<div class="mfg-sub">teór. ' + mfgFmt(teor, 2) + '</div>'
     + '<div class="mfg-sub">' + mfgFmt(m2, 0) + ' m²</div></td>';
 
   alvo.innerHTML = painel
@@ -1324,14 +1456,20 @@ function mfgRenderDuelo(alvo, indice, porItem, grupos, maquinaDe) {
     + comuns.length + '). Presa aos mesmos produtos, a comparação tira o efeito do mix — '
     + 'o que sobra é diferença de processo. A média de cima é <b>Σ real ÷ Σ teórico</b>, '
     + 'ponderada pelo volume e neutra ao mix.'
-    + (mfgFiltros.indice === 'quimico'
+    + (mfgFiltros.indice.indexOf('quimico') === 0
         ? '<br>⚠️ <b>A máquina (PM/RB) não entra no químico:</b> a largura útil se cancela na '
           + 'fórmula, então diferença aqui é densidade realizada, cadastro do produto, ou m² apontado.'
         : '')
+    + ((mfgFiltros.indice === 'quimico' && mfgFiltros.compararPor !== 'item')
+        ? '<br>⚠️ <b>Em kg/m² o número absoluto depende da ESPESSURA:</b> o químico enche o '
+          + 'núcleo, então um painel de 100 mm gasta mais por m² que uma isotelha de 30 mm sem '
+          + 'nenhum desperdício. Agrupado por classe, espessuras diferentes entram no mesmo '
+          + 'número. <b>O desvio e a discordância continuam válidos</b> (o divisor se cancela) — '
+          + 'para comparar o valor absoluto, agrupe por <b>código do item</b> ou use a densidade.'
+        : '')
     + '</div>'
     + '<div class="scroll-area"><table class="data-table mfg-tabela-comparar"><thead><tr>'
-    + '<th>' + (porItem ? 'Item' : 'Classe') + '</th>'
-    + '<th class="mfg-num" title="Do cadastro, já com o +1%. Igual para as duas.">Teórico</th>'
+    + '<th>' + escapeHtml(mfgRotuloGrupo()) + '</th>'
     + '<th class="mfg-num">' + escapeHtml(rotuloUnidade(A) || A)
       + '<div class="mfg-sub">' + escapeHtml(maquinaDe[A] || '') + '</div></th>'
     + '<th class="mfg-num">' + escapeHtml(rotuloUnidade(B) || B)
@@ -1340,16 +1478,14 @@ function mfgRenderDuelo(alvo, indice, porItem, grupos, maquinaDe) {
     + '</tr></thead><tbody>'
     + comuns.slice(0, MFG_TETO_LINHAS).map(c =>
         '<tr><td>' + escapeHtml(c.rotulo) + '</td>'
-        + '<td class="mfg-num"><b>' + mfgFmt(c.teorico, 2) + '</b>'
-          + '<div class="mfg-sub">' + escapeHtml(indice.unidade) + '</div></td>'
-        + celula(c.ia, c.da, c.a.m2, c.diferenca > 0)
-        + celula(c.ib, c.db, c.b.m2, c.diferenca < 0)
+        + celula(c.ia, c.teoricoA, c.da, c.a.m2, c.diferenca > 0)
+        + celula(c.ib, c.teoricoB, c.db, c.b.m2, c.diferenca < 0)
         + '<td class="mfg-num ' + (Math.abs(c.diferenca) > 5 ? 'mfg-bad' : '') + '"><b>'
           + (c.diferenca > 0 ? '+' : '') + mfgFmt(c.diferenca, 1) + ' pp</b></td></tr>'
       ).join('')
     + '</tbody></table></div>'
     + '<div class="mfg-sub" style="margin-top:8px;">' + comuns.length + ' '
-    + (porItem ? 'item(ns)' : 'classe(s)') + ' em comum'
+    + mfgRotuloGrupoPlural() + ' em comum'
     + (comuns.length > MFG_TETO_LINHAS ? ' — mostrando os ' + MFG_TETO_LINHAS + ' de maior diferença.' : '.')
     + '</div>';
 }
@@ -1432,7 +1568,7 @@ function mfgRenderComparar() {
   }).filter(Boolean);
 
   if (!linhas.length) {
-    alvo.innerHTML = '<div class="empty-msg">Nenhum ' + (porItem ? 'item' : 'classe')
+    alvo.innerHTML = '<div class="empty-msg">Nenhum ' + mfgRotuloGrupo().toLowerCase()
       + ' foi produzido em mais de uma unidade com índice de ' + escapeHtml(indice.rotulo.toLowerCase())
       + ' cadastrado — não há comparação possível neste recorte.</div>';
     return;
@@ -1444,8 +1580,7 @@ function mfgRenderComparar() {
   // principal pelo dinheiro.
   linhas.sort((a, b) => b.espalhamento - a.espalhamento);
 
-  const cab = '<tr><th>' + (porItem ? 'Item' : 'Classe') + '</th>'
-    + '<th class="mfg-num" title="Do cadastro, já com o +1% de perda prevista. É o mesmo para todas as unidades.">Teórico</th>'
+  const cab = '<tr><th>' + escapeHtml(mfgRotuloGrupo()) + '</th>'
     + ests.map(e => '<th class="mfg-num">' + escapeHtml(rotuloUnidade(e) || e)
         + '<div class="mfg-sub">' + escapeHtml(maquinaDe[e] || '') + '</div></th>').join('')
     + '<th class="mfg-num" title="Distância entre a unidade que mais gasta e a que menos gasta, no mesmo produto">Discordância</th></tr>';
@@ -1453,13 +1588,11 @@ function mfgRenderComparar() {
   const corpo = linhas.slice(0, MFG_TETO_LINHAS).map(l => {
     const porEst = {};
     l.desvios.forEach(d => { porEst[d.est] = d; });
-    const teorico = l.desvios[0].teorico;
     const comparaveis = l.desvios.filter(d => !d.devolucao);
     const piorDesvio = Math.max(...comparaveis.map(d => d.desvio));
     return '<tr>'
-      + '<td>' + escapeHtml(l.rotulo) + '<div class="mfg-sub">' + mfgFmt(l.m2, 0) + ' m²</div></td>'
-      + '<td class="mfg-num"><b>' + mfgFmt(teorico, 2) + '</b><div class="mfg-sub">'
-        + escapeHtml(indice.unidade) + '</div></td>'
+      + '<td>' + escapeHtml(l.rotulo) + '<div class="mfg-sub">' + mfgFmt(l.m2, 0)
+        + ' m² · ' + escapeHtml(indice.unidade) + '</div></td>'
       + ests.map(e => {
           const d = porEst[e];
           if (!d) return '<td class="mfg-num mfg-gray">—</td>';
@@ -1480,6 +1613,7 @@ function mfgRenderComparar() {
             + mfgFmt(d.real, 2)
             + '<div class="mfg-sub ' + (ruim ? 'mfg-bad' : 'mfg-good') + '">'
             + (d.desvio > 0 ? '+' : '') + mfgFmt(d.desvio, 1) + '%</div>'
+            + '<div class="mfg-sub">teór. ' + mfgFmt(d.teorico, 2) + '</div>'
             + '<div class="mfg-sub">' + mfgFmt(d.m2, 0) + ' m²</div></td>';
         }).join('')
       + '<td class="mfg-num"><b>' + mfgFmt(l.espalhamento, 1) + ' pp</b></td>'
@@ -1494,11 +1628,18 @@ function mfgRenderComparar() {
     + 'pontos percentuais, entre a unidade que mais gasta e a que menos gasta <i>no mesmo '
     + 'produto</i>: é ela que aponta onde há índice errado ou processo fora de controle, e a '
     + 'lista começa por ela.'
-    + (mfgFiltros.indice === 'quimico'
+    + (mfgFiltros.indice.indexOf('quimico') === 0
         ? '<br>⚠️ <b>PM × RB não explica diferença no químico:</b> a largura útil entra e sai da '
           + 'fórmula (m² ÷ largura × largura), então a máquina não altera o teórico. Se duas '
           + 'fábricas divergem aqui, a causa é a densidade realizada, o cadastro do produto, ou '
           + 'o m² apontado a menos.'
+        : '')
+    + ((mfgFiltros.indice === 'quimico' && mfgFiltros.compararPor !== 'item')
+        ? '<br>⚠️ <b>Em kg/m² o número absoluto depende da ESPESSURA:</b> o químico enche o '
+          + 'núcleo, então um painel de 100 mm gasta mais por m² que uma isotelha de 30 mm sem '
+          + 'nenhum desperdício. Agrupado por classe, espessuras diferentes entram no mesmo '
+          + 'número. <b>O desvio e a discordância continuam válidos</b> (o divisor se cancela) — '
+          + 'para comparar o valor absoluto, agrupe por <b>código do item</b> ou use a densidade.'
         : '')
     + '</div>'
     + '<div class="scroll-area"><table class="data-table mfg-tabela-comparar"><thead>' + cab
@@ -1506,7 +1647,7 @@ function mfgRenderComparar() {
     + '<div class="mfg-sub" style="margin-top:8px;">'
     + (linhas.length > MFG_TETO_LINHAS
         ? 'Mostrando ' + MFG_TETO_LINHAS + ' de ' + linhas.length + ' — use os filtros para estreitar.'
-        : linhas.length + ' ' + (porItem ? 'item(ns)' : 'classe(s)') + ' feito(s) em mais de uma unidade.')
+        : linhas.length + ' ' + mfgRotuloGrupoPlural() + ' feito(s) em mais de uma unidade.')
     // O corte por volume nunca é silencioso.
     + (escondidasPorVolume
         ? ' <b class="mfg-bad">' + escondidasPorVolume + ' fora da lista por terem menos de '
@@ -1615,7 +1756,8 @@ function mfgFecharDetalhe() {
 
 // ---- Exportar ---------------------------------------------------------------
 const MFG_EXPORT_CABECALHO = [
-  'OP', 'Unidade', 'Máquina', 'Data', 'Classe', 'Item', 'Descrição', 'UM',
+  'OP', 'Unidade', 'Máquina', 'Data', 'Sistema químico', 'Código do poliol',
+  'Classe', 'Item', 'Descrição', 'UM',
   'm²', 'Espessura (mm)', 'Largura (m)', 'Densidade teórica', 'Densidade realizada',
   'POLIOL', 'MDI', 'CATALIZADOR', 'PENTANO', 'ADESIVO (fora do total)',
   'Químico teórico (kg)', 'Químico reportado (kg)', 'Diferença (kg)', 'Diferença (%)',
@@ -1627,7 +1769,8 @@ const MFG_EXPORT_CABECALHO = [
 function mfgLinhasExportacao() {
   const tol = mfgFiltros.tolerancia;
   return mfgFiltradas().slice().sort((a, b) => a.rsTotal - b.rsTotal).map(l => [
-    l.op, l.est, l.maquina, l.data, l.classe, l.item, l.descricao || '', l.um || '',
+    l.op, l.est, l.maquina, l.data, l.fornecedor, l.poliolCodigo,
+    l.classe, l.item, l.descricao || '', l.um || '',
     l.m2, l.espessura * 1000, l.largura, l.densidadeTeorica, l.densidadeRealizada,
     l.grupos.POLIOL || 0, l.grupos.MDI || 0, l.grupos.CATALIZADOR || 0, l.grupos.PENTANO || 0, l.adesivo,
     l.teorico, l.reportado, l.diferenca, l.percentual,
@@ -1652,9 +1795,10 @@ function mfgExportacaoDuelo() {
   const piso = mfgFiltros.m2Minimo || 0;
   const rotA = rotuloUnidade(A) || A, rotB = rotuloUnidade(B) || B;
 
-  const cabecalho = [porItem ? 'Item' : 'Classe', 'Índice teórico (' + indice.unidade + ')',
-    rotA + ' realizado', rotA + ' desvio %', rotA + ' m²',
-    rotB + ' realizado', rotB + ' desvio %', rotB + ' m²',
+  // Um teórico POR LADO: agrupado por classe/fornecedor eles diferem (mix).
+  const cabecalho = [mfgRotuloGrupo(),
+    rotA + ' teórico', rotA + ' realizado', rotA + ' desvio %', rotA + ' m²',
+    rotB + ' teórico', rotB + ' realizado', rotB + ' desvio %', rotB + ' m²',
     'Diferença A − B (pp)'];
 
   const linhas = mfgAgruparIndices(porItem).map(g => {
@@ -1663,11 +1807,11 @@ function mfgExportacaoDuelo() {
     if (a.m2 < piso || b.m2 < piso) return null;
     const ia = indice.real(a), ib = indice.real(b);
     if (ia < 0 || ib < 0) return null;   // devolução líquida, ver mfgRenderDuelo
-    const t = indice.teor(a);
-    const da = t ? ((ia - t) / t) * 100 : 0;
-    const db = t ? ((ib - t) / t) * 100 : 0;
-    return [g.rotulo, t, ia, da, a.m2, ib, db, b.m2, da - db];
-  }).filter(Boolean).sort((x, y) => Math.abs(y[8]) - Math.abs(x[8]));
+    const ta = indice.teor(a), tb = indice.teor(b);
+    const da = ta ? ((ia - ta) / ta) * 100 : 0;
+    const db = tb ? ((ib - tb) / tb) * 100 : 0;
+    return [g.rotulo, ta, ia, da, a.m2, tb, ib, db, b.m2, da - db];
+  }).filter(Boolean).sort((x, y) => Math.abs(y[9]) - Math.abs(x[9]));
 
   return { cabecalho, linhas, aba: (A + ' x ' + B).slice(0, 28) };
 }
@@ -1680,9 +1824,10 @@ function mfgExportacaoComparar() {
   const maquinaDe = {};
   grupos.forEach(g => Object.values(g.unidades).forEach(a => { maquinaDe[a.est] = a.maquina; }));
 
-  const cabecalho = [porItem ? 'Item' : 'Classe', 'm²', 'Índice teórico (' + indice.unidade + ')']
+  const cabecalho = [mfgRotuloGrupo(), 'm²', 'Unidade do índice']
     .concat(ests.flatMap(e => [
-      (rotuloUnidade(e) || e) + ' (' + (maquinaDe[e] || '') + ') realizado',
+      (rotuloUnidade(e) || e) + ' (' + (maquinaDe[e] || '') + ') teórico',
+      (rotuloUnidade(e) || e) + ' realizado',
       (rotuloUnidade(e) || e) + ' desvio %'
     ]))
     .concat(['Discordância (pp)']);
@@ -1698,8 +1843,8 @@ function mfgExportacaoComparar() {
     const pcts = presentes.map(e => dv[e].d);
     return [g.rotulo,
             presentes.reduce((s, e) => s + g.unidades[e].m2, 0),
-            dv[presentes[0]].t]
-      .concat(ests.flatMap(e => dv[e] ? [dv[e].r, dv[e].d] : ['', '']))
+            indice.unidade]
+      .concat(ests.flatMap(e => dv[e] ? [dv[e].t, dv[e].r, dv[e].d] : ['', '', '']))
       .concat([Math.max(...pcts) - Math.min(...pcts)]);
   }).filter(Boolean).sort((a, b) => b[b.length - 1] - a[a.length - 1]);
 
@@ -1893,6 +2038,9 @@ document.getElementById('mfgFiltroEst').addEventListener('change', (e) => {
 });
 document.getElementById('mfgFiltroClasse').addEventListener('change', (e) => {
   mfgFiltros.classe = e.target.value; mfgRender();
+});
+document.getElementById('mfgFiltroFornecedor').addEventListener('change', (e) => {
+  mfgFiltros.fornecedor = e.target.value; mfgRender();
 });
 document.getElementById('mfgFiltroSituacao').addEventListener('change', (e) => {
   mfgFiltros.situacao = e.target.value; mfgRender();

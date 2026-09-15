@@ -3,7 +3,7 @@
 Contexto do projeto para qualquer agente de IA ou pessoa que for mexer neste repositório.
 Sempre em **português do Brasil**.
 
-**Atualizado:** 15/09/2026 (Análise MFG + Painel de Docas/Preparar, das duas frentes)
+**Atualizado:** 15/09/2026 (Análise MFG: índice do químico em kg/m² e por sistema químico)
 **Mantenedores:** Robson (dono do projeto e admin geral) · Victor Dobner (colaborador)
 
 > Este arquivo é lido automaticamente pelo Claude Code ao abrir a pasta do projeto.
@@ -5811,3 +5811,129 @@ sobrevive a sair da aba e voltar; os totais das outras abas não mudaram
 (**químico −177.340,27 + aço +17.587,32 = −159.752,95**). **Zero texto abaixo de
 4,5:1 nos dois temas**, e no celular os três blocos empilham sem estourar a
 largura. Zero erro de console.
+
+#### Índice do químico em kg/m², e separado por sistema químico (15/09/2026)
+
+Dois pedidos do Victor, na sequência: *"Vc não esta colocando o indice por
+quimico. Faça o consumo dividido pela metragem"* e *"Além disso, divida também
+por 'grupo de quimico'. Se baseie no Poliol usado: Se a OP consumiu 123469 - é
+BASF / 141828i - é WANHUA / 123488 - é NANOPIR / 141830i - é SYNTHESIA"*.
+
+##### O índice do químico virou kg/m²
+
+`Químico (kg/m²)` passou a ser a opção padrão do comparador — consumo ÷
+metragem, a mesma régua do aço e do filme, e é como a fábrica pensa ("quanto de
+químico eu gasto por m² produzido"). A densidade (kg/m³) **não foi jogada
+fora**: ficou como segunda opção, porque é a única que se compara entre
+**espessuras** diferentes.
+
+⚠️ **O divisor NÃO altera o desvio, e isso é álgebra, não opinião.** O desvio é
+`(real − teórico) ÷ teórico`, e os dois lados são divididos pela MESMA base, que
+se cancela:
+
+    (real/base − teor/base) ÷ (teor/base) = (real − teor) ÷ teor
+
+Então trocar m³ por m² muda só o número absoluto na célula: **desvio,
+discordância, ordenação e o custo da diferença saem idênticos.** Conferido no
+navegador — a lacuna entre 105 e 106 dá **15,0 pp nas duas unidades de medida**.
+
+⚠️ **Em kg/m² o número absoluto depende da ESPESSURA, e isso enganou a mim
+primeiro.** O químico enche o núcleo, então um painel de 100 mm gasta mais por m²
+que uma isotelha de 30 mm sem nenhum desperdício. Na primeira versão o cartão da
+105 dizia **1,72 kg/m²** contra **1,26** da 106 — parecia que a 105 gastava mais,
+**contradizendo o veredito escrito logo embaixo** (a 105 roda 4,4% ABAIXO da
+receita, a 106 10,6% acima; a 105 é que faz painel mais grosso). Duas correções:
+o **teórico de cada lado vai junto do índice** ("−4,4% vs o teórico de 1,80"), e
+agrupado por classe a tela avisa que o valor absoluto só se compara no mesmo
+produto — sugerindo agrupar por item ou usar a densidade.
+
+##### O sistema químico sai do código do POLIOL
+
+Nova coluna **Sistema** na aba Químico, filtro próprio na barra, e
+`Agrupar por → Sistema químico (fornecedor)` no comparador. O mapa
+(`MFG_POLIOL_FORNECEDOR`) tem os quatro códigos do pedido.
+
+- **É o poliol que identifica o sistema**, não o MDI nem o catalisador — foi o
+  critério dado, e é o certo: o poliol é a parte formulada, o resto acompanha.
+- ⚠️ Conferido no arquivo real antes de escrever a regra: **nenhuma OP mistura
+  dois códigos de poliol** (964 OPs, zero mistas). Ainda assim, quando houver
+  mais de um, vale o de **maior consumo** — o que formou a espuma, não um
+  resíduo de 2 kg — e a linha ganha um "⚠ mais de um poliol", porque isso é fato
+  digno de nota, não de silêncio.
+- ⚠️ **Código fora do mapa não vira "sem fornecedor" em silêncio:** aparece como
+  `Outro (código)`. É assim que o próximo código a cadastrar se anuncia — e o
+  filtro é montado de **quem realmente aparece no arquivo**, não do mapa, senão
+  uma lista fixa esconderia exatamente isso. No arquivo de setembro são 6 OPs
+  com `141831I`, ainda sem nome.
+- ⚠️ **Existe `123469` (BASF) e também `123469I`, e o segundo NÃO foi mapeado de
+  propósito.** Adivinhar que o sufixo "I" é o mesmo fornecedor importado é chute,
+  e chute aqui vira número errado num comparativo de fornecedor.
+- A ordem do filtro é por **volume de OPs** — o sistema principal da fábrica
+  primeiro: WANHUA 440, BASF 343, SYNTHESIA 166, Outro(141831I) 6, NANOPIR 3,
+  sem poliol 1.
+
+##### ⛔ O defeito que este pedido desenterrou: desvio medido contra o teórico do OUTRO
+
+`mfgRenderDuelo()` calculava `const t = indice.teor(a)` e usava **o mesmo `t`**
+para os dois lados — ou seja, **o desvio da segunda unidade era medido contra o
+teórico da primeira**.
+
+⚠️ **Agrupado por ITEM isso passa desapercebido**, porque o cadastro é o mesmo e
+os dois teóricos coincidem. Por **classe** e por **fornecedor** não: o teórico do
+grupo é a média ponderada do **mix de cada fábrica**, e os mixes são diferentes.
+
+No arquivo real o erro produzia **BASF na 106 = +138,3%** e **WANHUA na 106 =
+−43,6%**. Os valores certos são **+8,9%** e **+6,8%** — e aquele +138% pertence
+de verdade a outra linha (**104/NANOPIR**, 3 OPs em 396 m²). Número inventado, no
+lugar mais perigoso possível: um comparativo entre fornecedores, que é
+exatamente onde alguém decide trocar de fornecedor.
+
+Foi pego **conferindo a tela contra um cálculo independente em Python**, não
+lendo o código. Hoje cada lado usa o seu (`ta`/`tb`), o teórico mora **dentro da
+célula de cada unidade** (uma coluna "Teórico" única no meio da tabela daria a
+impressão de referência comum) e as duas exportações emitem um teórico por
+unidade.
+
+**A lição que vale além deste arquivo:** quando o agrupamento muda de "uma chave
+por produto" para "uma chave por categoria", tudo que era único por chave passa a
+ser uma média — e as fórmulas escritas na época do agrupamento fino continuam
+compilando, só param de dizer a verdade.
+
+##### O que os números dizem, por fornecedor
+
+Cada célula é `Σ real ÷ Σ teórico` da (unidade, fornecedor) — conferido casando
+**10 de 10 pares** com o cálculo independente:
+
+| Unidade | Sistema | OPs | m² | Desvio |
+|---|---|---|---|---|
+| 101 | BASF | 272 | 47.226 | +1,2% |
+| 101 | Outro (141831I) | 6 | 9.532 | +2,2% |
+| 103 | WANHUA | 112 | 17.265 | −1,4% |
+| 104 | SYNTHESIA | 166 | 42.227 | +5,4% |
+| 104 | **NANOPIR** | 3 | 396 | **+138,1%** |
+| 105 | WANHUA | 195 | 51.323 | −2,9% |
+| 106 | BASF | 67 | 22.211 | **+8,9%** |
+| 106 | WANHUA | 133 | 43.763 | **+6,8%** |
+
+⚠️ **O fornecedor NÃO explica a 106.** As duas marcas que ela usa estouram
+juntas (+8,9% e +6,8%), enquanto a mesma WANHUA roda **−2,9% na 105** e
+**−1,4% na 103**. Um desvio que acompanha a fábrica e não a marca não é
+matéria-prima — reforça a conclusão anterior (processo, cadastro ou m²
+apontado), agora por um caminho independente.
+
+⚠️ As duas linhas de 1 e 3 OPs (**105/BASF −69,4%** e **104/NANOPIR +138,1%**)
+são volume pequeno, mas ficam na lista de propósito: em 396 m² um erro de +138%
+é lançamento em OP errada, não desperdício — e é justamente o que se quer achar.
+
+Conferido no navegador com o arquivo real: os **10 pares (unidade, fornecedor)
+batem casa a casa** com o cálculo independente, incluindo os dois que estavam
+errados antes da correção; a lacuna 105 × 106 dá **15,0 pp em kg/m² e em
+kg/m³**, confirmando que o divisor se cancela; o filtro de fornecedor recorta
+(440 linhas, todas WANHUA) e soma 959 OPs entre as seis opções; o detalhe da OP
+mostra o sistema; os rótulos de contagem acompanham o agrupamento
+("sistema(s) químico(s) em comum"); **os totais não mudaram — químico
+−177.340,27 + aço +17.587,32 = −159.752,95**, e as cinco unidades com os mesmos
+valores de antes; as 12 páginas do portal abrem sem erro e **nenhuma requisição
+falhada vem do MFG**; **zero texto abaixo de 4,5:1 nos dois temas** nas três
+visões novas; no celular nada estoura a largura e a página não rola de lado em
+nenhuma das cinco abas. Zero erro de console.
