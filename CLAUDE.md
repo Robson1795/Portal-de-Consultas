@@ -3016,32 +3016,63 @@ grupo; busca por pedido continua funcionando; item retirado na mesma
 localização continua fora, mesmo buscando por ela. Zero erro de
 console.
 
-## Análise de Compras avisa o que vai sumir ao colar planilha nova (15/09/2026)
+## Análise de Compras: colar planilha JUNTA, não substitui mais (15/09/2026)
 
 O Robson: *"na analise de compras deixe que eu analise os itens que eu
 preciso deixar, antes voce ja estava excluindo alguns automaticos"*.
 
-"Substituir análise por estas N linha(s)" (`gravarAnalise()` →
-`substituir_analise_demanda`) sempre apagou a análise inteira da unidade
-e regravou só com o que foi colado — item da análise atual que não está
-na planilha nova **sumia sozinho**, sem avisar. Perguntado entre mostrar
-o que vai sumir antes de trocar ou virar um "juntar em vez de substituir",
-escolheu ver antes de decidir — o comportamento de substituir continua o
-mesmo, só ganhou visibilidade.
+**Primeira versão** (revertida no mesmo dia, minutos depois): "Substituir
+análise" continuava apagando tudo e regravando, só que agora avisando
+antes quais itens sumiriam. Ele viu o aviso listar **23 itens reais**
+(alguns com pedido de 5.000+ unidades) e decidiu: *"não quero que
+desapareça"* — visibilidade não bastava, o apagar automático em si tinha
+que sair.
 
-Ao clicar "Conferir" (antes de "Substituir" aparecer), a prévia agora
-compara os códigos da planilha colada com `agruparAnalise()` (a análise
-atual) e lista, num quadro amarelo, todo item que **não** está na nova
-planilha — com descrição e quantidade pedida, pra ele reconhecer se é
-esperado (pedido faturado, saiu do relatório do Datasul) ou sinal de que
-colou uma planilha incompleta. Sem nenhum item sumindo, o quadro nem
-aparece — aviso que aparece sempre vira aviso que ninguém lê.
+### Como ficou
 
-Conferido no navegador: colar uma planilha menor mostra o item que ficou
-de fora com descrição e pedido certos; colar uma planilha com os mesmos
-itens (nada muda) não mostra aviso nenhum. Zero erro de console (o 404 de
-`reservas_aco` que aparece nos testes é falta de tabela do Victor, não
-deste código).
+`gravarAnalise()` trocou de RPC: `substituir_analise_demanda` (fase19,
+delete + insert da unidade inteira) virou `mesclar_analise_demanda`
+(`sql/fase47-analise-demanda-mesclar.sql`, upsert por
+`(unidade, numero_pedido, codigo_item, seq_etapa)`). Pedido/item que já
+estava na análise e não veio nesta colagem **fica exatamente como
+estava** — só é atualizado quando volta a aparecer numa planilha nova.
+Botão renomeado de "Substituir análise por estas N linha(s)" pra "Juntar
+estas N linha(s) na análise", e o quadro amarelo de "vai sumir" (a
+primeira versão) foi removido — não faz sentido avisar sobre algo que
+não acontece mais.
+
+⚠️ **NULL não bate com NULL num índice único do Postgres** — `numero_pedido`
+e `seq_etapa` podem vir em branco na planilha (o parser transforma célula
+vazia em `null`), e sem tratar isso o `ON CONFLICT` simplesmente não
+funcionaria pra essas linhas (cada uma pareceria sempre nova). A fase47
+faz backfill de NULL pra `''` nas duas colunas, dá dedupe em linhas que já
+colidiriam, e só depois cria o índice único.
+
+### E quando um pedido REALMENTE não é mais demanda?
+
+Perguntado como remover pedido faturado/cancelado já que nada mais some
+sozinho, escolheu **remoção manual**: botão **🗑 Remover** por item, ao
+lado do já existente 🚫 "não repor". São conceitos diferentes e os dois
+ficam:
+- **🚫 Não repor** — "sei que falta, mas não vou comprar isso" (decisão de
+  compra; a demanda continua contando, só fica escondida da lista).
+- **🗑 Remover** — "isso não é mais demanda de verdade" (apaga as linhas de
+  `analise_demanda` daquele item pra esta unidade). Se uma planilha futura
+  trouxer o item de novo, ele volta — remover não é um "não repor pra
+  sempre", é só tirar o que está lá agora.
+
+`removerItemDaAnalise()` filtra os ids em **memória** por
+`normalizaCodigoItem()` antes de apagar, em vez de um `.eq('codigo_item',
+...)` direto no Supabase — a linha grupada na tela usa o código já
+normalizado (maiúsculo, sem espaço), mas a linha salva pode ter vindo da
+planilha com espaço ou minúscula; um filtro exato só bateria por sorte.
+
+Conferido no navegador: colar planilha usa `mesclar_analise_demanda`, não
+a antiga; nenhum aviso de "vai sumir" aparece mais; 🗑 Remover apaga TODAS
+as linhas daquele item (inclusive uma com `codigo_item` em minúscula,
+provando a normalização) num `delete().in('id', [...])` só; recusar a
+confirmação não chama nada. Zero erro de console (o 404 de `reservas_aco`
+que aparece nos testes é falta de tabela do Victor, não deste código).
 
 ## Prazo e cancelar na aba Preparar (15/09/2026)
 
