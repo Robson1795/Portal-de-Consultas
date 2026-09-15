@@ -745,6 +745,8 @@
 .stat-icone.azul  { background: var(--azul-fundo); }
 .stat-icone.verde { background: var(--ok-fundo); }
 .stat-icone.roxo  { background: var(--roxo-fundo); }
+.stat-icone.vermelho { background: var(--erro-fundo); }
+.stat-icone.laranja  { background: var(--aviso-fundo); }
 .stat-texto { min-width: 0; }
 .stat-rotulo {
   font-size: 10.5px; font-weight: 700; letter-spacing: 0.7px;
@@ -1335,4 +1337,67 @@ td.col-acoes { white-space: nowrap; text-align: center; }
 .scanner-mira {
   position: absolute; inset: 18% 12%; border: 3px solid rgba(255,255,255,0.9);
   border-radius: 10px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.35);
+}
+
+
+/* ===================== ANALISE MFG (15/09/2026) =====================
+   Consumo teorico x reportado por OP, e o dinheiro que a diferenca custou.
+   As cores aqui sao SEMANTICAS e sao as mesmas em toda a tela: vermelho e
+   sempre "consumiu a mais / perdeu dinheiro", verde e sempre o contrario.
+   Vem dos tokens (--erro-texto / --ok-texto), entao acompanham o tema claro
+   e escuro sem uma segunda regra -- ver a secao 16 do CLAUDE.md. */
+.mfg-bad  { color: var(--erro-texto); }
+.mfg-good { color: var(--ok-texto); }
+.mfg-ok   { color: var(--muted); }
+.mfg-gray { color: var(--muted); }
+.mfg-num  { text-align: right; white-space: nowrap; }
+.mfg-sub  { font-size: 11px; color: var(--muted); line-height: 1.3; }
+
+.mfg-badge {
+  display: inline-block; padding: 2px 9px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 700; white-space: nowrap;
+  border: 1px solid currentColor;
+}
+.mfg-badge.mfg-bad  { background: var(--erro-fundo); }
+.mfg-badge.mfg-good { background: var(--ok-fundo); }
+.mfg-badge.mfg-ok   { background: var(--panel-2); }
+.mfg-badge.mfg-gray { background: var(--panel-2); }
+
+.mfg-h4 {
+  margin: 16px 0 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.6px;
+  text-transform: uppercase; color: var(--muted);
+}
+
+/* ⚠️ Estas duas tabelas rolam DENTRO da própria caixa. Sem isto, no celular
+   (396px de largura útil) a tabela por unidade ia até 645px e ficava cortada:
+   a coluna "Resultado" -- justamente a que responde a pergunta -- sumia da
+   tela, e o corpo da página não rolava para o lado para compensar. É a mesma
+   regra que a tabela principal já segue por estar dentro de .scroll-area. */
+#mfgPorUnidade, #mfgHistorico { overflow-x: auto; }
+
+.mfg-tabela-unidade, .mfg-tabela-detalhe {
+  width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 14px;
+}
+/* ⚠️ A cor do texto TEM de ser --sobre-acento, e não --muted. Existe uma regra
+   global `thead th` que pinta TODO cabeçalho de tabela do portal de azul
+   (--blue) com texto branco. Trocar só a cor do texto por --muted deixava
+   cinza sobre azul: 1,49:1 no tema claro, contra o mínimo de 4,5:1 que a
+   seção 16 do CLAUDE.md fixou -- e o auditor de contraste pegou. Mantendo o
+   azul, estas duas tabelas ficam iguais a todas as outras do portal. */
+.mfg-tabela-unidade th, .mfg-tabela-detalhe th {
+  text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--sobre-acento); padding: 6px 8px;
+}
+.mfg-tabela-unidade td, .mfg-tabela-detalhe td {
+  padding: 6px 8px; border-bottom: 1px solid var(--border); color: var(--ink);
+}
+.mfg-tabela-unidade th:not(:first-child), .mfg-tabela-unidade td:not(:first-child),
+.mfg-tabela-detalhe th:not(:first-child), .mfg-tabela-detalhe td:not(:first-child) {
+  text-align: right; white-space: nowrap;
+}
+.mfg-linha-total td { border-top: 2px solid var(--border-forte); }
+
+/* O botao de lupa por linha: pequeno, so abre o detalhe, nao decide nada. */
+.btn-mini {
+  padding: 2px 8px; font-size: 13px; line-height: 1.5;
 }

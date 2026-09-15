@@ -3,7 +3,7 @@
 Contexto do projeto para qualquer agente de IA ou pessoa que for mexer neste repositório.
 Sempre em **português do Brasil**.
 
-**Atualizado:** 14/09/2026 (QR em todas as etiquetas do portal)
+**Atualizado:** 15/09/2026 (Análise MFG: consumo teórico x reportado por OP)
 **Mantenedores:** Robson (dono do projeto e admin geral) · Victor Dobner (colaborador)
 
 > Este arquivo é lido automaticamente pelo Claude Code ao abrir a pasta do projeto.
@@ -44,6 +44,7 @@ servidos são o próprio código-fonte. Divididos na Fase 2a (03/09/2026):
 | `js/busca.js` | Busca global: onde o item está em todas as telas, de uma vez (seção 26) |
 | `js/inventario.js` | Fechar inventário: congela a contagem e calcula a acuracidade (seção 27) |
 | `js/scanner.js` | Leitor de código pela câmera (BarcodeDetector) e o QR das etiquetas (seção 28) |
+| `js/mfg.js` | Análise MFG: consumo teórico x reportado por OP, e o dinheiro da diferença (seção 29) |
 
 São **scripts clássicos, não módulos**, carregados nessa ordem no fim do `body`. O `let`/`const` de
 nível superior vai para o escopo lexical global, compartilhado entre os arquivos — é por isso que o
@@ -4532,3 +4533,170 @@ etiqueta da Trading recebe o QR mantendo endereço em 40mm e item em 32mm; a
 ficha do EXP recebe um por ficha **sem tocar na linha medida do topo**; as três
 folhas saem **iguais** sem QR; e a aba abre antes de gerar (`abriu → gerou →
 escreveu`). **18 de 18 checagens.**
+
+## 29. Análise MFG — consumo teórico x reportado, por OP (15/09/2026)
+
+O Victor: *"preciso que vc faça uma analise pesada nesse arquivo do MFG e
+desenvolva uma tela MFG. Quero basicamente poder jogar as OPs, talvez subindo um
+arquivo de Excel e o sistema fazer uma analise bem semelhante ao MFG da empresa
+só que melhor. Preciso TAMBÉM que ele mostre quais OPs estao com divergencias,
+tanto pra mais quanto pra menos no consumo. Se puder também detalhar quanto a
+unidade ta perdendo ou ganhando, valores, etc."*
+
+Vive em **`js/mfg.js`**. Script: `sql/fase42-analise-mfg.sql` (**ainda não
+rodado** — e a tela funciona sem ele, ver abaixo).
+
+### ⚠️ O modelo não foi deduzido: foi extraído do arquivo e depois conferido
+
+O `.xlsx` é um zip, e `xl/worksheets/sheetN.xml` traz **cada fórmula em texto**.
+As 56 fórmulas da aba de análise foram lidas de lá. Depois o cálculo foi
+reimplementado do zero a partir das abas de origem e comparado com os números
+que a própria planilha já tinha calculado: **958 de 958 OPs batem, em dez
+métricas** (consumo teórico, report, aço/filme/alumínio teórico e real, e as
+cinco de R$). Não é "parecido com o MFG" — é o MFG.
+
+Três coisas teriam saído erradas se eu tivesse deduzido em vez de ler:
+
+1. **A largura útil depende da MÁQUINA (PM ou RB)**, não da classe sozinha — e a
+   máquina vem da unidade (101/103/104 = PM, 105/106 = RB).
+2. **O trapézio (+5 mm na espessura) só entra quando a classe começa com
+   "ISOT"**. Painel liso não tem.
+3. ⚠️ **O report total do químico soma POLIOL + MDI + CATALIZADOR + PENTANO e
+   deixa o ADESIVO de fora.** O adesivo é consumido e aparece no Consumo, mas
+   não entra no total que vira densidade realizada — ele cola faces, não forma
+   espuma. Somá-lo faria **toda** OP parecer que consumiu a mais. A tela mostra
+   o adesivo à parte, justamente para ninguém achar que o portal o perdeu.
+
+### A conta, por OP
+
+    CONSUMO TEÓRICO (kg) = m² × (espessura + trapézio) × densidade × 1,01
+    REPORTADO (kg)       = POLIOL + MDI + CATALIZADOR + PENTANO
+    DIFERENÇA            = teórico − reportado   (negativo = consumiu a MAIS)
+    DENSIDADE REALIZADA  = reportado ÷ (m² × (espessura + trapézio))   [sem o 1,01]
+
+    AÇO/FILME/ALUMÍNIO TEÓRICO = índice da Base de Dados × m² × 1,01
+    AÇO/FILME/ALUMÍNIO REAL    = o que o Consumo baixou daquela família
+
+    R$ = diferença × preço unitário da família NAQUELA UNIDADE
+
+⚠️ **O preço é por família E por unidade**, não um preço global: o mesmo aço
+custa diferente em Anápolis e em Araquari, e usar a média da empresa jogaria
+erro de preço dentro do resultado de produção. Para aço/filme/alumínio o preço é
+**ponderado** (Σ valor ÷ Σ quantidade); para o químico o MFG usa a **média
+simples dos unitários** (AVERAGEIFS). São contas diferentes, e mantive cada uma
+como está — mudar faria os números divergirem do MFG da empresa, que é
+exatamente contra o que esta tela vai ser conferida na primeira semana.
+
+### ⚠️ Tudo por NOME de coluna, nunca por letra
+
+O MFG referencia coluna fixa (`Consumo!$N:$N`), e por isso **uma coluna a mais no
+export do Datasul quebra a planilha inteira em silêncio** — a conta continua
+saindo, só que da coluna errada. Aqui a coluna é achada pelo nome do cabeçalho,
+com sinônimos e sem acento/caixa, então a ordem pode mudar à vontade.
+
+A aba **"Base de Dados" guarda três tabelas lado a lado** com o mesmo cabeçalho
+(acabados, químicos, e o de-para unidade→máquina, que não tem cabeçalho nenhum).
+As duas primeiras se distinguem por nome de coluna; a terceira é achada pelo
+**conteúdo** — a coluna cujos valores só são PM/RB, e a de unidade ao lado dela.
+
+### O que esta tela faz que o MFG da empresa não faz
+
+1. ⚠️ **OP com consumo e sem apontamento de produção.** A análise da empresa
+   parte do Acabado, então OP que baixou matéria-prima e nunca apontou produção
+   **não existe nela**. No arquivo real de setembro: 974 OPs no Consumo contra
+   959 no Acabado — **15 OPs tiraram material do estoque e não viraram m²
+   nenhum**. Ficam num botão próprio ("🚨 Consumo sem OP").
+2. ⚠️ **OP que o MFG descartou em silêncio.** O Acabado tem 959 OPs e a análise
+   da empresa tem **958**: a OP `1954151` sumiu porque o item dela não está na
+   Base de Dados. Aqui ela aparece como **"Sem cadastro"**, com o motivo
+   escrito, **fora** da conta de perda e ganho — porque sem teórico a
+   "diferença" vira o consumo inteiro da OP, uma perda gigante e falsa.
+3. **Soma o dinheiro por unidade.** O MFG dá a variação OP a OP; "quanto esta
+   fábrica ganhou ou perdeu na semana" ninguém respondia sem tabela dinâmica por
+   fora. No arquivo de setembro: **R$ −159.752,95** no total, com a 103 em
+   −159.898 e a 105 em +111.083.
+4. **Diz a direção em letras** ("Custou a MAIS" / "Custou a menos") em vez de
+   deixar deduzir pelo sinal.
+5. **Faixa de tolerância ajustável** (padrão 2%): abaixo dela a diferença é
+   ruído de balança, não divergência. Com 0% **958 das 959** OPs "divergem", o
+   que não informa nada.
+
+### ⚠️ A situação olha o químico E o material — e isso foi um defeito meu
+
+A primeira versão classificava a OP só pelo percentual do **químico**. Resultado:
+a **maior perda do arquivo inteiro** (OP 1941769, R$ −58.819) aparecia como
+**"Dentro da faixa"** — o químico dela estava a 1,1%, e quem estourou foi o
+**aço**, a −306%. Foi pego no navegador, olhando a primeira linha da tabela.
+
+Hoje `mfgDivergencias()` mede os dois contra a mesma tolerância e **basta um
+estourar** para a OP ser divergência; `mfgOndeDiverge()` escreve qual dos dois
+foi ("no químico", "no aço/filme", "químico e material"). A **direção** segue o
+**dinheiro**, não o químico: uma OP que economizou químico e desperdiçou aço
+perdeu dinheiro, e é isso que ela precisa dizer. Conferido depois da correção:
+**zero** OPs com mais de R$ 5.000 de impacto continuam rotuladas "Dentro da
+faixa", e os totais não mudaram (a classificação mudou, a aritmética não).
+
+### A tela funciona sem o banco
+
+Subir o arquivo, calcular, filtrar, abrir o detalhe de cada OP e exportar **não
+dependem de tabela nenhuma**: a conta inteira acontece no navegador, e o arquivo
+não sai da máquina. O `fase42` acrescenta só o **histórico** — guardar o
+resultado de cada semana para responder "a unidade está melhorando?". Enquanto
+não rodar, o botão "Guardar esta análise" avisa que a tabela não existe e a
+análise na tela continua valendo.
+
+- ⚠️ **Guarda o RESULTADO (~960 linhas por semana), não as ~30.000 de consumo
+  que entraram.** O consumo é insumo: cabe no arquivo, e regravá-lo toda semana
+  seriam 1,5 milhão de linhas por ano para responder perguntas que o próprio
+  arquivo já responde. Mesma ordem de grandeza de `analise_demanda`.
+- ⚠️ **Aqui NÃO se substitui**, diferente de `analise_demanda` (fase19), que é o
+  retrato do dia. Lá o passado não interessa; aqui o passado **é o produto** — a
+  variação de uma semana só vira informação comparada com as outras.
+- ⚠️ **A `tolerancia` fica gravada**, e não é enfeite: é a régua que decidiu
+  quantas OPs contaram como divergentes naquele dia. Sem guardá-la, mudar de 2%
+  para 3% faria análises antigas "terem menos divergência" sem nada ter mudado
+  na fábrica. Mesmo princípio dos totais gravados em `inventarios` (fase41).
+- **RLS por `pode_ver_analise_compras()`**, a mesma trava da Análise de Compras
+  — e não `esta_aprovado()`. É resultado industrial com preço de matéria-prima
+  dentro: mesma natureza de dado, seria incoerente fechar uma e deixar a outra
+  aberta. **Há política de DELETE (só admin)**, diferente do inventário: uma
+  importação é um arquivo, e arquivo errado (semana trocada, export pela metade)
+  acontece — sem poder apagar, o primeiro engano ficaria para sempre torcendo a
+  série histórica.
+
+### De quebra: duas tabelas estavam fora do backup
+
+Ao acrescentar `mfg_analises` e `mfg_ops` em `TABELAS_BACKUP`
+(`js/configuracoes.js`), apareceu que **`inventarios` e `inventario_itens`
+(fase41) nunca tinham entrado** — exatamente a omissão silenciosa que a seção 24
+avisa que acontece. As quatro foram acrescentadas; a lista tem 42 tabelas.
+
+### Detalhes que evitam defeito
+
+- ⚠️ **Os m² são somados pelo `Nro Documento`**, não pelo `Nr Ord Prod` — é o
+  que a fórmula do MFG faz. Na prática os dois são iguais, mas trocar a coluna
+  faria a conferência contra a planilha da empresa parar de bater.
+- **Teto de 300 linhas desenhadas**, com o total dito na tela. São 959 OPs por
+  semana, e desenhar todas trava a aba — o corte nunca é silencioso.
+- **A ordem é a do dinheiro**: a maior perda em cima. É a OP que precisa ser
+  investigada primeiro; ordem alfabética esconderia o problema. Mesma decisão da
+  aba Conferir e da lista de reservas.
+- **Os cards contam o que o FILTRO deixou**, para o dinheiro bater com a tabela
+  que está na frente da pessoa; quantas OPs existem no total vai na linha de
+  resumo ao lado.
+- Ler o arquivo de 10,8 MB leva **~20 segundos**. A mensagem "Calculando as
+  OPs..." é pintada **antes** do cálculo travar a linha do tempo (um
+  `setTimeout` de 30 ms), senão ela só apareceria no fim.
+
+Conferido no navegador com o arquivo real de 10,8 MB, pelo mesmo handler do
+input de arquivo: 959 OPs analisadas e 15 sem apontamento; a OP 1938428 bate
+**casa a casa** com a planilha nas dez métricas (teórico 209,7669 · report
+213,7010 · material 681,2430/830 · R$ −74,2454/−751,6311 · densidade realizada
+30,8683 · MDI÷POLIOL 2,4736); o total por unidade reproduz o cálculo
+independente ao centavo (**R$ −159.752,95**); filtros de unidade, classe,
+situação e busca recortam certo; a tolerância muda a contagem de divergentes
+(958 → 654 → 221 com 0%, 2% e 10%); o modal de detalhe abre pelo clique real e
+traz as quatro seções; a exportação sai com 36 colunas e 959 linhas; **zero
+texto abaixo de 4,5:1 nos dois temas**, modal incluído; no celular a tabela por
+unidade rola dentro da própria caixa e nada estoura a largura. Zero erro de
+console.
