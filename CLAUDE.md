@@ -3,7 +3,7 @@
 Contexto do projeto para qualquer agente de IA ou pessoa que for mexer neste repositório.
 Sempre em **português do Brasil**.
 
-**Atualizado:** 15/09/2026 (Análise MFG: consumo teórico x reportado por OP)
+**Atualizado:** 15/09/2026 (Análise MFG: por unidade, e as planilhas soltas)
 **Mantenedores:** Robson (dono do projeto e admin geral) · Victor Dobner (colaborador)
 
 > Este arquivo é lido automaticamente pelo Claude Code ao abrir a pasta do projeto.
@@ -4700,3 +4700,90 @@ traz as quatro seções; a exportação sai com 36 colunas e 959 linhas; **zero
 texto abaixo de 4,5:1 nos dois temas**, modal incluído; no celular a tabela por
 unidade rola dentro da própria caixa e nada estoura a largura. Zero erro de
 console.
+
+### Separada por unidade, e aceitando as planilhas soltas (15/09/2026)
+
+O Victor, logo depois: *"Primeiro, separar por unidade. Segundo: Seria
+interessante ter um botão para carregar as planilhas de entrada de material e
+consumo de material, e a partir dai gerar o MFG e fazer a analise. Elas são
+exatamente como a aba Acabado e consumo da planilha que eu anexei do MFG."*
+
+#### 1. A tela abre na unidade do cabeçalho
+
+O arquivo do MFG traz as **cinco fábricas juntas**, e a primeira versão abria no
+consolidado. Agora `mfgMontarFiltros()` aponta o filtro para `unidadeAtual` — é
+o idioma de todo o portal, onde o seletor do topo manda em todas as telas — e
+`mfgTrocarUnidade()` entrou em `trocarUnidade()` (`js/estoque.js`), ao lado das
+outras páginas.
+
+⚠️ **Trocar a unidade NÃO relê o arquivo.** As outras telas recarregam do banco;
+aqui os dados das cinco fábricas já estão em memória, e reler custaria 20
+segundos de parsing à toa. Só o filtro se reaponta.
+
+⚠️ **O quadro por unidade é o único lugar que IGNORA o filtro de unidade**
+(`mfgFiltradas(true)`). Filtrá-lo junto o deixaria com uma linha só — e "como a
+minha fábrica está contra as outras" é justamente o que o MFG da empresa não
+respondia sem tabela dinâmica por fora. Ele mostra as cinco mais a linha "Todas
+as unidades", a linha da unidade em foco fica destacada, e **clicar numa linha
+aponta a tela para aquela unidade** (os cards e a tabela seguem; o quadro, não).
+
+#### 2. Duas planilhas soltas bastam — depois de uma vez com o arquivo completo
+
+Dois botões: **"📄 Carregar planilhas de Acabado e Consumo"** e **"📂 Arquivo
+completo do MFG"**. Os dois caem na mesma `mfgAbrirArquivos()`, que aceita
+**vários arquivos de uma vez** e classifica **cada aba de cada arquivo**.
+
+⚠️ **A classificação é por CONTEÚDO, não pelo nome da aba.** Um export do
+Datasul salvo à parte chega como "Planilha1". E Acabado e Consumo têm o
+cabeçalho **quase idêntico** — são o mesmo relatório de movimentação, de pontas
+opostas. Conferido no arquivo real, o que de fato separa as duas:
+
+| | Acabado | Consumo |
+|---|---|---|
+| Grupo de Estoque | `25 - PRODUTOS ACABADOS` | `10 - MATERIAS-PRIMAS` |
+| Esp Docto | `ACA` (apontamento) | `REQ` / `RRQ` (requisição) |
+| Quantidade | positiva (entrou) | negativa (baixou) |
+
+Os três **votam**, e o vencedor leva: um sinal sozinho erraria na linha atípica
+(o Acabado tem 1 quantidade negativa em 3.000, o Consumo tem 158 positivas).
+
+⚠️ **As colunas `Químico`, `Chave Custo`, `Unitário` e `Médio Total` do Consumo
+NÃO existem no export cru** — são fórmulas que a planilha do MFG acrescenta.
+Por isso não entram na classificação nem na conta: o portal recalcula as quatro
+a partir de Item, Vl Materiais e Quantidade, que vêm do Datasul. (No Acabado, só
+`Qtd` é fórmula.) É o que faz a planilha solta bastar.
+
+#### ⚠️ Sem cadastro não existe teórico — e é por isso que o arquivo completo vem uma vez
+
+**Base de Dados** e **Densidades** são o que diz espessura, densidade, largura
+útil e os índices de aço/filme/alumínio. Sem elas o teórico é 0 e a análise não
+existe. Mas elas mudam raramente, e o que chega toda semana é só Acabado +
+Consumo — exatamente o que o pedido descreve.
+
+Então o cadastro do último arquivo completo fica **guardado no navegador**
+(`localStorage`, ~600 KB para 3.571 produtos), e as importações seguintes usam
+o guardado. A tela diz, em cima, se há cadastro e de quando — sem isso a pessoa
+clicaria no botão e só descobriria no erro. Quando as duas planilhas chegam sem
+cadastro nenhum, a mensagem diz o que fazer, em vez de só falhar.
+
+- ⚠️ **Só o que faltou vem do guardado.** Subir o arquivo completo junto com uma
+  planilha solta usa a Base de Dados **do arquivo**, que é a mais nova.
+- **`localStorage`, e não banco**: é dado de referência (espessura e densidade de
+  produto), cabe com folga, e guardá-lo no Supabase pediria mais uma tabela e
+  mais um script para rodar — para resolver uma conveniência. O preço é ser por
+  navegador, e a tela escreve isso com a data.
+- **Cota estourada não atrapalha a análise**: o cadastro continua valendo nesta
+  sessão (está em memória), só não sobrevive ao F5. Vira `console.warn`.
+
+Conferido no navegador, partindo o arquivo real em duas planilhas soltas **com a
+aba renomeada para "Planilha1"** (é o caso real): sem cadastro guardado, as duas
+soltas são recusadas com a explicação; o arquivo completo calcula e guarda o
+cadastro (3.571 produtos, 596 KB); as duas soltas sozinhas então produzem
+**exatamente o mesmo resultado** — 959 OPs, 15 sem apontamento, e **R$
+−159.752,95 idêntico ao do arquivo completo**. A tela abre na unidade do
+cabeçalho (202 OPs da 106, R$ 32.724,12) e todas as linhas filtradas são dela; o
+quadro comparativo continua com as cinco fábricas mais o total; clicar na 103
+aponta a tela (R$ −159.898,60) e move o destaque; clicar em "Todas as unidades"
+volta ao consolidado; `trocarUnidade('101')` de verdade reaponta o filtro sem
+reler o arquivo. **Zero texto abaixo de 4,5:1 nos dois temas**, e no celular nada
+estoura a largura. Zero erro de console.

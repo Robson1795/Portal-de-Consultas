@@ -1397,6 +1397,14 @@ td.col-acoes { white-space: nowrap; text-align: center; }
 }
 .mfg-linha-total td { border-top: 2px solid var(--border-forte); }
 
+/* Linha do quadro comparativo: clicar aponta a tela para aquela unidade. */
+.mfg-linha-unidade { cursor: pointer; }
+.mfg-linha-unidade:hover td { background: var(--panel-2); }
+/* A unidade em foco. `box-shadow` como filete lateral em vez de `border-left`,
+   que empurraria a célula e faria a tabela tremer ao trocar de unidade. */
+.mfg-unidade-ativa td { background: var(--azul-fundo); }
+.mfg-unidade-ativa td:first-child { box-shadow: inset 3px 0 0 var(--blue); }
+
 /* O botao de lupa por linha: pequeno, so abre o detalhe, nao decide nada. */
 .btn-mini {
   padding: 2px 8px; font-size: 13px; line-height: 1.5;

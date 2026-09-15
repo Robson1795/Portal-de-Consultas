@@ -187,12 +187,6 @@ function mfgMapearColunas(cabecalho, definicao) {
   return mapa;
 }
 
-function mfgAcharAba(livro, pedaco) {
-  const alvo = mfgChaveCabecalho(pedaco);
-  return livro.SheetNames.find(n => mfgChaveCabecalho(n) === alvo)
-      || livro.SheetNames.find(n => mfgChaveCabecalho(n).indexOf(alvo) >= 0);
-}
-
 function mfgMatriz(livro, nomeAba) {
   const ws = livro.Sheets[nomeAba];
   return ws ? XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, blankrows: false }) : [];
@@ -293,26 +287,119 @@ function mfgLerDensidades(matriz) {
   return larguras;
 }
 
-// ---- O cálculo --------------------------------------------------------------
-function mfgCalcular(livro) {
-  const nomes = {
-    consumo:   mfgAcharAba(livro, 'Consumo'),
-    acabado:   mfgAcharAba(livro, 'Acabado'),
-    base:      mfgAcharAba(livro, 'Base de Dados'),
-    densidade: mfgAcharAba(livro, 'Densidades')
-  };
-  const faltando = Object.keys(nomes).filter(k => !nomes[k]);
-  if (faltando.length) {
-    throw new Error('O arquivo não tem a(s) aba(s): ' + faltando.join(', ')
-      + '. Esperado: Consumo, Acabado, Base de Dados e Densidades.');
-  }
+// ---- Que aba é esta? --------------------------------------------------------
+//
+// O Victor: *"Seria interessante ter um botão para carregar as planilhas de
+// entrada de material e consumo de material... Elas são exatamente como a aba
+// Acabado e consumo da planilha que eu anexei do MFG."*
+//
+// ⚠️ O NOME DA ABA NÃO SERVE DE CRITÉRIO quando os arquivos vêm soltos: um
+// export do Datasul salvo à parte chega com a aba chamada "Planilha1". Então a
+// classificação é por CONTEÚDO, e o nome só entra como atalho quando bate.
+//
+// ⚠️ E Acabado e Consumo têm o cabeçalho quase IDÊNTICO — as duas são o mesmo
+// relatório de movimentação, só que de pontas opostas. Conferido no arquivo
+// real, o que de fato separa as duas:
+//
+//   | | Acabado | Consumo |
+//   | Grupo de Estoque | 25 - PRODUTOS ACABADOS | 10 - MATERIAS-PRIMAS |
+//   | Esp Docto        | ACA (apontamento)      | REQ / RRQ (requisição) |
+//   | Quantidade       | positiva (entrou)      | negativa (baixou) |
+//
+// Os três votam, e o vencedor leva — um só erraria na linha atípica (o Acabado
+// tem 1 quantidade negativa em 3.000, o Consumo tem 158 positivas).
+//
+// ⚠️ As colunas "Químico", "Unitário" e "Médio Total" do Consumo NÃO existem no
+// export cru: são fórmulas que a planilha do MFG acrescenta. Por isso elas não
+// entram na classificação nem na conta — o portal recalcula as três a partir de
+// Item, Vl Materiais e Quantidade, que vêm do Datasul.
+function mfgClassificarAba(matriz, nomeAba) {
+  const nome = mfgChaveCabecalho(nomeAba);
+  if (nome.indexOf('densidade') >= 0) return 'densidades';
+  if (nome.indexOf('base de dados') >= 0) return 'base';
 
-  const base = mfgLerBaseDeDados(mfgMatriz(livro, nomes.base));
-  if (!base) throw new Error('Não reconheci o cabeçalho da aba "Base de Dados".');
-  const larguras = mfgLerDensidades(mfgMatriz(livro, nomes.densidade));
+  const cab = mfgAcharCabecalho(matriz, ['item', 'quantidade', 'familia', 'pm', 'rb',
+                                         'densidade', 'familia mfg', 'nr ord prod']);
+  if (cab.linha < 0) return null;
+  const chaves = (matriz[cab.linha] || []).map(mfgChaveCabecalho);
+  const tem = n => chaves.indexOf(n) >= 0;
+
+  if (tem('familia mfg') || tem('espessura aca')) return 'base';
+  if (tem('pm') && tem('rb') && tem('densidade')) return 'densidades';
+  if (!tem('nr ord prod') || !tem('quantidade')) return null;
+  if (nome === 'consumo') return 'consumo';
+  if (nome === 'acabado') return 'acabado';
+
+  const iGrupo = chaves.indexOf('grupo de estoque');
+  const iEsp = chaves.indexOf('esp docto');
+  const iQtd = chaves.indexOf('quantidade');
+  let acabado = 0, consumo = 0;
+  for (let i = cab.linha + 1, vistas = 0; i < matriz.length && vistas < 400; i++) {
+    const L = matriz[i] || [];
+    if (!L.length) continue;
+    vistas++;
+    const g = String(L[iGrupo] == null ? '' : L[iGrupo]).toUpperCase();
+    if (g.indexOf('ACABADO') >= 0) acabado++;
+    else if (g.indexOf('MATERIA') >= 0) consumo++;
+    const e = String(L[iEsp] == null ? '' : L[iEsp]).toUpperCase().trim();
+    if (e === 'ACA' || e === 'EAC') acabado++;
+    else if (e === 'REQ' || e === 'RRQ' || e === 'DEV') consumo++;
+    const q = mfgNum(L[iQtd]);
+    if (q > 0) acabado++; else if (q < 0) consumo++;
+  }
+  if (!acabado && !consumo) return null;
+  return acabado >= consumo ? 'acabado' : 'consumo';
+}
+
+// ---- O cadastro fica guardado entre importações -----------------------------
+//
+// ⚠️ Sem "Base de Dados" e "Densidades" NÃO DÁ para calcular teórico nenhum:
+// são elas que dizem a espessura, a densidade, a largura útil e os índices de
+// aço/filme/alumínio de cada produto. Mas elas mudam raramente, e o que chega
+// toda semana é só Acabado + Consumo — foi exatamente isso que o pedido do
+// Victor descreveu.
+//
+// Então o cadastro do último arquivo completo fica guardado no navegador, e as
+// importações seguintes podem trazer só as duas planilhas do período. Se o
+// cadastro mudar, é só subir o arquivo completo de novo uma vez.
+//
+// ⚠️ localStorage, e não banco: é dado de referência público (espessura e
+// densidade de produto), cabe em ~300 KB, e guardá-lo no Supabase exigiria mais
+// uma tabela e mais um script para rodar, para resolver uma conveniência. O
+// preço é ser por navegador — e a tela diz isso, com a data de quando veio.
+const MFG_CHAVE_CADASTRO = 'portal_mfg_cadastro';
+let mfgCadastro = null;
+
+function mfgGuardarCadastro(base, larguras, arquivo) {
+  mfgCadastro = { base, larguras, arquivo, quando: new Date().toISOString() };
+  try {
+    localStorage.setItem(MFG_CHAVE_CADASTRO, JSON.stringify(mfgCadastro));
+  } catch (e) {
+    // Cota estourada ou navegador anônimo: o cadastro continua valendo NESTA
+    // sessão (está em memória), só não sobrevive ao F5. Não é motivo para
+    // atrapalhar a análise que a pessoa acabou de pedir.
+    console.warn('Análise MFG: não consegui guardar o cadastro no navegador.', e.message);
+  }
+}
+
+function mfgLerCadastroGuardado() {
+  if (mfgCadastro) return mfgCadastro;
+  try {
+    const cru = localStorage.getItem(MFG_CHAVE_CADASTRO);
+    if (cru) mfgCadastro = JSON.parse(cru);
+  } catch (e) {
+    console.warn('Análise MFG: o cadastro guardado não pôde ser lido.', e.message);
+  }
+  return mfgCadastro;
+}
+
+// ---- O cálculo --------------------------------------------------------------
+function mfgCalcular(fontes) {
+  const base = fontes.base;
+  const larguras = fontes.larguras;
 
   // ---- Acabado: o que foi produzido -----------------------------------------
-  const mAcab = mfgMatriz(livro, nomes.acabado);
+  const mAcab = fontes.acabado;
   const cabAcab = mfgAcharCabecalho(mAcab, ['item', 'quantidade', 'nr ord prod', 'estab']);
   const cA = mfgMapearColunas(mAcab[cabAcab.linha] || [], {
     item:      ['Item'],
@@ -353,7 +440,7 @@ function mfgCalcular(livro) {
   }
 
   // ---- Consumo: o que foi baixado -------------------------------------------
-  const mCons = mfgMatriz(livro, nomes.consumo);
+  const mCons = fontes.consumo;
   const cabCons = mfgAcharCabecalho(mCons, ['item', 'familia', 'quantidade', 'nr ord prod']);
   const cC = mfgMapearColunas(mCons[cabCons.linha] || [], {
     item:    ['Item'],
@@ -564,13 +651,18 @@ const MFG_SITUACOES = {
   sem_cadastro: { rotulo: 'Sem cadastro',     classe: 'mfg-gray', ajuda: 'Não dá para calcular o teórico: falta cadastro. Fora da conta de perda e ganho.' }
 };
 
-// ---- Abrir o arquivo --------------------------------------------------------
-async function mfgAbrirArquivo(arquivo) {
+// ---- Abrir os arquivos ------------------------------------------------------
+//
+// Aceita, na mesma seleção: o arquivo completo do MFG (quatro abas), OU só as
+// planilhas de Acabado e Consumo do período, OU uma mistura — cada aba de cada
+// arquivo é classificada por conteúdo, e a última encontrada de cada tipo vale.
+async function mfgAbrirArquivos(arquivos) {
   const msg = document.getElementById('mfgMsg');
-  if (!arquivo) return;
-  mfgArquivo = arquivo.name;
+  const lista = Array.from(arquivos || []);
+  if (!lista.length) return;
+  mfgArquivo = lista.map(a => a.name).join(' + ');
   msg.className = 'status-msg';
-  msg.textContent = 'Lendo ' + arquivo.name + '...';
+  msg.textContent = 'Lendo ' + lista.length + ' arquivo(s)...';
 
   try {
     await carregarBiblioteca('o leitor de Excel', CDN_XLSX, () => typeof XLSX !== 'undefined');
@@ -581,28 +673,75 @@ async function mfgAbrirArquivo(arquivo) {
   }
 
   try {
-    const buffer = await arquivo.arrayBuffer();
+    const achadas = {};
+    const relato = [];
+    for (const arquivo of lista) {
+      msg.textContent = 'Lendo ' + arquivo.name + '...';
+      await new Promise(r => setTimeout(r, 20));
+      const livro = XLSX.read(new Uint8Array(await arquivo.arrayBuffer()), { type: 'array' });
+      for (const nomeAba of livro.SheetNames) {
+        const matriz = mfgMatriz(livro, nomeAba);
+        if (matriz.length < 2) continue;
+        const tipo = mfgClassificarAba(matriz, nomeAba);
+        if (!tipo) continue;
+        achadas[tipo] = matriz;
+        relato.push(nomeAba + ' → ' + tipo);
+      }
+    }
+
+    if (!achadas.acabado || !achadas.consumo) {
+      const faltam = [!achadas.acabado && 'Acabado (produção apontada)',
+                      !achadas.consumo && 'Consumo (material baixado)'].filter(Boolean);
+      throw new Error('Não achei a(s) planilha(s) de ' + faltam.join(' e ')
+        + '. Reconheci: ' + (relato.join(', ') || 'nenhuma aba conhecida') + '.');
+    }
+
+    // ---- O cadastro: do próprio arquivo, ou do que ficou guardado -----------
+    let base = achadas.base ? mfgLerBaseDeDados(achadas.base) : null;
+    let larguras = achadas.densidades ? mfgLerDensidades(achadas.densidades) : null;
+    let deOndeVeioOCadastro = 'deste arquivo';
+
+    if (base && larguras) {
+      mfgGuardarCadastro(base, larguras, mfgArquivo);
+    } else {
+      const guardado = mfgLerCadastroGuardado();
+      if (!guardado) {
+        throw new Error('Estas planilhas não trazem "Base de Dados" e "Densidades", e ainda não há '
+          + 'cadastro guardado neste navegador. Suba UMA VEZ o arquivo completo do MFG — depois disso '
+          + 'só Acabado e Consumo bastam.');
+      }
+      // ⚠️ Só o que faltou vem do guardado. Subir o arquivo completo e uma
+      // planilha solta junto tem de usar a Base de Dados do arquivo completo,
+      // que é a mais nova.
+      base = base || guardado.base;
+      larguras = larguras || guardado.larguras;
+      const d = new Date(guardado.quando);
+      deOndeVeioOCadastro = 'guardado em ' + d.toLocaleDateString('pt-BR')
+        + ' (' + guardado.arquivo + ')';
+    }
+
     msg.textContent = 'Calculando as OPs...';
     // Deixa o navegador pintar o "Calculando" antes de travar no cálculo: são
     // 30 mil linhas de consumo, e sem isto a mensagem só apareceria no fim.
     await new Promise(r => setTimeout(r, 30));
 
-    const livro = XLSX.read(new Uint8Array(buffer), { type: 'array' });
-    const r = mfgCalcular(livro);
+    const r = mfgCalcular({ acabado: achadas.acabado, consumo: achadas.consumo, base, larguras });
     mfgLinhas = r.linhas;
     mfgSemApontamento = r.semApontamento;
     mfgVendoSemApontamento = false;
 
     mfgMontarFiltros();
+    mfgMostrarCadastro();
     mfgRender();
     msg.className = 'status-msg ok';
-    msg.textContent = '✓ ' + mfgLinhas.length + ' OP(s) analisada(s) de ' + arquivo.name
-      + (mfgSemApontamento.length ? ' — e ' + mfgSemApontamento.length + ' OP(s) com consumo sem apontamento.' : '.');
+    msg.textContent = '✓ ' + mfgLinhas.length + ' OP(s) analisada(s)'
+      + (mfgSemApontamento.length ? ', ' + mfgSemApontamento.length + ' com consumo sem apontamento' : '')
+      + ' — cadastro ' + deOndeVeioOCadastro + '.';
     document.getElementById('mfgSalvarBtn').style.display = '';
   } catch (e) {
     console.error('Análise MFG:', e);
     msg.className = 'status-msg erro';
-    msg.textContent = 'Não consegui ler o arquivo: ' + e.message;
+    msg.textContent = 'Não consegui ler: ' + e.message;
   }
 }
 
@@ -612,16 +751,39 @@ function mfgMontarFiltros() {
   const classes = [...new Set(mfgLinhas.map(l => l.classe).filter(Boolean))].sort();
   const selEst = document.getElementById('mfgFiltroEst');
   const selClasse = document.getElementById('mfgFiltroClasse');
-  selEst.innerHTML = '<option value="">Todas as unidades</option>'
+  selEst.innerHTML = '<option value="">Todas as unidades (consolidado)</option>'
     + ests.map(e => '<option value="' + escapeHtml(e) + '">' + escapeHtml(rotuloUnidade(e) || e) + '</option>').join('');
   selClasse.innerHTML = '<option value="">Todas as classes</option>'
     + classes.map(c => '<option value="' + escapeHtml(c) + '">' + escapeHtml(c) + '</option>').join('');
+
+  // ⚠️ ABRE NA UNIDADE DO CABEÇALHO, e não no consolidado. O arquivo do MFG traz
+  // as cinco fábricas juntas, e quem abre a tela quer ver a sua — é o idioma de
+  // todo o portal (o seletor do topo manda em todas as outras telas). O
+  // consolidado continua a um clique, porque comparar as unidades é justamente
+  // o que o MFG da empresa não deixava fazer sem tabela dinâmica por fora.
+  mfgFiltros.est = ests.includes(unidadeAtual) ? unidadeAtual : '';
+  selEst.value = mfgFiltros.est;
+  selClasse.value = mfgFiltros.classe = '';
 }
 
-function mfgFiltradas() {
+// Trocar a unidade no cabeçalho reaponta a análise que já está em memória --
+// sem pedir o arquivo de novo, porque ele já tem as cinco fábricas dentro.
+// Chamada por trocarUnidade() em js/estoque.js, junto com as outras telas.
+function mfgTrocarUnidade() {
+  if (!mfgLinhas.length) return;
+  const ests = new Set(mfgLinhas.map(l => l.est));
+  mfgFiltros.est = ests.has(unidadeAtual) ? unidadeAtual : '';
+  const sel = document.getElementById('mfgFiltroEst');
+  if (sel) sel.value = mfgFiltros.est;
+  mfgRender();
+}
+
+// `ignorarUnidade` serve ao quadro comparativo, que mostra as cinco fábricas
+// mesmo com a tela filtrada numa só -- ver a nota em mfgRender().
+function mfgFiltradas(ignorarUnidade) {
   const busca = mfgFiltros.busca.trim().toLowerCase();
   return mfgLinhas.filter(l => {
-    if (mfgFiltros.est && l.est !== mfgFiltros.est) return false;
+    if (!ignorarUnidade && mfgFiltros.est && l.est !== mfgFiltros.est) return false;
     if (mfgFiltros.classe && l.classe !== mfgFiltros.classe) return false;
     if (mfgFiltros.situacao && mfgSituacao(l, mfgFiltros.tolerancia) !== mfgFiltros.situacao) return false;
     if (busca) {
@@ -690,14 +852,22 @@ function mfgRender() {
         : '');
 
   // ---- Quadro por unidade --------------------------------------------------
+  //
+  // ⚠️ Este quadro mostra SEMPRE todas as fábricas do arquivo, mesmo com a tela
+  // filtrada numa só (é o único lugar com `ignorarUnidade`). Filtrá-lo junto o
+  // deixaria com uma linha só -- e "como a minha unidade está contra as outras"
+  // é justamente a pergunta que o MFG da empresa não respondia sem tabela
+  // dinâmica por fora. Clicar numa linha aponta a tela para aquela unidade, e a
+  // linha da unidade em foco fica destacada.
   const porEst = {};
-  linhas.forEach(l => {
+  mfgFiltradas(true).forEach(l => {
     if (mfgSituacao(l, tol) === 'sem_cadastro') return;
     const u = porEst[l.est] || (porEst[l.est] = { ops: 0, m2: 0, perda: 0, ganho: 0 });
     u.ops++; u.m2 += l.m2;
     if (l.rsTotal < 0) u.perda += l.rsTotal; else u.ganho += l.rsTotal;
   });
   const ests = Object.keys(porEst).sort();
+  const totalGeral = ests.reduce((s, e) => s + porEst[e].ganho + porEst[e].perda, 0);
   porUnidade.innerHTML = ests.length <= 1 ? '' :
     '<table class="mfg-tabela-unidade"><thead><tr>'
     + '<th>Unidade</th><th>OPs</th><th>m²</th><th>Ganho</th><th>Perda</th><th>Resultado</th>'
@@ -705,13 +875,19 @@ function mfgRender() {
     + ests.map(e => {
         const u = porEst[e];
         const liq = u.ganho + u.perda;
-        return '<tr><td>' + escapeHtml(rotuloUnidade(e) || e) + '</td>'
+        return '<tr class="mfg-linha-unidade' + (mfgFiltros.est === e ? ' mfg-unidade-ativa' : '') + '"'
+          + ' data-est="' + escapeHtml(e) + '" title="Clique para ver só esta unidade">'
+          + '<td>' + escapeHtml(rotuloUnidade(e) || e) + '</td>'
           + '<td>' + u.ops + '</td>'
           + '<td>' + mfgFmt(u.m2, 0) + '</td>'
           + '<td class="mfg-good">' + mfgRS(u.ganho) + '</td>'
           + '<td class="mfg-bad">' + mfgRS(u.perda) + '</td>'
           + '<td class="' + (liq < 0 ? 'mfg-bad' : 'mfg-good') + '"><b>' + mfgRS(liq) + '</b></td></tr>';
       }).join('')
+    + '<tr class="mfg-linha-total mfg-linha-unidade' + (mfgFiltros.est ? '' : ' mfg-unidade-ativa') + '"'
+    + ' data-est="" title="Clique para ver todas as unidades juntas">'
+    + '<td><b>Todas as unidades</b></td><td></td><td></td><td></td><td></td>'
+    + '<td class="' + (totalGeral < 0 ? 'mfg-bad' : 'mfg-good') + '"><b>' + mfgRS(totalGeral) + '</b></td></tr>'
     + '</tbody></table>';
 
   // ---- A lista -------------------------------------------------------------
@@ -1036,15 +1212,37 @@ async function carregarHistoricoMfg() {
     + '</tbody></table>';
 }
 
+// Diz se já há cadastro guardado — é o que decide se as duas planilhas soltas
+// bastam. Sem esta linha, a pessoa clicaria no botão e só descobriria no erro.
+function mfgMostrarCadastro() {
+  const alvo = document.getElementById('mfgCadastroInfo');
+  if (!alvo) return;
+  const c = mfgLerCadastroGuardado();
+  if (!c) {
+    alvo.innerHTML = '<br><b class="mfg-bad">Ainda não há cadastro guardado neste navegador</b>'
+      + ' — comece pelo arquivo completo do MFG.';
+    return;
+  }
+  const quantos = Object.keys((c.base && c.base.produtos) || {}).length;
+  alvo.innerHTML = '<br><b class="mfg-good">✓ Cadastro guardado</b> — ' + quantos
+    + ' produto(s), de ' + escapeHtml(c.arquivo || 'arquivo anterior') + ', em '
+    + new Date(c.quando).toLocaleDateString('pt-BR') + '.';
+}
+
 function carregarMfg() {
+  mfgMostrarCadastro();
   mfgRender();
   carregarHistoricoMfg();
 }
 
 // ---- Ligações ---------------------------------------------------------------
 document.getElementById('mfgArquivoInput').addEventListener('change', (e) => {
-  mfgAbrirArquivo(e.target.files && e.target.files[0]);
+  mfgAbrirArquivos(e.target.files);
   e.target.value = '';   // permite reescolher o MESMO arquivo depois de corrigir
+});
+document.getElementById('mfgPlanilhasInput').addEventListener('change', (e) => {
+  mfgAbrirArquivos(e.target.files);
+  e.target.value = '';
 });
 document.getElementById('mfgFiltroEst').addEventListener('change', (e) => {
   mfgFiltros.est = e.target.value; mfgRender();
@@ -1077,6 +1275,14 @@ document.getElementById('mfgSalvarBtn').addEventListener('click', mfgSalvarAnali
 document.getElementById('mfgBody').addEventListener('click', (e) => {
   const btn = e.target.closest('.mfg-detalhe-btn');
   if (btn) mfgAbrirDetalhe(btn.dataset.op);
+});
+// Clicar numa linha do quadro comparativo aponta a tela para aquela unidade.
+document.getElementById('mfgPorUnidade').addEventListener('click', (e) => {
+  const tr = e.target.closest('.mfg-linha-unidade');
+  if (!tr) return;
+  mfgFiltros.est = tr.dataset.est || '';
+  document.getElementById('mfgFiltroEst').value = mfgFiltros.est;
+  mfgRender();
 });
 document.getElementById('mfgDetalheModal').addEventListener('click', (e) => {
   if (e.target === document.getElementById('mfgDetalheModal')) mfgFecharDetalhe();

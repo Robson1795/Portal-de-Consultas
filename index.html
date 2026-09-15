@@ -1396,10 +1396,16 @@
       </div>
 
       <div class="cfg-barra">
-        <label class="btn btn-primary" for="mfgArquivoInput" style="cursor:pointer;">
-          📂 Escolher arquivo do MFG (.xlsx)
+        <label class="btn btn-primary" for="mfgPlanilhasInput" style="cursor:pointer;"
+               title="As duas planilhas do período: a de produção apontada e a de material baixado">
+          📄 Carregar planilhas de Acabado e Consumo
         </label>
-        <input type="file" id="mfgArquivoInput" accept=".xlsx,.xlsm" style="display:none;">
+        <input type="file" id="mfgPlanilhasInput" accept=".xlsx,.xlsm,.xls" multiple style="display:none;">
+        <label class="btn" for="mfgArquivoInput" style="cursor:pointer;"
+               title="O arquivo inteiro do MFG, com as quatro abas — é ele que traz o cadastro">
+          📂 Arquivo completo do MFG
+        </label>
+        <input type="file" id="mfgArquivoInput" accept=".xlsx,.xlsm,.xls" multiple style="display:none;">
         <button class="btn" id="mfgSemApontamentoBtn"
                 title="OPs que baixaram matéria-prima e nunca apontaram produção — o MFG da empresa não mostra estas">
           🚨 Consumo sem OP
@@ -1412,9 +1418,15 @@
       </div>
 
       <div class="modal-text" style="margin:0 0 14px; font-size:12.5px; color:var(--muted);">
-        O arquivo precisa ter as abas <b>Consumo</b>, <b>Acabado</b>, <b>Base de Dados</b> e
-        <b>Densidades</b> — é o mesmo arquivo que já roda hoje. Nada é enviado para
-        fora: a leitura e a conta acontecem no seu próprio navegador.
+        As duas planilhas do período são <b>Acabado</b> (produção apontada) e <b>Consumo</b>
+        (material baixado) — as mesmas abas do arquivo do MFG, e o portal reconhece cada uma
+        pelo conteúdo, mesmo que a aba venha com outro nome. Pode escolher os dois arquivos de
+        uma vez.
+        <br>⚠️ <b>Espessura, densidade, largura útil e os índices de aço/filme/alumínio</b> vêm da
+        <b>Base de Dados</b> e da <b>Densidades</b>. Suba o <b>arquivo completo do MFG uma vez</b>:
+        o cadastro fica guardado neste navegador e, daí em diante, só Acabado e Consumo bastam.
+        <br>Nada é enviado para fora — a leitura e a conta acontecem no seu próprio navegador.
+        <span id="mfgCadastroInfo"></span>
       </div>
 
       <div class="stat-cards" id="mfgCards"></div>
