@@ -2633,6 +2633,10 @@ async function trocarUnidade(cod) {
   if (paginaAtual === 'painel') await carregarPainel();
   if (paginaAtual === 'bobinas') await loadBobinas();
   if (paginaAtual === 'analise') await carregarAnalise();
+  // A Análise MFG não recarrega nada: o arquivo importado já traz as cinco
+  // fábricas juntas, então trocar a unidade só reaponta o filtro do que está em
+  // memória. Pedir o arquivo de novo custaria 20 segundos de leitura à toa.
+  if (paginaAtual === 'mfg' && typeof mfgTrocarUnidade === 'function') mfgTrocarUnidade();
   if (paginaAtual === 'requisicao') await carregarRequisicao();
   if (paginaAtual === 'debitodireto' && typeof carregarDebitoDireto === 'function') await carregarDebitoDireto();
   // Se a contagem estava ativa e a unidade ja foi desbloqueada nesta sessao,

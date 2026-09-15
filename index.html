@@ -1554,6 +1554,159 @@
   </div>
   <!-- ==================== FIM PAINEL DE DOCAS ==================== -->
 
+  <!-- ==================== ANALISE MFG ==================== -->
+  <div id="mfgContent" style="display:none;">
+    <div class="panel">
+      <h2 style="margin:0 0 4px;">📐 Análise MFG</h2>
+      <div class="modal-text" style="margin-bottom:12px;">
+        Suba o arquivo do MFG e o portal refaz a análise de consumo <b>OP por OP</b>:
+        quanto de químico a receita previa, quanto foi realmente baixado, e
+        <b>quanto isso custou ou economizou em reais</b> — para mais e para menos.
+        <br>O cálculo foi conferido contra a própria planilha da empresa:
+        <b>958 de 958 OPs batem</b>, nas dez métricas.
+      </div>
+
+      <div class="cfg-barra">
+        <label class="btn btn-primary" for="mfgPlanilhasInput" style="cursor:pointer;"
+               title="As duas planilhas do período: a de produção apontada e a de material baixado">
+          📄 Carregar planilhas de Acabado e Consumo
+        </label>
+        <input type="file" id="mfgPlanilhasInput" accept=".xlsx,.xlsm,.xls" multiple style="display:none;">
+        <label class="btn" for="mfgArquivoInput" style="cursor:pointer;"
+               title="O arquivo inteiro do MFG, com as quatro abas — é ele que traz o cadastro">
+          📂 Arquivo completo do MFG
+        </label>
+        <input type="file" id="mfgArquivoInput" accept=".xlsx,.xlsm,.xls" multiple style="display:none;">
+        <button class="btn" id="mfgSalvarBtn" style="display:none;"
+                title="Guarda o resultado desta análise para comparar com as próximas semanas">
+          💾 Guardar esta análise
+        </button>
+        <span class="status-msg" id="mfgMsg" style="margin-left:auto;"></span>
+      </div>
+
+      <div class="modal-text" style="margin:0 0 14px; font-size:12.5px; color:var(--muted);">
+        As duas planilhas do período são <b>Acabado</b> (produção apontada) e <b>Consumo</b>
+        (material baixado) — as mesmas abas do arquivo do MFG, e o portal reconhece cada uma
+        pelo conteúdo, mesmo que a aba venha com outro nome. Pode escolher os dois arquivos de
+        uma vez.
+        <br>⚠️ <b>Espessura, densidade, largura útil e os índices de aço/filme/alumínio</b> vêm da
+        <b>Base de Dados</b> e da <b>Densidades</b>. Suba o <b>arquivo completo do MFG uma vez</b>:
+        o cadastro fica guardado neste navegador e, daí em diante, só Acabado e Consumo bastam.
+        <br>Nada é enviado para fora — a leitura e a conta acontecem no seu próprio navegador.
+        <span id="mfgCadastroInfo"></span>
+      </div>
+
+      <div class="cfg-barra" id="mfgAbas">
+        <button class="btn btn-primary" data-mfg-aba="resumo"
+                title="Os dois juntos: é o que a fábrica ganhou ou perdeu de verdade">📊 Resumo</button>
+        <button class="btn" data-mfg-aba="quimico"
+                title="Densidade da espuma: POLIOL, MDI, catalisador e pentano">🧪 Químico</button>
+        <button class="btn" data-mfg-aba="material"
+                title="Aço, filme e alumínio: corte, refile e sobra">🔩 Aço e filme</button>
+        <button class="btn" data-mfg-aba="comparar"
+                title="O mesmo produto em fábricas diferentes — onde os índices discordam">⚖️ Comparar unidades</button>
+        <button class="btn" data-mfg-aba="semop"
+                title="OPs que baixaram matéria-prima e nunca apontaram produção — o MFG da empresa não mostra estas">🚨 Consumo sem OP</button>
+      </div>
+
+      <div class="stat-cards" id="mfgCards"></div>
+      <div id="mfgPorUnidade"></div>
+
+      <div class="cfg-barra">
+        <input type="text" id="mfgBusca" placeholder="Buscar por OP, item, descrição ou classe..."
+               style="flex:1; min-width:200px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+        <select id="mfgFiltroEst" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <option value="">Todas as unidades</option>
+        </select>
+        <select id="mfgFiltroClasse" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <option value="">Todas as classes</option>
+        </select>
+        <select id="mfgFiltroFornecedor" title="Fornecedor do sistema químico, pelo código do poliol que a OP consumiu"
+                style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <option value="">Todos os fornecedores</option>
+        </select>
+        <select id="mfgFiltroSituacao" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <option value="">Todas as situações</option>
+          <option value="a_mais">Consumiu a MAIS (perda)</option>
+          <option value="a_menos">Consumiu a menos (ganho)</option>
+          <option value="ok">Dentro da faixa</option>
+          <option value="sem_cadastro">Sem cadastro</option>
+        </select>
+      </div>
+
+      <div class="cfg-barra" id="mfgCompararControles" style="display:none;">
+        <label for="mfgUnidadeA" style="font-size:13px; color:var(--muted);"
+               title="Escolha as duas fábricas para o confronto cara a cara. Deixe a segunda em branco para ver o panorama de todas.">
+          Comparar
+        </label>
+        <select id="mfgUnidadeA" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <option value="">— escolha a 1ª —</option>
+        </select>
+        <span style="font-size:13px; color:var(--muted);">com</span>
+        <select id="mfgUnidadeB" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <option value="">— escolha a 2ª —</option>
+        </select>
+        <button class="btn btn-mini" id="mfgInverterBtn" title="Trocar os dois lados de lugar">⇄</button>
+      </div>
+
+      <div class="cfg-barra" id="mfgCompararControles2" style="display:none;">
+        <label for="mfgIndice" style="font-size:13px; color:var(--muted);">Índice</label>
+        <select id="mfgIndice" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <option value="quimico">Químico (kg/m²) — consumo ÷ metragem</option>
+          <option value="aco">Aço (kg/m²)</option>
+          <option value="filme">Filme (kg/m²)</option>
+          <option value="quimicoDens">Químico — densidade (kg/m³)</option>
+        </select>
+        <label for="mfgCompararPor" style="font-size:13px; color:var(--muted);">Agrupar por</label>
+        <select id="mfgCompararPor" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <option value="classe">Classe do produto</option>
+          <option value="item">Código do item</option>
+          <option value="fornecedor">Sistema químico (fornecedor)</option>
+        </select>
+        <label for="mfgM2Minimo" style="font-size:13px; color:var(--muted);"
+               title="Esconde produtos com pouco volume, onde um desvio grande costuma ser de uma OP só. Zero mostra tudo.">
+          m² mínimo
+        </label>
+        <input type="number" id="mfgM2Minimo" value="0" min="0" step="100"
+               style="width:90px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+      </div>
+
+      <div class="cfg-barra">
+        <label for="mfgTolerancia" style="font-size:13px; color:var(--muted);"
+               title="Abaixo desta faixa a diferença é ruído de balança, não divergência">
+          Tolerância
+        </label>
+        <input type="range" id="mfgTolerancia" min="0" max="10" step="0.5" value="2" style="width:150px;">
+        <b id="mfgToleranciaValor" style="font-size:13px;">2,0%</b>
+        <select id="mfgExportarFormato" style="margin-left:auto; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <option value="xlsx">Excel (.xlsx)</option>
+          <option value="csv">CSV</option>
+        </select>
+        <button class="btn" id="mfgExportarBtn">⬇️ Exportar</button>
+      </div>
+
+      <div class="cfg-barra">
+        <span id="mfgResumo" style="font-size:13px; color:var(--muted);"></span>
+      </div>
+
+      <div id="mfgTabelaArea">
+        <div class="scroll-area">
+          <!-- O cabeçalho é montado em JS: cada aba mostra as colunas da sua
+               dimensão (ver COLUNAS em js/mfg.js). -->
+          <table class="data-table" id="mfgTabela">
+            <thead><tr></tr></thead>
+            <tbody id="mfgBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div id="mfgCompararCorpo" style="display:none;"></div>
+      <div class="empty-msg" id="mfgVazio">Escolha o arquivo do MFG acima para começar.</div>
+
+      <div id="mfgHistorico"></div>
+    </div>
+  </div>
+  <!-- ==================== FIM ANALISE MFG ==================== -->
+
   <div id="configContent" style="display:none;">
     <div class="stat-cards">
       <div class="stat-card">
@@ -1892,6 +2045,11 @@
 
   <!-- Cadastro de centro de custo e item. Só admin abre; o RLS recusa os outros. -->
   <!-- Importação das duas planilhas da programação -->
+  <!-- Detalhe de uma OP da Analise MFG: a conta inteira, aberta. -->
+  <div class="modal-overlay" id="mfgDetalheModal">
+    <div class="modal-box" id="mfgDetalheBox" style="max-width:720px;"></div>
+  </div>
+
   <div class="modal-overlay" id="progImportModal">
     <div class="modal-box" style="max-width:680px;">
       <button class="modal-close" id="progImportCloseBtn">&#10005;</button>
@@ -2213,6 +2371,7 @@
 <script src="js/docas.js"></script>
 <script src="js/analise.js"></script>
 <script src="js/debitodireto.js"></script>
+<script src="js/mfg.js"></script>
 <script src="js/tour.js"></script>
 <!-- Depois dos outros: usa escapeHtml, rotuloUnidade e os globais de sessão. -->
 <script src="js/sugestao.js"></script>
