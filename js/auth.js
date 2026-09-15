@@ -261,6 +261,7 @@ async function mostrarTelaCorreta(session) {
     portalScreen.style.display = 'block';
     montarCabecalho();
     await atualizarPermissaoAnalise(); // precisa rodar antes do menu, pra saber se mostra "Análise de Compras"
+    await atualizarPermissaoDebitoDireto(); // mesmo motivo, pra "Itens Débito Direto"
     montarMenu();           // ja abre a primeira pagina permitida
     await atualizarBotaoEditar();
     // O botão de contagem virou trava por cargo quando a senha saiu (11/09/2026):

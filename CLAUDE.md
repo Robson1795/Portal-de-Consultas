@@ -5362,3 +5362,86 @@ Ré6, Sol6 — sobem, não caem, pra soar "alerta" e não "erro"), lembrando o
 micro-ondas. Continua sem arquivo de áudio (só osciladores do Web Audio,
 um `AudioContext` por chamada, fechado sozinho depois da última nota) —
 mesma limitação de antes: som só sai com o portal aberto numa aba.
+
+## 29. Itens Débito Direto (15/09/2026)
+
+O Robson: *"quero criar uma aba ITENS DEBITO DIRETO, são itens que temos no
+estoque mas nao esta no sistema, a ideia é colocar a localização nesses
+itens também, dai vou colocar o nome do material que esta guardado, isso
+para eu identificar facil material que nao tem via sistema, os itens estao
+no almoxarifado, quero também uma aba de impressao da folha que nem fiz da
+trading, dai vou colocar o nome do material e nela fica escrita item
+debito direto e a localização"*. Depois, confirmando o cadastro: *"ai eu
+escrevo os itens na propria plataforma"* — sem planilha nenhuma, cadastro
+manual direto na tela. E por fim, o acesso: *"usuario permitido para
+visualizar eu Maiko, Joel e Victor"*.
+
+Página nova (`js/debitodireto.js`, `debitoDiretoContent`), logo abaixo de
+Depósito Benchmark no menu. **Não reaproveita a tela de Consulta de Itens**
+— aquela é sempre item de CÓDIGO conhecido (planilha do Datasul, substituída
+em lote a cada importação); isto é o oposto, material sem código nenhum, só
+um nome digitado à mão. Tabela própria `itens_debito_direto`
+(`sql/fase51-itens-debito-direto.sql`), mesmo desenho de
+`exp_controle_itens` (descrição livre + localização, por unidade, sem
+depender de planilha) — só dois campos, porque foi só isso que o Robson
+pediu: nome do material e localização, sem quantidade nem UM.
+
+- **Cadastro**: dois campos + "+ Adicionar", Enter em qualquer um dos dois
+  também cadastra (digitar item após item sem tirar a mão do teclado).
+  Localização grava em **maiúscula** (mesmo padrão da Localização do
+  Controle EXP, 12/09/2026) — nome do material fica como digitado, sem
+  padronizar caixa, porque é texto livre e não um endereço a comparar/
+  agrupar.
+- **Editar/Excluir**: dois botões por linha, edição por `prompt()` (nome e
+  localização, um de cada vez) — sem inline-edit porque o cadastro em si já
+  é a tela toda, não precisa de uma segunda forma de editar.
+- **Impressão — "a folha que nem fiz da trading"**: reaproveita o desenho de
+  `montarHtmlEtiquetasTrading()`/`imprimirEtiquetasTrading()` (js/estoque.js)
+  quase inteiro — checkbox por linha, "🖨️ Etiquetas (N)" no botão, aba
+  aberta ANTES do `await` (ativação transitória do clique), A4 paisagem,
+  `color-scheme: light` explícito, confirmação acima de
+  `LIMITE_FOLHAS_IMPRESSAO` (10) reusando a mesma constante. **Diferença de
+  tamanho**: na Trading o texto grande é o CÓDIGO do item (curto, cabe em
+  32mm); aqui é o NOME do material, texto livre que pode ser uma frase
+  inteira — por isso corpo menor (18mm) com quebra de linha liberada, em vez
+  do item raso e travado da Trading. A localização continua a maior de
+  todas (40mm, mesma régua da Trading: é o limite onde um endereço tipo
+  "B-01-01-01" ainda cabe numa linha só nos 265mm úteis da paisagem) — é o
+  que se procura de longe na estante, igual lá. O topo troca "TRADING" por
+  "ITEM DÉBITO DIRETO".
+- **Sem QR**: a etiqueta da Trading e a ficha do Controle EXP carregam QR do
+  código do item (seção 28) — aqui não há código nenhum pra codificar, só
+  teria o nome do material, que já está escrito grande do lado. Não
+  adicionado.
+
+### Acesso restrito por lista de pessoas, não por perfil só
+
+Mesmo desenho de `sql/fase21-analise-acesso-restrito.sql` (Análise de
+Compras): tabela `debito_direto_acesso` (e-mail + quem adicionou, sem
+senha, só admin mexe direto no SQL Editor) e a função
+`pode_ver_debito_direto()`, sem argumento de unidade (diferente de
+`pode_ver_analise_compras(uni)` — aqui não existe a segunda camada
+"responsável da unidade", é só a lista mesmo, porque foi só isso que o
+Robson pediu). `podeVerDebitoDiretoCache` (JS) segue o mesmo padrão de
+`podeVerAnaliseCache`: checado em `atualizarPermissaoDebitoDireto()` (chamada
+em `js/auth.js` antes de `montarMenu()`), e usado tanto pra **esconder o
+item do menu** (`montarMenu()`, `js/navegacao.js`) quanto pra **bloquear a
+navegação direta** (`mostrarPagina()`) — perfil decide o SETOR
+(`estoque_alm`/`admin` continuam podendo ver a página, na lista de
+`PERFIS`), esta trava decide QUEM dentro do setor.
+
+E-mails cadastrados: Joel (`j.lisboa@kingspanisoeste.com.br`) e Victor
+(`victor.dobner@portal.kingspanisoeste.local`), já conferidos no fase21;
+Maiko (`maiko.castro@kingspanisoeste.com`), informado pelo Robson nesta
+conversa; e o próprio Robson (duas contas, `r.alves1@portal.
+kingspanisoeste.local` e `robson_alves1995@live.com`) — ele e o Victor já
+são super admin e passam por `eh_admin()` de qualquer forma, cadastrados só
+pra lista ficar auto-explicativa (mesmo motivo do fase21).
+
+Testado localmente (mocks de `sb.from`, sem depender de login): cadastro
+grava com localização em maiúscula e nome como digitado; editar e excluir
+funcionam; busca filtra por material ou localização; seleção gera a
+etiqueta certa (marca, nome, localização); mais de 10 folhas pede
+confirmação antes de abrir a aba; e o gate de acesso bloqueia tanto o item
+do menu quanto a navegação direta quando `podeVerDebitoDiretoCache` é
+`false`, liberando os dois quando `true`. Sem erro no console.

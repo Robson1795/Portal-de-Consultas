@@ -20,9 +20,9 @@
 // da Requisicao (que e so pedir). Quem faz esse fluxo e o ALM da unidade.
 const PERFIS = {
   consultor:   { rotulo: 'Consultor',   paginas: ['painel', 'estoque'] },
-  estoque_alm: { rotulo: 'Estoque ALM', paginas: ['painel', 'estoque', 'sesmt', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'analise'] },
+  estoque_alm: { rotulo: 'Estoque ALM', paginas: ['painel', 'estoque', 'sesmt', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'debitodireto', 'analise'] },
   estoque_aco: { rotulo: 'Estoque Aço', paginas: ['painel', 'bobinas', 'requisicao'] },
-  admin:       { rotulo: 'Admin',       paginas: ['painel', 'estoque', 'sesmt', 'bobinas', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'analise', 'config'] }
+  admin:       { rotulo: 'Admin',       paginas: ['painel', 'estoque', 'sesmt', 'bobinas', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'debitodireto', 'analise', 'config'] }
 };
 
 const PAGINAS = {
@@ -58,6 +58,14 @@ const PAGINAS = {
   // Depósito SESMT logo acima. O `id` da página continua 'expbenchmark' de
   // propósito, pra não precisar mexer nas listas de PERFIS abaixo.
   expbenchmark: { rotulo: 'Depósito Benchmark', icone: '🏭', elemento: 'estoqueContent' },
+  // Material que está fisicamente no almoxarifado mas não tem código
+  // nenhum no sistema (Robson, 15/09/2026: "itens que temos no estoque mas
+  // nao esta no sistema") -- cadastro livre (nome do material +
+  // localização), sem depender de planilha, e com a mesma impressão de
+  // etiqueta da Trading (ver js/debitodireto.js). Tabela própria
+  // (sql/fase50), não reaproveita `estoque`: aquela é sempre item de
+  // código conhecido, substituída em lote a cada importação.
+  debitodireto: { rotulo: 'Itens Débito Direto', icone: '🏷️', elemento: 'debitoDiretoContent' },
   // Demanda dos pedidos x saldo do almoxarifado: o que falta comprar.
   // Só lê o estoque -- não mexe em saldo nenhum (ver js/analise.js).
   analise: { rotulo: 'Análise de Compras', icone: '📊', elemento: 'analiseComprasContent' },
@@ -79,13 +87,16 @@ function rotuloDoPerfil() {
 // ---- Menu lateral -----------------------------------------------------------
 function montarMenu() {
   const nav = document.getElementById('sidebarNav');
-  // 'analise' tem uma segunda trava, além do perfil: acesso restrito por
-  // pessoa/responsável de unidade (podeVerAnaliseCache, atualizada em
-  // js/auth.js antes de chamar montarMenu -- ver atualizarPermissaoAnalise()
-  // em js/analise.js). Perfil decide o SETOR (Estoque ALM vê a página, aço
-  // não vê); esta trava decide QUEM dentro do setor. Não mistura as duas.
+  // 'analise' e 'debitodireto' têm uma segunda trava, além do perfil: acesso
+  // restrito por lista de pessoas (podeVerAnaliseCache/podeVerDebitoDiretoCache,
+  // atualizadas em js/auth.js antes de chamar montarMenu -- ver
+  // atualizarPermissaoAnalise() em js/analise.js e
+  // atualizarPermissaoDebitoDireto() em js/debitodireto.js). Perfil decide o
+  // SETOR (Estoque ALM vê a página, aço não vê); esta trava decide QUEM
+  // dentro do setor. Não mistura as duas.
   const visiveis = (PERFIS[perfilAtual] || PERFIS.consultor).paginas
-    .filter(id => id !== 'analise' || podeVerAnaliseCache);
+    .filter(id => id !== 'analise' || podeVerAnaliseCache)
+    .filter(id => id !== 'debitodireto' || podeVerDebitoDiretoCache);
 
   nav.innerHTML = visiveis.map(id => {
     const p = PAGINAS[id];
@@ -124,6 +135,7 @@ function marcarItemAtivo() {
 function mostrarPagina(id) {
   if (!PAGINAS[id] || !podeVer(id)) return;
   if (id === 'analise' && !podeVerAnaliseCache) return; // mesma trava do menu, ver montarMenu()
+  if (id === 'debitodireto' && !podeVerDebitoDiretoCache) return; // idem
 
   const indoParaSesmt = (id === 'sesmt');
   const saindoDoSesmt = (paginaAtual === 'sesmt' && id !== 'sesmt');
@@ -186,6 +198,7 @@ function mostrarPagina(id) {
     pararTempoRealDocas();
     pararRelogioDocas();
   }
+  if (id === 'debitodireto') { carregarDebitoDireto(); }
   if (id === 'analise') { carregarAnalise(); }
   // ⚠️ `carregarAcessos()` vai DEPOIS de `carregarUsuarios()`, encadeado e não
   // solto: ele cruza o log de login com a lista de aprovados, e disparando os

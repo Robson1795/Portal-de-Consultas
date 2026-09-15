@@ -2634,6 +2634,7 @@ async function trocarUnidade(cod) {
   if (paginaAtual === 'bobinas') await loadBobinas();
   if (paginaAtual === 'analise') await carregarAnalise();
   if (paginaAtual === 'requisicao') await carregarRequisicao();
+  if (paginaAtual === 'debitodireto' && typeof carregarDebitoDireto === 'function') await carregarDebitoDireto();
   // Se a contagem estava ativa e a unidade ja foi desbloqueada nesta sessao,
   // mantem ativa sem pedir a senha de novo.
   if (estavaContando && podeContarNestaUnidade()) {
