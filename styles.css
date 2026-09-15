@@ -1410,3 +1410,13 @@ td.col-acoes { white-space: nowrap; text-align: center; }
   0%, 100% { box-shadow: 0 0 0 0 rgba(214, 69, 51, 0.35); }
   50% { box-shadow: 0 0 0 7px rgba(214, 69, 51, 0); }
 }
+
+/* Selo de urgência no cartão da aba Preparar (fase46) -- "Imediata"/prazo
+   vencido usa o mesmo vermelho de urgente; prazo futuro usa o azul de
+   informação (ainda dá tempo, mas já está marcado). */
+.avisoprep-urgencia {
+  display: inline-block; font-size: 11px; font-weight: 800;
+  padding: 2px 8px; border-radius: 999px; white-space: nowrap;
+}
+.avisoprep-urgencia-imediata { background: var(--erro-borda); color: #fff; }
+.avisoprep-urgencia-prazo { background: var(--azul-fundo); color: var(--blue-texto); }

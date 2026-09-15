@@ -4378,9 +4378,38 @@ async function carregarAvisosPreparo() {
   (data || []).forEach(r => avisosPreparoMap.set(chavePedidoCarregamento(r.numero_pedido), r));
 }
 
+// Robson, 15/09/2026: "uma area aonde o encarregado coloque se a
+// separaçao é imediata, ou ele colloca o tempo estimado que tem que
+// deixar pronto" -- `prazo_em` nulo = imediata. "Urgência" de ordenação:
+// imediata e prazo já vencido pesam igual (os dois são "precisa agora"),
+// prazo futuro ordena pelo relógio (quem vence primeiro sobe), e dentro do
+// mesmo nível o mais antigo avisado vem primeiro -- é quem espera há mais
+// tempo.
+function urgenciaDoAviso(a) {
+  if (!a.prazo_em) return 0;                              // imediata
+  if (new Date(a.prazo_em).getTime() <= Date.now()) return 0; // prazo já vencido conta como imediata
+  return new Date(a.prazo_em).getTime();                  // prazo futuro: quanto mais cedo, mais urgente
+}
+
 function avisosPendentes() {
   return [...avisosPreparoMap.values()].filter(a => a.status === 'pendente')
-    .sort((a, b) => new Date(a.avisado_em) - new Date(b.avisado_em)); // mais antigo primeiro -- é o que espera há mais tempo
+    .sort((a, b) => {
+      const ua = urgenciaDoAviso(a), ub = urgenciaDoAviso(b);
+      if (ua !== ub) return ua - ub;
+      return new Date(a.avisado_em) - new Date(b.avisado_em);
+    });
+}
+
+// Selo de urgência do cartão -- "⚡ Imediata" ou "Prazo: até HH:mm", com o
+// mesmo vermelho de urgente quando é imediata OU o prazo já passou (as
+// duas situações pedem a mesma atenção agora).
+function seloUrgenciaAviso(a) {
+  const vencido = a.prazo_em && new Date(a.prazo_em).getTime() <= Date.now();
+  if (!a.prazo_em || vencido) {
+    return `<span class="avisoprep-urgencia avisoprep-urgencia-imediata">⚡ ${vencido ? 'Prazo vencido' : 'Imediata'}</span>`;
+  }
+  const hora = new Date(a.prazo_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  return `<span class="avisoprep-urgencia avisoprep-urgencia-prazo">🕒 Até ${escapeHtml(hora)}</span>`;
 }
 
 function avisosJaPreparados() {
@@ -4433,14 +4462,17 @@ function renderAvisosPreparo() {
 
   corpo.innerHTML = pendentes.map(a => `
     <div style="border:1px solid var(--erro-borda); border-radius:10px; margin-top:12px; overflow:hidden;">
-      <div class="cfg-barra" style="background:var(--erro-fundo);">
+      <div class="cfg-barra" style="background:var(--erro-fundo); flex-wrap:wrap;">
         <span class="loc-chip">Pedido ${escapeHtml(a.numero_pedido)}</span>
+        ${seloUrgenciaAviso(a)}
         <span style="font-size:12px; color:var(--erro-texto);" title="${a.avisado_por ? escapeHtml(a.avisado_por) : ''}">
           avisado ${escapeHtml(formatarDataHoraBR(a.avisado_em))}${a.avisado_por ? ' por ' + escapeHtml(a.avisado_por) : ''}
         </span>
         <span style="margin-left:auto; display:flex; gap:6px;">
           <button class="btn avisoprep-imprimir" data-pedido="${escapeHtml(a.numero_pedido)}">🖨️ Imprimir</button>
           <button class="btn btn-primary avisoprep-preparado" data-pedido="${escapeHtml(a.numero_pedido)}">✓ Preparado</button>
+          <button class="acao-btn avisoprep-cancelar" data-pedido="${escapeHtml(a.numero_pedido)}"
+                  title="Não precisa mais separar -- remove o aviso">↺</button>
         </span>
       </div>
       ${tabelaItensPedidoHtml(a.numero_pedido)}
@@ -4481,6 +4513,12 @@ document.getElementById('avisoPrepHistToggle').addEventListener('click', (e) => 
   e.target.textContent = avisoPrepHistVisivel ? 'Esconder' : 'Mostrar';
 });
 
+// Campo de horário só aparece quando a urgência escolhida é "Tem prazo" --
+// "imediata" não tem hora nenhuma pra preencher.
+document.getElementById('avisoPrepUrgencia').addEventListener('change', (e) => {
+  document.getElementById('avisoPrepPrazoHora').style.display = e.target.value === 'prazo' ? 'inline-block' : 'none';
+});
+
 // "coloca o numero do pedido... abre um aviso" -- upsert por (unidade,
 // numero_pedido): avisar de novo um pedido já preparado volta ele pra
 // pendente (pode ter chegado item novo, ou foi engano marcar preparado).
@@ -4488,6 +4526,8 @@ document.getElementById('avisoPrepAvisarBtn').addEventListener('click', async ()
   const msg = document.getElementById('avisoPrepMsg');
   const btn = document.getElementById('avisoPrepAvisarBtn');
   const campo = document.getElementById('avisoPrepPedidos');
+  const urgencia = document.getElementById('avisoPrepUrgencia').value;
+  const campoHora = document.getElementById('avisoPrepPrazoHora');
 
   const pedidos = campo.value.split(/[,;\s]+/).map(p => p.trim().toUpperCase()).filter(Boolean);
   if (!pedidos.length) {
@@ -4496,13 +4536,31 @@ document.getElementById('avisoPrepAvisarBtn').addEventListener('click', async ()
     return;
   }
 
+  // "ele colloca o tempo estimado que tem que deixar pronto" -- combina o
+  // horário digitado com a data de HOJE (é sempre um prazo do próprio
+  // turno). Sem hora escolhida com "Tem prazo" marcado, avisa em vez de
+  // gravar um prazo vazio que pareceria "imediata" sem realmente ser a
+  // escolha feita.
+  let prazoEm = null;
+  if (urgencia === 'prazo') {
+    if (!campoHora.value) {
+      msg.textContent = 'Informe o horário do prazo, ou troque pra "Imediata".';
+      msg.className = 'status-msg status-err';
+      return;
+    }
+    const [h, m] = campoHora.value.split(':').map(Number);
+    const alvo = new Date();
+    alvo.setHours(h, m, 0, 0);
+    prazoEm = alvo.toISOString();
+  }
+
   btn.disabled = true;
   msg.textContent = 'Avisando a equipe...';
   msg.className = 'status-msg';
 
   const { error } = await sb.from('exp_pedido_aviso_preparo').upsert(
     pedidos.map(numero_pedido => ({
-      unidade: unidadeAtual, numero_pedido, status: 'pendente',
+      unidade: unidadeAtual, numero_pedido, status: 'pendente', prazo_em: prazoEm,
       avisado_por: nomeUsuarioAtual, avisado_em: new Date().toISOString(),
       preparado_por: null, preparado_em: null
     })),
@@ -4513,21 +4571,44 @@ document.getElementById('avisoPrepAvisarBtn').addEventListener('click', async ()
 
   if (error) {
     msg.textContent = 'Não foi possível avisar: ' + error.message
-      + (/does not exist|relation/i.test(error.message) ? ' — rode sql/fase45-aviso-preparo-pedido.sql no Supabase.' : '');
+      + (/does not exist|relation|column/i.test(error.message) ? ' — rode sql/fase45-aviso-preparo-pedido.sql e sql/fase46-aviso-preparo-prazo.sql no Supabase.' : '');
     msg.className = 'status-msg status-err';
     return;
   }
 
+  const horaEscolhida = campoHora.value;
   campo.value = '';
+  campoHora.value = '';
   await carregarAvisosPreparo();
   renderAvisosPreparo();
-  msg.textContent = `${pedidos.length} pedido(s) avisado(s) -- vai aparecer no Painel do Dia pra quem cuida do EXP.`;
+  msg.textContent = `${pedidos.length} pedido(s) avisado(s)${prazoEm ? ' -- prazo até ' + horaEscolhida : ' (imediata)'} -- vai aparecer no Painel do Dia pra quem cuida do EXP.`;
   msg.className = 'status-msg status-ok';
 });
 
+// "um botao de retornar caso nao precise mais separar" -- diferente de
+// "✓ Preparado" (que É fato, fica no histórico): cancelar apaga a linha
+// de vez, porque o pedido nunca chegou a ser preparado -- não é
+// resultado, é "isso não devia estar na lista".
 document.getElementById('avisoPrepBody').addEventListener('click', async (e) => {
   const btnPreparado = e.target.closest('.avisoprep-preparado');
   const btnImprimir = e.target.closest('.avisoprep-imprimir');
+  // "um botao de retornar caso nao precise mais separar" -- diferente de
+  // "✓ Preparado" (que É fato, fica no histórico): cancelar apaga a linha
+  // de vez, porque o pedido nunca chegou a ser preparado -- não é
+  // resultado, é "isso não devia estar na lista".
+  const btnCancelar = e.target.closest('.avisoprep-cancelar');
+
+  if (btnCancelar) {
+    const pedido = btnCancelar.dataset.pedido;
+    if (!confirm(`Cancelar o aviso do pedido ${pedido}? Ele some da lista -- use quando não precisar mais separar.`)) return;
+    btnCancelar.disabled = true;
+    const { error } = await sb.from('exp_pedido_aviso_preparo')
+      .delete().eq('unidade', unidadeAtual).eq('numero_pedido', pedido);
+    if (error) { alert('Não foi possível cancelar: ' + error.message); btnCancelar.disabled = false; return; }
+    await carregarAvisosPreparo();
+    renderAvisosPreparo();
+    return;
+  }
 
   if (btnPreparado) {
     const pedido = btnPreparado.dataset.pedido;

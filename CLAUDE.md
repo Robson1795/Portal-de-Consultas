@@ -3016,6 +3016,70 @@ grupo; busca por pedido continua funcionando; item retirado na mesma
 localização continua fora, mesmo buscando por ela. Zero erro de
 console.
 
+## Análise de Compras avisa o que vai sumir ao colar planilha nova (15/09/2026)
+
+O Robson: *"na analise de compras deixe que eu analise os itens que eu
+preciso deixar, antes voce ja estava excluindo alguns automaticos"*.
+
+"Substituir análise por estas N linha(s)" (`gravarAnalise()` →
+`substituir_analise_demanda`) sempre apagou a análise inteira da unidade
+e regravou só com o que foi colado — item da análise atual que não está
+na planilha nova **sumia sozinho**, sem avisar. Perguntado entre mostrar
+o que vai sumir antes de trocar ou virar um "juntar em vez de substituir",
+escolheu ver antes de decidir — o comportamento de substituir continua o
+mesmo, só ganhou visibilidade.
+
+Ao clicar "Conferir" (antes de "Substituir" aparecer), a prévia agora
+compara os códigos da planilha colada com `agruparAnalise()` (a análise
+atual) e lista, num quadro amarelo, todo item que **não** está na nova
+planilha — com descrição e quantidade pedida, pra ele reconhecer se é
+esperado (pedido faturado, saiu do relatório do Datasul) ou sinal de que
+colou uma planilha incompleta. Sem nenhum item sumindo, o quadro nem
+aparece — aviso que aparece sempre vira aviso que ninguém lê.
+
+Conferido no navegador: colar uma planilha menor mostra o item que ficou
+de fora com descrição e pedido certos; colar uma planilha com os mesmos
+itens (nada muda) não mostra aviso nenhum. Zero erro de console (o 404 de
+`reservas_aco` que aparece nos testes é falta de tabela do Victor, não
+deste código).
+
+## Prazo e cancelar na aba Preparar (15/09/2026)
+
+Com a aba "🔔 Preparar" já em uso (ver seção seguinte), o Robson: *"quero
+um botao de retornar caso nao precise mais separar e tambem uma area
+aonde o encarregado coloque se a separaçao é imediata, ou ele colloca o
+tempo estimado que tem que deixar pronto"*.
+
+**Prazo:** coluna `prazo_em` (`sql/fase46-aviso-preparo-prazo.sql`),
+nula = imediata. Select "⚡ Imediata" / "Tem prazo…" na barra de avisar;
+escolhendo "Tem prazo", aparece um `<input type="time">` (obrigatório
+nesse caso) e o horário vira `prazo_em` combinado com a data de hoje —
+são sempre prazos do próprio turno, não datas futuras arbitrárias.
+
+Cada cartão pendente ganhou um selo: **⚡ Imediata** / **⚡ Prazo vencido**
+(vermelho, mesma urgência visual) ou **🕒 Até HH:mm** (azul, ainda dá
+tempo). `urgenciaDoAviso()` reordena a lista: imediata e prazo já vencido
+pesam igual e vêm primeiro (as duas pedem atenção AGORA), prazo futuro
+ordena por quem vence mais cedo, e dentro do mesmo nível o mais antigo
+avisado vem na frente.
+
+**Botão retornar:** *"caso nao precise mais separar"* — `↺` ao lado de
+Imprimir/Preparado, com confirmação. **Diferente de "✓ Preparado"**, que
+É fato e fica no histórico: cancelar **apaga a linha de vez**, porque o
+pedido nunca chegou a ser preparado — não é resultado, é "isso não devia
+estar na lista". Os dois handlers de clique do corpo do card (preparado/
+imprimir e o cancelar, que eu tinha escrito em listeners separados) foram
+unidos num só, seguindo o padrão de delegação única já usado no resto do
+arquivo.
+
+Conferido no navegador: "Imediata" não mostra campo de hora; "Tem prazo"
+sem hora preenchida recusa; com hora no futuro grava `prazo_em` certo e
+mostra "🕒 Até HH:mm"; prazo já vencido conta como imediata na ordenação
+e no selo; cartões ordenam imediata/vencido primeiro, prazo futuro
+depois, mais antigo primeiro dentro do mesmo nível; cancelar remove a
+linha sem passar por preparado nem aparecer no histórico; recusar a
+confirmação não grava nada. Zero erro de console.
+
 ## Aba "🔔 Preparar": aviso da expedição pro EXP (15/09/2026)
 
 O Robson: *"o encarregado da expedição quando receber a lista do pcp,

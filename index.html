@@ -1049,6 +1049,17 @@
         <div class="cfg-barra" style="flex-wrap:wrap;">
           <input type="text" id="avisoPrepPedidos" placeholder="Nº do(s) pedido(s) — separe por vírgula"
                  style="flex:1; min-width:230px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <!-- Robson, 15/09/2026: "tambem uma area aonde o encarregado
+               coloque se a separaçao é imediata, ou ele colloca o tempo
+               estimado que tem que deixar pronto" -- em branco (sem
+               horário escolhido) = imediata. -->
+          <select id="avisoPrepUrgencia"
+                  style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+            <option value="imediata" selected>⚡ Imediata</option>
+            <option value="prazo">Tem prazo…</option>
+          </select>
+          <input type="time" id="avisoPrepPrazoHora" style="display:none;
+                 padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
           <button class="btn btn-primary" id="avisoPrepAvisarBtn">🔔 Avisar equipe</button>
         </div>
         <div class="status-msg" id="avisoPrepMsg" style="padding:0 16px 8px;"></div>

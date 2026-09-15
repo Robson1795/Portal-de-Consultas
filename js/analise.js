@@ -1064,6 +1064,38 @@ document.getElementById('analiseConferirBtn').addEventListener('click', () => {
     + (semQtd ? ` ⚠ ${semQtd} sem Qt. pedida — essas não somam nada na análise.` : '');
   msg.className = semQtd ? 'status-msg status-err' : 'status-msg status-ok';
 
+  // Robson, 15/09/2026: "na analise de compras deixe que eu analise os
+  // itens que eu preciso deixar, antes voce ja estava excluindo alguns
+  // automaticos" -- "Substituir" apaga a análise inteira da unidade e
+  // regrava só com o que foi colado agora (ver gravarAnalise() /
+  // substituir_analise_demanda). Colar uma planilha menor ou diferente da
+  // anterior fazia item sumir sozinho, sem avisar. Esta lista mostra ANTES
+  // de gravar quem está na análise atual e NÃO está na planilha nova --
+  // ele decide se cola mesmo assim ou vai colar uma lista mais completa.
+  const codigosNovos = new Set(analisePendentes.map(l => normalizaCodigoItem(l.codigo_item)));
+  const vaoSumir = agruparAnalise().filter(item => !codigosNovos.has(item.codigo_item));
+  const avisoSumir = !vaoSumir.length ? '' : `
+    <div class="modal-text" style="background:var(--aviso-fundo); color:var(--aviso-texto);
+                border:1px solid var(--aviso-borda); border-radius:8px; padding:10px 12px; margin-top:10px;">
+      <b>⚠ ${vaoSumir.length} item(ns) que estão na análise atual NÃO aparecem nesta planilha
+      e vão sumir por completo</b> se você substituir (não vira "comprar 0", some da lista de
+      vez -- confira se não é só uma planilha parcial antes de continuar):
+      <div class="scroll-area" style="max-height:160px; margin-top:6px;">
+        <table>
+          <thead><tr><th>Item</th><th>Descrição</th><th>Pedido</th></tr></thead>
+          <tbody>
+            ${vaoSumir.slice(0, 40).map(item => `
+              <tr>
+                <td class="item">${escapeHtml(item.codigo_item)}</td>
+                <td>${escapeHtml(item.descricao || '—')}</td>
+                <td class="num">${numeroBR(item.pedido)}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+      ${vaoSumir.length > 40 ? `<div style="margin-top:4px;">…e mais ${vaoSumir.length - 40} item(ns).</div>` : ''}
+    </div>`;
+
   // Prévia só das 10 primeiras: é conferência de formato (as colunas caíram
   // no lugar certo?), não revisão linha a linha -- a planilha tem centenas.
   previa.innerHTML = `
@@ -1087,6 +1119,7 @@ document.getElementById('analiseConferirBtn').addEventListener('click', () => {
       </tbody>
     </table>
     ${analisePendentes.length > 10 ? `<div class="modal-text" style="padding:8px 0 0;">…e mais ${analisePendentes.length - 10} linha(s).</div>` : ''}
+    ${avisoSumir}
     <div class="cfg-barra" style="padding:10px 0 0;">
       <button class="btn btn-primary" id="analiseGravarBtn">Substituir análise por estas ${analisePendentes.length} linha(s)</button>
     </div>`;
