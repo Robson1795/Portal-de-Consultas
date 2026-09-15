@@ -3,7 +3,7 @@
 Contexto do projeto para qualquer agente de IA ou pessoa que for mexer neste repositório.
 Sempre em **português do Brasil**.
 
-**Atualizado:** 15/09/2026 (Análise MFG: abas aço/químico e comparador de índices)
+**Atualizado:** 15/09/2026 (Análise MFG: confronto cara a cara entre duas unidades)
 **Mantenedores:** Robson (dono do projeto e admin geral) · Victor Dobner (colaborador)
 
 > Este arquivo é lido automaticamente pelo Claude Code ao abrir a pasta do projeto.
@@ -4903,3 +4903,81 @@ colunas na comparação, 36 na planilha completa); o detalhe da OP abre nas trê
 abas de lista; `trocarUnidade()` continua reapontando o filtro. **Zero texto
 abaixo de 4,5:1 nos dois temas** e nada estoura a largura no celular, nas cinco
 abas. Zero erro de console.
+
+#### Confronto cara a cara entre duas unidades (15/09/2026)
+
+O Victor: *"Quero poder selecionar a primeira unidade e dps selecionar a segunda
+unidade e a partir dai fazer a comparação. Pegue os itens em comum das duas
+unidades e faça a comparação dos indices, faça uma média de indice."*
+
+Dois seletores na aba Comparar (**"Comparar [1ª] com [2ª]"**, com a máquina no
+rótulo — `Unidade 105 — Cambuí (MG) · RB` — porque o pedido nasceu de comparar
+duas fábricas da MESMA máquina), mais um **⇄** que troca os lados. Com as duas
+preenchidas a aba vira confronto; com a segunda em branco continua o panorama de
+todas — as duas visões respondem perguntas diferentes e nenhuma substitui a
+outra. A primeira já nasce na unidade do cabeçalho: quem investiga começa pela
+própria fábrica.
+
+⚠️ **SÓ OS ITENS EM COMUM, e é isso que faz a comparação valer.** Comparar a
+média geral de duas fábricas mistura duas coisas: o quanto cada uma gasta a mais
+que a receita, e o **mix de produtos** que cada uma faz. Uma fábrica que só faz
+painel denso pareceria pior que uma que só faz isotelha, sem gastar um grama a
+mais. Preso aos produtos que as duas fazem, o que sobra é diferença de processo.
+
+⚠️ **A média é `Σ real ÷ Σ teórico`, e NÃO a média dos índices de cada produto.**
+Somar os percentuais e dividir por N daria o mesmo peso a um produto de 200 m² e
+a um de 20.000 — e é o grande que faz o mês. Feita assim, ela também fica
+**neutra ao mix**: cada produto é comparado com o teórico DELE.
+
+O painel de cima mostra, para cada lado, o índice médio realizado, o desvio
+contra o teórico, e quantas OPs/m² entraram; a fábrica que roda mais apertado
+leva um filete verde. No meio, a **diferença em pontos percentuais** e o **custo
+dela** — quanto a pior gastou a mais do que teria gasto rodando no índice da
+melhor, nos mesmos produtos, ao preço da pior.
+
+⚠️ **O custo tem um aviso que eu só escrevi depois de olhar o número.** A lacuna
+é medida contra a OUTRA FÁBRICA, não contra a receita. No arquivo real isso dá
+**R$ 218.337** entre 105 e 106 — maior que a própria perda da 106 contra o
+teórico (R$ 126.070), porque a 105 está **4,4% ABAIXO** da receita. Perseguir
+esse número como meta seria perseguir um artefato: consumir menos que a receita
+pode ser ganho real, mas também pode ser consumo subapontado. Quando a melhor
+está abaixo do teórico, a tela escreve isso e aponta a régua mais segura (o
+desvio de cada uma contra o teórico). **O valor não é escondido — o que ele mede
+é que fica explícito.**
+
+A tabela lista os produtos em comum ordenados pela **diferença entre as duas em
+módulo** (maior discordância em cima), com o m² de cada fábrica em cada célula e
+a coluna **A − B** em pp. O ⇄ troca os lados e o sinal da coluna vira junto.
+Devolução líquida (índice real negativo) e o piso de m² valem aqui igual ao
+panorama. A **exportação segue a forma na tela**: confronto exporta o confronto
+(9 colunas, uma por lado), panorama exporta o panorama.
+
+#### O que o confronto respondeu sobre a 106
+
+| | índice realizado | vs teórico | OPs · m² em comum |
+|---|---|---|---|
+| 105 Cambuí (RB) | **30,85** kg/m³ | −4,4% | 184 · 47.789 m² |
+| 106 Araquari (RB) | **34,59** kg/m³ | +10,6% | 196 · 60.961 m² |
+| **Diferença** | | **15,0 pp** | **R$ 218.337** |
+
+E a 106 está pior em quase toda classe em comum: Isotelha PRE/PRE (−16,0% ×
++0,3%), Isotelha PRE/Filme (−6,2% × +8,5%), Painel Frigo (+2,8% × +15,2%). A
+exceção é **Isotelha Fachada**, onde a 105 gasta mais (−7,7% × −34,0%, +26,3 pp)
+— mas em 342 m² na 106, volume pequeno, e é por isso que o m² está na célula.
+
+⚠️ **No AÇO o resultado se inverte**: no mesmo par, quem roda pior é a **105**
+(2,1 pp, R$ 43.006). É exatamente o que separar as duas dimensões existe para
+mostrar — uma fábrica pode estar ótima num material e ruim no outro, e a soma
+esconderia as duas coisas.
+
+Conferido no navegador com o arquivo real: os seletores nascem com a máquina no
+rótulo e a 1ª na unidade do cabeçalho; sem a 2ª continua o panorama; escolhendo
+105 × 106 o painel monta com os números acima; o aviso de "leia com cuidado"
+aparece porque a 105 está abaixo do teórico; o ⇄ troca os lados **e o sinal da
+coluna A − B** (+26,3 → −26,3); escolher a mesma unidade dos dois lados recusa
+com explicação; trocar o índice para aço refaz o confronto (e inverte quem está
+pior); a exportação sai com 9 colunas e só os itens em comum; o confronto
+sobrevive a sair da aba e voltar; os totais das outras abas não mudaram
+(**químico −177.340,27 + aço +17.587,32 = −159.752,95**). **Zero texto abaixo de
+4,5:1 nos dois temas**, e no celular os três blocos empilham sem estourar a
+largura. Zero erro de console.

@@ -101,7 +101,10 @@ let mfgArquivo = '';
 let mfgFiltros = {
   est: '', classe: '', situacao: '', busca: '', tolerancia: MFG_TOLERANCIA_PADRAO,
   // Só da aba Comparar unidades: qual índice e agrupado por quê.
-  indice: 'quimico', compararPor: 'classe', m2Minimo: 0
+  indice: 'quimico', compararPor: 'classe', m2Minimo: 0,
+  // Com as DUAS preenchidas e diferentes, a aba vira confronto cara a cara
+  // (mfgRenderDuelo). Vazias, fica o panorama de todas as fábricas.
+  unidadeA: '', unidadeB: ''
 };
 // resumo | quimico | material | comparar | semop
 let mfgAba = 'resumo';
@@ -585,7 +588,7 @@ function mfgCalcular(fontes) {
       rsQuimico, rsAco, rsFilme, rsAlu,
       rsMaterial: rsAco + rsFilme + rsAlu,
       rsTotal: rsQuimico + rsAco + rsFilme + rsAlu,
-      precoQuimico: pQuim, precoAco: pAco,
+      precoQuimico: pQuim, precoAco: pAco, precoFilme: pFilme,
       motivos,
       // Uma OP que aparece em mais de um documento no Acabado — o MFG detecta
       // isso com um COUNTIF e não faz nada com o resultado.
@@ -802,6 +805,30 @@ function mfgMontarFiltros() {
   const selClasse = document.getElementById('mfgFiltroClasse');
   selEst.innerHTML = '<option value="">Todas as unidades (consolidado)</option>'
     + ests.map(e => '<option value="' + escapeHtml(e) + '">' + escapeHtml(rotuloUnidade(e) || e) + '</option>').join('');
+
+  // ---- Os dois lados do confronto -----------------------------------------
+  // ⚠️ A máquina vai no rótulo (PM/RB), e não é enfeite: o pedido nasceu de
+  // comparar duas fábricas que rodam na MESMA máquina ("ambas trabalham com a
+  // robor"). Sem isso a pessoa teria de lembrar de cor qual é qual para montar
+  // um par que faz sentido.
+  const maq = {};
+  mfgLinhas.forEach(l => { if (l.est) maq[l.est] = l.maquina; });
+  const opcoes = (vazio) => '<option value="">' + vazio + '</option>'
+    + ests.map(e => '<option value="' + escapeHtml(e) + '">'
+        + escapeHtml(rotuloUnidade(e) || e) + (maq[e] ? ' · ' + escapeHtml(maq[e]) : '')
+        + '</option>').join('');
+  const selA = document.getElementById('mfgUnidadeA');
+  const selB = document.getElementById('mfgUnidadeB');
+  selA.innerHTML = opcoes('— escolha a 1ª —');
+  selB.innerHTML = opcoes('— escolha a 2ª —');
+  // ⚠️ A primeira já nasce na unidade de quem abriu a tela: quem investiga
+  // começa pela própria fábrica, e deixar as duas em branco obrigaria a dois
+  // cliques antes de ver qualquer coisa. A segunda fica vazia de propósito --
+  // escolher a comparação é justamente a decisão que o pedido descreve.
+  mfgFiltros.unidadeA = ests.includes(unidadeAtual) ? unidadeAtual : '';
+  mfgFiltros.unidadeB = '';
+  selA.value = mfgFiltros.unidadeA;
+  selB.value = '';
   selClasse.innerHTML = '<option value="">Todas as classes</option>'
     + classes.map(c => '<option value="' + escapeHtml(c) + '">' + escapeHtml(c) + '</option>').join('');
 
@@ -1116,19 +1143,28 @@ function mfgRender() {
 //
 // Os dois lados (teórico e realizado) usam o MESMO denominador, então a
 // comparação é honesta mesmo com volumes muito diferentes entre as fábricas.
+// `kgTeor`/`kgReal` existem para a MÉDIA do confronto entre duas unidades: a
+// média honesta é `Σ real ÷ Σ teórico`, não a média dos índices de cada
+// produto -- ver a nota em mfgRenderDuelo().
 const MFG_INDICES = {
   quimico:  { rotulo: 'Químico (densidade)', unidade: 'kg/m³',
               teor: a => a.volume ? a.quimicoTeorico / a.volume : 0,
               real: a => a.volume ? a.quimicoReal / a.volume : 0,
-              temBase: a => a.quimicoTeorico > 0 },
+              temBase: a => a.quimicoTeorico > 0,
+              kgTeor: a => a.quimicoTeorico, kgReal: a => a.quimicoReal,
+              base: a => a.volume, preco: a => a.precoQuimico },
   aco:      { rotulo: 'Aço', unidade: 'kg/m²',
               teor: a => a.m2 ? a.acoTeorico / a.m2 : 0,
               real: a => a.m2 ? a.acoReal / a.m2 : 0,
-              temBase: a => a.acoTeorico > 0 },
+              temBase: a => a.acoTeorico > 0,
+              kgTeor: a => a.acoTeorico, kgReal: a => a.acoReal,
+              base: a => a.m2, preco: a => a.precoAco },
   filme:    { rotulo: 'Filme', unidade: 'kg/m²',
               teor: a => a.m2 ? a.filmeTeorico / a.m2 : 0,
               real: a => a.m2 ? a.filmeReal / a.m2 : 0,
-              temBase: a => a.filmeTeorico > 0 }
+              temBase: a => a.filmeTeorico > 0,
+              kgTeor: a => a.filmeTeorico, kgReal: a => a.filmeReal,
+              base: a => a.m2, preco: a => a.precoFilme }
 };
 
 // Junta as OPs por (classe|item) × unidade. A média é PONDERADA pelo volume --
@@ -1144,7 +1180,10 @@ function mfgAgruparIndices(porItem) {
     const a = g.unidades[l.est] || (g.unidades[l.est] = {
       est: l.est, maquina: l.maquina, ops: 0, m2: 0, volume: 0,
       quimicoTeorico: 0, quimicoReal: 0, acoTeorico: 0, acoReal: 0,
-      filmeTeorico: 0, filmeReal: 0, valor: 0
+      filmeTeorico: 0, filmeReal: 0, valor: 0,
+      // Preço da família NAQUELA unidade — é o mesmo em todas as linhas dela,
+      // e é o que transforma a diferença de índice em dinheiro.
+      precoQuimico: l.precoQuimico, precoAco: l.precoAco, precoFilme: l.precoFilme
     });
     a.ops++; a.m2 += l.m2;
     a.volume += l.m2 * (l.espessura + l.trapezio);
@@ -1154,6 +1193,165 @@ function mfgAgruparIndices(porItem) {
     a.valor += l.rsTotal;
   });
   return [...mapa.values()];
+}
+
+// ---- Duas unidades, cara a cara ---------------------------------------------
+//
+// O Victor: *"Quero poder selecionar a primeira unidade e dps selecionar a
+// segunda unidade e a partir dai fazer a comparação. Pegue os itens em comum das
+// duas unidades e faça a comparação dos indices, faça uma média de indice."*
+//
+// ⚠️ SÓ OS ITENS EM COMUM, e isso é o ponto. Comparar a média geral de duas
+// fábricas mistura duas coisas: o quanto cada uma gasta a mais que a receita, e
+// o MIX de produtos que cada uma faz. Uma fábrica que só faz painel denso
+// pareceria pior que uma que só faz isotelha, sem gastar um grama a mais. Preso
+// aos produtos que as duas fazem, o que sobra é a diferença de processo.
+//
+// ⚠️ A MÉDIA É `Σ real ÷ Σ teórico`, e NÃO a média dos índices de cada produto.
+// Somar os percentuais e dividir por N daria o mesmo peso a um produto de 200 m²
+// e a um de 20.000 -- e é o grande que faz o mês. Feita assim, a média também
+// fica **neutra ao mix**: cada produto é comparado com o teórico DELE, então a
+// proporção entre produtos não entra na conta. É o número que responde "quem
+// roda mais apertado", que é a pergunta.
+function mfgRenderDuelo(alvo, indice, porItem, grupos, maquinaDe) {
+  const A = mfgFiltros.unidadeA, B = mfgFiltros.unidadeB;
+  const piso = mfgFiltros.m2Minimo || 0;
+
+  const comuns = grupos.map(g => {
+    const a = g.unidades[A], b = g.unidades[B];
+    if (!a || !b || !indice.temBase(a) || !indice.temBase(b)) return null;
+    if (a.m2 < piso || b.m2 < piso) return null;
+    const ia = indice.real(a), ib = indice.real(b);
+    // Devolução líquida não é índice de processo -- fora do confronto.
+    if (ia < 0 || ib < 0) return null;
+    const t = indice.teor(a);
+    const da = t ? ((ia - t) / t) * 100 : 0;
+    const db = t ? ((ib - t) / t) * 100 : 0;
+    return { rotulo: g.rotulo, teorico: t, a, b, ia, ib, da, db, diferenca: da - db };
+  }).filter(Boolean);
+
+  if (!comuns.length) {
+    alvo.innerHTML = '<div class="empty-msg">Não há ' + (porItem ? 'item' : 'classe')
+      + ' feito nas DUAS unidades com índice de ' + escapeHtml(indice.rotulo.toLowerCase())
+      + ' neste recorte' + (piso ? ' e com pelo menos ' + mfgFmt(piso, 0) + ' m² em cada' : '')
+      + '. Tente agrupar por classe, baixar o piso de m², ou escolher outro par.</div>';
+    return;
+  }
+
+  // ---- A média, pelos itens em comum --------------------------------------
+  const soma = (est) => comuns.reduce((s, c) => {
+    const u = c[est === A ? 'a' : 'b'];
+    s.kgTeor += indice.kgTeor(u); s.kgReal += indice.kgReal(u);
+    s.base += indice.base(u); s.m2 += u.m2; s.ops += u.ops;
+    return s;
+  }, { kgTeor: 0, kgReal: 0, base: 0, m2: 0, ops: 0 });
+  const mA = soma(A), mB = soma(B);
+  mA.indice = mA.base ? mA.kgReal / mA.base : 0;
+  mB.indice = mB.base ? mB.kgReal / mB.base : 0;
+  mA.teorico = mA.base ? mA.kgTeor / mA.base : 0;
+  mB.teorico = mB.base ? mB.kgTeor / mB.base : 0;
+  mA.desvio = mA.kgTeor ? ((mA.kgReal - mA.kgTeor) / mA.kgTeor) * 100 : 0;
+  mB.desvio = mB.kgTeor ? ((mB.kgReal - mB.kgTeor) / mB.kgTeor) * 100 : 0;
+
+  const pior = mA.desvio > mB.desvio ? A : B;
+  const melhor = pior === A ? B : A;
+  const mPior = pior === A ? mA : mB, mMelhor = pior === A ? mB : mA;
+  const lacuna = mPior.desvio - mMelhor.desvio;
+
+  // ⚠️ O custo da diferença: quanto a fábrica pior gastou a mais do que teria
+  // gasto rodando no índice da melhor, NOS MESMOS PRODUTOS. Não é uma meta nem
+  // uma promessa -- é a conta de "quanto vale fechar esta lacuna", e é o número
+  // que faz alguém agir. O preço é o da unidade pior, que é quem paga.
+  const kgExtra = mPior.kgTeor * (lacuna / 100);
+  const precoPior = indice.preco(comuns[0][pior === A ? 'a' : 'b']) || 0;
+  const custo = kgExtra * precoPior;
+
+  const painel =
+    '<div class="mfg-duelo">'
+    + [A, B].map(est => {
+        const m = est === A ? mA : mB;
+        const ganhando = est === melhor;
+        return '<div class="mfg-duelo-lado' + (ganhando ? ' mfg-duelo-melhor' : '') + '">'
+          + '<div class="stat-rotulo">' + escapeHtml(rotuloUnidade(est) || est)
+            + ' · ' + escapeHtml(maquinaDe[est] || '') + '</div>'
+          + '<div class="mfg-duelo-indice">' + mfgFmt(m.indice, 2)
+            + '<span class="mfg-sub"> ' + escapeHtml(indice.unidade) + '</span></div>'
+          + '<div class="' + (m.desvio > 0 ? 'mfg-bad' : 'mfg-good') + '"><b>'
+            + (m.desvio > 0 ? '+' : '') + mfgFmt(m.desvio, 1) + '%</b> vs o teórico</div>'
+          + '<div class="mfg-sub">' + m.ops + ' OPs · ' + mfgFmt(m.m2, 0) + ' m² nos itens em comum</div>'
+          + '</div>';
+      }).join('')
+    + '<div class="mfg-duelo-lacuna">'
+    + '<div class="stat-rotulo">Diferença</div>'
+    + '<div class="mfg-duelo-indice ' + (lacuna > 0.05 ? 'mfg-bad' : 'mfg-good') + '">'
+      + mfgFmt(Math.abs(lacuna), 1) + ' pp</div>'
+    + (lacuna > 0.05
+        ? '<div class="mfg-sub"><b>' + escapeHtml(rotuloUnidade(pior) || pior) + '</b> roda mais '
+          + 'pesado que a <b>' + escapeHtml(rotuloUnidade(melhor) || melhor) + '</b> nos mesmos produtos.</div>'
+          + '<div style="margin-top:6px;">Custo da diferença: <b class="mfg-bad">' + mfgRS(custo) + '</b>'
+          + '<div class="mfg-sub">' + mfgFmt(kgExtra, 0) + ' kg a mais no período, ao preço da '
+          + escapeHtml(pior) + '. É quanto vale fechar a lacuna — não é meta.</div></div>'
+          // ⚠️ A lacuna é medida contra a OUTRA FÁBRICA, não contra a receita. Se
+          // a melhor está rodando ABAIXO do teórico, parte da lacuna é ela gastando
+          // menos do que a receita manda -- o que pode ser ganho real, mas também
+          // pode ser consumo subapontado ou m² superapontado. Perseguir esse número
+          // como meta seria perseguir um artefato. O aviso não esconde o valor:
+          // diz contra o que ele foi medido.
+          + (mMelhor.desvio < -0.5
+              ? '<div class="mfg-sub" style="margin-top:6px;"><b class="mfg-bad">⚠️ Leia com cuidado:</b> a '
+                + escapeHtml(melhor) + ' está <b>' + mfgFmt(mMelhor.desvio, 1) + '%</b> abaixo do próprio '
+                + 'teórico. Parte desta lacuna é ela consumir menos que a receita — pode ser ganho real, '
+                + 'ou consumo subapontado. A régua mais segura é o desvio de cada uma contra o teórico ('
+                + (mPior.desvio > 0 ? '+' : '') + mfgFmt(mPior.desvio, 1) + '% na ' + escapeHtml(pior) + ').</div>'
+              : '')
+        : '<div class="mfg-sub">As duas rodam praticamente no mesmo índice nos itens em comum.</div>')
+    + '</div></div>';
+
+  // ---- A tabela, produto a produto ----------------------------------------
+  // Ordena pela diferença ENTRE AS DUAS, em módulo: no topo, o produto em que
+  // elas mais discordam -- é por onde a investigação começa.
+  comuns.sort((x, y) => Math.abs(y.diferenca) - Math.abs(x.diferenca));
+
+  const celula = (ind, desvio, m2, marcar) =>
+    '<td class="mfg-num' + (marcar ? ' mfg-celula-pior' : '') + '">' + mfgFmt(ind, 2)
+    + '<div class="mfg-sub ' + (desvio > 0 ? 'mfg-bad' : 'mfg-good') + '">'
+    + (desvio > 0 ? '+' : '') + mfgFmt(desvio, 1) + '%</div>'
+    + '<div class="mfg-sub">' + mfgFmt(m2, 0) + ' m²</div></td>';
+
+  alvo.innerHTML = painel
+    + '<div class="modal-text" style="margin:14px 0 10px; font-size:12.5px;">'
+    + 'Só os ' + (porItem ? 'itens' : 'as classes') + ' que <b>as duas fábricas fizeram</b> ('
+    + comuns.length + '). Presa aos mesmos produtos, a comparação tira o efeito do mix — '
+    + 'o que sobra é diferença de processo. A média de cima é <b>Σ real ÷ Σ teórico</b>, '
+    + 'ponderada pelo volume e neutra ao mix.'
+    + (mfgFiltros.indice === 'quimico'
+        ? '<br>⚠️ <b>A máquina (PM/RB) não entra no químico:</b> a largura útil se cancela na '
+          + 'fórmula, então diferença aqui é densidade realizada, cadastro do produto, ou m² apontado.'
+        : '')
+    + '</div>'
+    + '<div class="scroll-area"><table class="data-table mfg-tabela-comparar"><thead><tr>'
+    + '<th>' + (porItem ? 'Item' : 'Classe') + '</th>'
+    + '<th class="mfg-num" title="Do cadastro, já com o +1%. Igual para as duas.">Teórico</th>'
+    + '<th class="mfg-num">' + escapeHtml(rotuloUnidade(A) || A)
+      + '<div class="mfg-sub">' + escapeHtml(maquinaDe[A] || '') + '</div></th>'
+    + '<th class="mfg-num">' + escapeHtml(rotuloUnidade(B) || B)
+      + '<div class="mfg-sub">' + escapeHtml(maquinaDe[B] || '') + '</div></th>'
+    + '<th class="mfg-num" title="Desvio de A menos desvio de B. Positivo = A gasta mais.">A − B</th>'
+    + '</tr></thead><tbody>'
+    + comuns.slice(0, MFG_TETO_LINHAS).map(c =>
+        '<tr><td>' + escapeHtml(c.rotulo) + '</td>'
+        + '<td class="mfg-num"><b>' + mfgFmt(c.teorico, 2) + '</b>'
+          + '<div class="mfg-sub">' + escapeHtml(indice.unidade) + '</div></td>'
+        + celula(c.ia, c.da, c.a.m2, c.diferenca > 0)
+        + celula(c.ib, c.db, c.b.m2, c.diferenca < 0)
+        + '<td class="mfg-num ' + (Math.abs(c.diferenca) > 5 ? 'mfg-bad' : '') + '"><b>'
+          + (c.diferenca > 0 ? '+' : '') + mfgFmt(c.diferenca, 1) + ' pp</b></td></tr>'
+      ).join('')
+    + '</tbody></table></div>'
+    + '<div class="mfg-sub" style="margin-top:8px;">' + comuns.length + ' '
+    + (porItem ? 'item(ns)' : 'classe(s)') + ' em comum'
+    + (comuns.length > MFG_TETO_LINHAS ? ' — mostrando os ' + MFG_TETO_LINHAS + ' de maior diferença.' : '.')
+    + '</div>';
 }
 
 function mfgRenderComparar() {
@@ -1170,6 +1368,17 @@ function mfgRenderComparar() {
   if (ests.length < 2) {
     alvo.innerHTML = '<div class="empty-msg">O arquivo só tem uma unidade — não há o que comparar. '
       + 'Comparar índices precisa de pelo menos duas fábricas no mesmo arquivo.</div>';
+    return;
+  }
+
+  // Com as duas unidades escolhidas, vira confronto cara a cara. Sem elas,
+  // continua o panorama de todas as fábricas -- as duas visões respondem
+  // perguntas diferentes ("quem discorda de quem" × "por que estas duas").
+  const A = mfgFiltros.unidadeA, B = mfgFiltros.unidadeB;
+  if (A && B && A !== B) return mfgRenderDuelo(alvo, indice, porItem, grupos, maquinaDe);
+  if (A && B && A === B) {
+    alvo.innerHTML = '<div class="empty-msg">Escolha duas unidades <b>diferentes</b> para comparar, '
+      + 'ou deixe uma em branco para ver o panorama de todas.</div>';
     return;
   }
 
@@ -1433,6 +1642,36 @@ function mfgLinhasExportacao() {
 // própria comparação. As abas de OP exportam a planilha completa -- ali o
 // recorte é do que se OLHA, e quem leva para o Excel vai querer as duas
 // dimensões na mesma linha para montar a tabela dinâmica dele.
+// A aba Comparar tem duas formas — panorama de todas, ou confronto de duas —, e
+// a exportação segue a que está na tela. Exportar sempre o panorama entregaria
+// uma planilha diferente do que a pessoa está olhando.
+function mfgExportacaoDuelo() {
+  const indice = MFG_INDICES[mfgFiltros.indice];
+  const porItem = mfgFiltros.compararPor === 'item';
+  const A = mfgFiltros.unidadeA, B = mfgFiltros.unidadeB;
+  const piso = mfgFiltros.m2Minimo || 0;
+  const rotA = rotuloUnidade(A) || A, rotB = rotuloUnidade(B) || B;
+
+  const cabecalho = [porItem ? 'Item' : 'Classe', 'Índice teórico (' + indice.unidade + ')',
+    rotA + ' realizado', rotA + ' desvio %', rotA + ' m²',
+    rotB + ' realizado', rotB + ' desvio %', rotB + ' m²',
+    'Diferença A − B (pp)'];
+
+  const linhas = mfgAgruparIndices(porItem).map(g => {
+    const a = g.unidades[A], b = g.unidades[B];
+    if (!a || !b || !indice.temBase(a) || !indice.temBase(b)) return null;
+    if (a.m2 < piso || b.m2 < piso) return null;
+    const ia = indice.real(a), ib = indice.real(b);
+    if (ia < 0 || ib < 0) return null;   // devolução líquida, ver mfgRenderDuelo
+    const t = indice.teor(a);
+    const da = t ? ((ia - t) / t) * 100 : 0;
+    const db = t ? ((ib - t) / t) * 100 : 0;
+    return [g.rotulo, t, ia, da, a.m2, ib, db, b.m2, da - db];
+  }).filter(Boolean).sort((x, y) => Math.abs(y[8]) - Math.abs(x[8]));
+
+  return { cabecalho, linhas, aba: (A + ' x ' + B).slice(0, 28) };
+}
+
 function mfgExportacaoComparar() {
   const indice = MFG_INDICES[mfgFiltros.indice];
   const porItem = mfgFiltros.compararPor === 'item';
@@ -1469,16 +1708,21 @@ function mfgExportacaoComparar() {
 
 async function mfgExportar(formato) {
   const comparando = mfgAba === 'comparar';
-  const pacote = comparando
-    ? mfgExportacaoComparar()
+  const A = mfgFiltros.unidadeA, B = mfgFiltros.unidadeB;
+  const duelo = comparando && A && B && A !== B;
+  const pacote = duelo ? mfgExportacaoDuelo()
+    : comparando ? mfgExportacaoComparar()
     : { cabecalho: MFG_EXPORT_CABECALHO, linhas: mfgLinhasExportacao(), aba: 'Análise MFG' };
   if (!pacote.linhas.length) {
-    alert(comparando
+    alert(duelo
+      ? 'Nenhum produto foi feito nas duas unidades neste recorte — não há confronto para exportar.'
+      : comparando
       ? 'Nenhum produto foi feito em mais de uma unidade neste recorte — não há comparação para exportar.'
       : 'Nenhuma OP para exportar — confira os filtros.');
     return;
   }
-  const nome = (comparando ? 'comparar-indices-mfg-' : 'analise-mfg-')
+  const nome = (duelo ? 'confronto-' + A + '-x-' + B + '-'
+    : comparando ? 'comparar-indices-mfg-' : 'analise-mfg-')
     + new Date().toISOString().slice(0, 10);
   if (formato === 'csv') exportarCsvGenerico(pacote.cabecalho, pacote.linhas, nome);
   else await exportarXlsxGenerico(pacote.cabecalho, pacote.linhas, pacote.aba, nome);
@@ -1672,6 +1916,7 @@ function mfgTrocarAba(aba) {
   });
   // Os controles do comparador so fazem sentido na aba dele.
   document.getElementById('mfgCompararControles').style.display = aba === 'comparar' ? '' : 'none';
+  document.getElementById('mfgCompararControles2').style.display = aba === 'comparar' ? '' : 'none';
   // Situacao e tolerancia nao se aplicam ao comparador nem a lista de orfas.
   document.getElementById('mfgFiltroSituacao').style.display =
     (aba === 'comparar' || aba === 'semop') ? 'none' : '';
@@ -1687,6 +1932,22 @@ document.getElementById('mfgIndice').addEventListener('change', (e) => {
 });
 document.getElementById('mfgCompararPor').addEventListener('change', (e) => {
   mfgFiltros.compararPor = e.target.value; mfgRender();
+});
+document.getElementById('mfgUnidadeA').addEventListener('change', (e) => {
+  mfgFiltros.unidadeA = e.target.value; mfgRender();
+});
+document.getElementById('mfgUnidadeB').addEventListener('change', (e) => {
+  mfgFiltros.unidadeB = e.target.value; mfgRender();
+});
+// Troca os dois lados de lugar. A coluna "A − B" muda de sinal, e é isso que
+// se quer quando a fábrica que interessa está do lado errado da conta.
+document.getElementById('mfgInverterBtn').addEventListener('click', () => {
+  const a = mfgFiltros.unidadeA;
+  mfgFiltros.unidadeA = mfgFiltros.unidadeB;
+  mfgFiltros.unidadeB = a;
+  document.getElementById('mfgUnidadeA').value = mfgFiltros.unidadeA;
+  document.getElementById('mfgUnidadeB').value = mfgFiltros.unidadeB;
+  mfgRender();
 });
 document.getElementById('mfgM2Minimo').addEventListener('input', (e) => {
   const v = parseFloat(String(e.target.value).replace(',', '.'));

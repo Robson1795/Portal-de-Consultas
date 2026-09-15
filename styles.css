@@ -1419,6 +1419,26 @@ td.col-acoes { white-space: nowrap; text-align: center; }
   background: var(--erro-fundo);
   box-shadow: inset 0 -2px 0 var(--erro-texto);
 }
+/* ===== Confronto entre duas unidades =====
+   Tres blocos lado a lado (fabrica A, fabrica B, e a diferenca), que viram
+   coluna no celular. O `minmax(0, 1fr)` -- e nao `1fr` -- porque um numero
+   longo dentro de um item de grid impede a coluna de encolher abaixo do
+   proprio conteudo, e ai o painel estoura a largura da tela. */
+.mfg-duelo {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px; margin-bottom: 14px;
+}
+.mfg-duelo-lado, .mfg-duelo-lacuna {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+  padding: 14px 16px; min-width: 0;
+}
+/* A fabrica que roda mais apertado leva um filete verde -- o lado a imitar. */
+.mfg-duelo-melhor { border-color: var(--ok-texto); box-shadow: inset 3px 0 0 var(--ok-texto); }
+.mfg-duelo-lacuna { background: var(--panel-2); }
+.mfg-duelo-indice {
+  font-size: 26px; font-weight: 700; color: var(--ink); line-height: 1.2; margin: 4px 0 2px;
+}
+
 /* A primeira coluna (produto) e a segunda (teorico) ficam visiveis ao rolar
    a tabela pro lado -- sem elas, as colunas das unidades viram numeros soltos
    sem dizer de que produto sao. */

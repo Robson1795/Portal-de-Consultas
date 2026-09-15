@@ -1460,6 +1460,21 @@
       </div>
 
       <div class="cfg-barra" id="mfgCompararControles" style="display:none;">
+        <label for="mfgUnidadeA" style="font-size:13px; color:var(--muted);"
+               title="Escolha as duas fábricas para o confronto cara a cara. Deixe a segunda em branco para ver o panorama de todas.">
+          Comparar
+        </label>
+        <select id="mfgUnidadeA" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <option value="">— escolha a 1ª —</option>
+        </select>
+        <span style="font-size:13px; color:var(--muted);">com</span>
+        <select id="mfgUnidadeB" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <option value="">— escolha a 2ª —</option>
+        </select>
+        <button class="btn btn-mini" id="mfgInverterBtn" title="Trocar os dois lados de lugar">⇄</button>
+      </div>
+
+      <div class="cfg-barra" id="mfgCompararControles2" style="display:none;">
         <label for="mfgIndice" style="font-size:13px; color:var(--muted);">Índice</label>
         <select id="mfgIndice" style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
           <option value="quimico">Químico — densidade (kg/m³)</option>
