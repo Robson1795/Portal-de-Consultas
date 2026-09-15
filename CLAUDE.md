@@ -3,7 +3,7 @@
 Contexto do projeto para qualquer agente de IA ou pessoa que for mexer neste repositório.
 Sempre em **português do Brasil**.
 
-**Atualizado:** 14/09/2026 (QR em todas as etiquetas do portal)
+**Atualizado:** 15/09/2026 (Análise MFG + Painel de Docas/Preparar, das duas frentes)
 **Mantenedores:** Robson (dono do projeto e admin geral) · Victor Dobner (colaborador)
 
 > Este arquivo é lido automaticamente pelo Claude Code ao abrir a pasta do projeto.
@@ -44,6 +44,7 @@ servidos são o próprio código-fonte. Divididos na Fase 2a (03/09/2026):
 | `js/busca.js` | Busca global: onde o item está em todas as telas, de uma vez (seção 26) |
 | `js/inventario.js` | Fechar inventário: congela a contagem e calcula a acuracidade (seção 27) |
 | `js/scanner.js` | Leitor de código pela câmera (BarcodeDetector) e o QR das etiquetas (seção 28) |
+| `js/mfg.js` | Análise MFG: consumo teórico x reportado por OP, e o dinheiro da diferença (seção 29) |
 
 São **scripts clássicos, não módulos**, carregados nessa ordem no fim do `body`. O `let`/`const` de
 nível superior vai para o escopo lexical global, compartilhado entre os arquivos — é por isso que o
@@ -5362,3 +5363,451 @@ Ré6, Sol6 — sobem, não caem, pra soar "alerta" e não "erro"), lembrando o
 micro-ondas. Continua sem arquivo de áudio (só osciladores do Web Audio,
 um `AudioContext` por chamada, fechado sozinho depois da última nota) —
 mesma limitação de antes: som só sai com o portal aberto numa aba.
+
+## 29. Análise MFG — consumo teórico x reportado, por OP (15/09/2026)
+
+O Victor: *"preciso que vc faça uma analise pesada nesse arquivo do MFG e
+desenvolva uma tela MFG. Quero basicamente poder jogar as OPs, talvez subindo um
+arquivo de Excel e o sistema fazer uma analise bem semelhante ao MFG da empresa
+só que melhor. Preciso TAMBÉM que ele mostre quais OPs estao com divergencias,
+tanto pra mais quanto pra menos no consumo. Se puder também detalhar quanto a
+unidade ta perdendo ou ganhando, valores, etc."*
+
+Vive em **`js/mfg.js`**. Script: `sql/fase50-analise-mfg.sql` (**ainda não
+rodado** — e a tela funciona sem ele, ver abaixo).
+
+### ⚠️ O modelo não foi deduzido: foi extraído do arquivo e depois conferido
+
+O `.xlsx` é um zip, e `xl/worksheets/sheetN.xml` traz **cada fórmula em texto**.
+As 56 fórmulas da aba de análise foram lidas de lá. Depois o cálculo foi
+reimplementado do zero a partir das abas de origem e comparado com os números
+que a própria planilha já tinha calculado: **958 de 958 OPs batem, em dez
+métricas** (consumo teórico, report, aço/filme/alumínio teórico e real, e as
+cinco de R$). Não é "parecido com o MFG" — é o MFG.
+
+Três coisas teriam saído erradas se eu tivesse deduzido em vez de ler:
+
+1. **A largura útil depende da MÁQUINA (PM ou RB)**, não da classe sozinha — e a
+   máquina vem da unidade (101/103/104 = PM, 105/106 = RB).
+2. **O trapézio (+5 mm na espessura) só entra quando a classe começa com
+   "ISOT"**. Painel liso não tem.
+3. ⚠️ **O report total do químico soma POLIOL + MDI + CATALIZADOR + PENTANO e
+   deixa o ADESIVO de fora.** O adesivo é consumido e aparece no Consumo, mas
+   não entra no total que vira densidade realizada — ele cola faces, não forma
+   espuma. Somá-lo faria **toda** OP parecer que consumiu a mais. A tela mostra
+   o adesivo à parte, justamente para ninguém achar que o portal o perdeu.
+
+### A conta, por OP
+
+    CONSUMO TEÓRICO (kg) = m² × (espessura + trapézio) × densidade × 1,01
+    REPORTADO (kg)       = POLIOL + MDI + CATALIZADOR + PENTANO
+    DIFERENÇA            = teórico − reportado   (negativo = consumiu a MAIS)
+    DENSIDADE REALIZADA  = reportado ÷ (m² × (espessura + trapézio))   [sem o 1,01]
+
+    AÇO/FILME/ALUMÍNIO TEÓRICO = índice da Base de Dados × m² × 1,01
+    AÇO/FILME/ALUMÍNIO REAL    = o que o Consumo baixou daquela família
+
+    R$ = diferença × preço unitário da família NAQUELA UNIDADE
+
+⚠️ **O preço é por família E por unidade**, não um preço global: o mesmo aço
+custa diferente em Anápolis e em Araquari, e usar a média da empresa jogaria
+erro de preço dentro do resultado de produção. Para aço/filme/alumínio o preço é
+**ponderado** (Σ valor ÷ Σ quantidade); para o químico o MFG usa a **média
+simples dos unitários** (AVERAGEIFS). São contas diferentes, e mantive cada uma
+como está — mudar faria os números divergirem do MFG da empresa, que é
+exatamente contra o que esta tela vai ser conferida na primeira semana.
+
+### ⚠️ Tudo por NOME de coluna, nunca por letra
+
+O MFG referencia coluna fixa (`Consumo!$N:$N`), e por isso **uma coluna a mais no
+export do Datasul quebra a planilha inteira em silêncio** — a conta continua
+saindo, só que da coluna errada. Aqui a coluna é achada pelo nome do cabeçalho,
+com sinônimos e sem acento/caixa, então a ordem pode mudar à vontade.
+
+A aba **"Base de Dados" guarda três tabelas lado a lado** com o mesmo cabeçalho
+(acabados, químicos, e o de-para unidade→máquina, que não tem cabeçalho nenhum).
+As duas primeiras se distinguem por nome de coluna; a terceira é achada pelo
+**conteúdo** — a coluna cujos valores só são PM/RB, e a de unidade ao lado dela.
+
+### O que esta tela faz que o MFG da empresa não faz
+
+1. ⚠️ **OP com consumo e sem apontamento de produção.** A análise da empresa
+   parte do Acabado, então OP que baixou matéria-prima e nunca apontou produção
+   **não existe nela**. No arquivo real de setembro: 974 OPs no Consumo contra
+   959 no Acabado — **15 OPs tiraram material do estoque e não viraram m²
+   nenhum**. Ficam num botão próprio ("🚨 Consumo sem OP").
+2. ⚠️ **OP que o MFG descartou em silêncio.** O Acabado tem 959 OPs e a análise
+   da empresa tem **958**: a OP `1954151` sumiu porque o item dela não está na
+   Base de Dados. Aqui ela aparece como **"Sem cadastro"**, com o motivo
+   escrito, **fora** da conta de perda e ganho — porque sem teórico a
+   "diferença" vira o consumo inteiro da OP, uma perda gigante e falsa.
+3. **Soma o dinheiro por unidade.** O MFG dá a variação OP a OP; "quanto esta
+   fábrica ganhou ou perdeu na semana" ninguém respondia sem tabela dinâmica por
+   fora. No arquivo de setembro: **R$ −159.752,95** no total, com a 103 em
+   −159.898 e a 105 em +111.083.
+4. **Diz a direção em letras** ("Custou a MAIS" / "Custou a menos") em vez de
+   deixar deduzir pelo sinal.
+5. **Faixa de tolerância ajustável** (padrão 2%): abaixo dela a diferença é
+   ruído de balança, não divergência. Com 0% **958 das 959** OPs "divergem", o
+   que não informa nada.
+
+### ⚠️ A situação olha o químico E o material — e isso foi um defeito meu
+
+A primeira versão classificava a OP só pelo percentual do **químico**. Resultado:
+a **maior perda do arquivo inteiro** (OP 1941769, R$ −58.819) aparecia como
+**"Dentro da faixa"** — o químico dela estava a 1,1%, e quem estourou foi o
+**aço**, a −306%. Foi pego no navegador, olhando a primeira linha da tabela.
+
+Hoje `mfgDivergencias()` mede os dois contra a mesma tolerância e **basta um
+estourar** para a OP ser divergência; `mfgOndeDiverge()` escreve qual dos dois
+foi ("no químico", "no aço/filme", "químico e material"). A **direção** segue o
+**dinheiro**, não o químico: uma OP que economizou químico e desperdiçou aço
+perdeu dinheiro, e é isso que ela precisa dizer. Conferido depois da correção:
+**zero** OPs com mais de R$ 5.000 de impacto continuam rotuladas "Dentro da
+faixa", e os totais não mudaram (a classificação mudou, a aritmética não).
+
+### A tela funciona sem o banco
+
+Subir o arquivo, calcular, filtrar, abrir o detalhe de cada OP e exportar **não
+dependem de tabela nenhuma**: a conta inteira acontece no navegador, e o arquivo
+não sai da máquina. O `fase50` acrescenta só o **histórico** — guardar o
+resultado de cada semana para responder "a unidade está melhorando?". Enquanto
+não rodar, o botão "Guardar esta análise" avisa que a tabela não existe e a
+análise na tela continua valendo.
+
+- ⚠️ **Guarda o RESULTADO (~960 linhas por semana), não as ~30.000 de consumo
+  que entraram.** O consumo é insumo: cabe no arquivo, e regravá-lo toda semana
+  seriam 1,5 milhão de linhas por ano para responder perguntas que o próprio
+  arquivo já responde. Mesma ordem de grandeza de `analise_demanda`.
+- ⚠️ **Aqui NÃO se substitui**, diferente de `analise_demanda` (fase19), que é o
+  retrato do dia. Lá o passado não interessa; aqui o passado **é o produto** — a
+  variação de uma semana só vira informação comparada com as outras.
+- ⚠️ **A `tolerancia` fica gravada**, e não é enfeite: é a régua que decidiu
+  quantas OPs contaram como divergentes naquele dia. Sem guardá-la, mudar de 2%
+  para 3% faria análises antigas "terem menos divergência" sem nada ter mudado
+  na fábrica. Mesmo princípio dos totais gravados em `inventarios` (fase41).
+- **RLS por `pode_ver_analise_compras()`**, a mesma trava da Análise de Compras
+  — e não `esta_aprovado()`. É resultado industrial com preço de matéria-prima
+  dentro: mesma natureza de dado, seria incoerente fechar uma e deixar a outra
+  aberta. **Há política de DELETE (só admin)**, diferente do inventário: uma
+  importação é um arquivo, e arquivo errado (semana trocada, export pela metade)
+  acontece — sem poder apagar, o primeiro engano ficaria para sempre torcendo a
+  série histórica.
+
+### De quebra: duas tabelas estavam fora do backup
+
+Ao acrescentar `mfg_analises` e `mfg_ops` em `TABELAS_BACKUP`
+(`js/configuracoes.js`), apareceu que **`inventarios` e `inventario_itens`
+(fase41) nunca tinham entrado** — exatamente a omissão silenciosa que a seção 24
+avisa que acontece. As quatro foram acrescentadas; a lista tem 42 tabelas.
+
+### Detalhes que evitam defeito
+
+- ⚠️ **Os m² são somados pelo `Nro Documento`**, não pelo `Nr Ord Prod` — é o
+  que a fórmula do MFG faz. Na prática os dois são iguais, mas trocar a coluna
+  faria a conferência contra a planilha da empresa parar de bater.
+- **Teto de 300 linhas desenhadas**, com o total dito na tela. São 959 OPs por
+  semana, e desenhar todas trava a aba — o corte nunca é silencioso.
+- **A ordem é a do dinheiro**: a maior perda em cima. É a OP que precisa ser
+  investigada primeiro; ordem alfabética esconderia o problema. Mesma decisão da
+  aba Conferir e da lista de reservas.
+- **Os cards contam o que o FILTRO deixou**, para o dinheiro bater com a tabela
+  que está na frente da pessoa; quantas OPs existem no total vai na linha de
+  resumo ao lado.
+- Ler o arquivo de 10,8 MB leva **~20 segundos**. A mensagem "Calculando as
+  OPs..." é pintada **antes** do cálculo travar a linha do tempo (um
+  `setTimeout` de 30 ms), senão ela só apareceria no fim.
+
+Conferido no navegador com o arquivo real de 10,8 MB, pelo mesmo handler do
+input de arquivo: 959 OPs analisadas e 15 sem apontamento; a OP 1938428 bate
+**casa a casa** com a planilha nas dez métricas (teórico 209,7669 · report
+213,7010 · material 681,2430/830 · R$ −74,2454/−751,6311 · densidade realizada
+30,8683 · MDI÷POLIOL 2,4736); o total por unidade reproduz o cálculo
+independente ao centavo (**R$ −159.752,95**); filtros de unidade, classe,
+situação e busca recortam certo; a tolerância muda a contagem de divergentes
+(958 → 654 → 221 com 0%, 2% e 10%); o modal de detalhe abre pelo clique real e
+traz as quatro seções; a exportação sai com 36 colunas e 959 linhas; **zero
+texto abaixo de 4,5:1 nos dois temas**, modal incluído; no celular a tabela por
+unidade rola dentro da própria caixa e nada estoura a largura. Zero erro de
+console.
+
+### Separada por unidade, e aceitando as planilhas soltas (15/09/2026)
+
+O Victor, logo depois: *"Primeiro, separar por unidade. Segundo: Seria
+interessante ter um botão para carregar as planilhas de entrada de material e
+consumo de material, e a partir dai gerar o MFG e fazer a analise. Elas são
+exatamente como a aba Acabado e consumo da planilha que eu anexei do MFG."*
+
+#### 1. A tela abre na unidade do cabeçalho
+
+O arquivo do MFG traz as **cinco fábricas juntas**, e a primeira versão abria no
+consolidado. Agora `mfgMontarFiltros()` aponta o filtro para `unidadeAtual` — é
+o idioma de todo o portal, onde o seletor do topo manda em todas as telas — e
+`mfgTrocarUnidade()` entrou em `trocarUnidade()` (`js/estoque.js`), ao lado das
+outras páginas.
+
+⚠️ **Trocar a unidade NÃO relê o arquivo.** As outras telas recarregam do banco;
+aqui os dados das cinco fábricas já estão em memória, e reler custaria 20
+segundos de parsing à toa. Só o filtro se reaponta.
+
+⚠️ **O quadro por unidade é o único lugar que IGNORA o filtro de unidade**
+(`mfgFiltradas(true)`). Filtrá-lo junto o deixaria com uma linha só — e "como a
+minha fábrica está contra as outras" é justamente o que o MFG da empresa não
+respondia sem tabela dinâmica por fora. Ele mostra as cinco mais a linha "Todas
+as unidades", a linha da unidade em foco fica destacada, e **clicar numa linha
+aponta a tela para aquela unidade** (os cards e a tabela seguem; o quadro, não).
+
+#### 2. Duas planilhas soltas bastam — depois de uma vez com o arquivo completo
+
+Dois botões: **"📄 Carregar planilhas de Acabado e Consumo"** e **"📂 Arquivo
+completo do MFG"**. Os dois caem na mesma `mfgAbrirArquivos()`, que aceita
+**vários arquivos de uma vez** e classifica **cada aba de cada arquivo**.
+
+⚠️ **A classificação é por CONTEÚDO, não pelo nome da aba.** Um export do
+Datasul salvo à parte chega como "Planilha1". E Acabado e Consumo têm o
+cabeçalho **quase idêntico** — são o mesmo relatório de movimentação, de pontas
+opostas. Conferido no arquivo real, o que de fato separa as duas:
+
+| | Acabado | Consumo |
+|---|---|---|
+| Grupo de Estoque | `25 - PRODUTOS ACABADOS` | `10 - MATERIAS-PRIMAS` |
+| Esp Docto | `ACA` (apontamento) | `REQ` / `RRQ` (requisição) |
+| Quantidade | positiva (entrou) | negativa (baixou) |
+
+Os três **votam**, e o vencedor leva: um sinal sozinho erraria na linha atípica
+(o Acabado tem 1 quantidade negativa em 3.000, o Consumo tem 158 positivas).
+
+⚠️ **As colunas `Químico`, `Chave Custo`, `Unitário` e `Médio Total` do Consumo
+NÃO existem no export cru** — são fórmulas que a planilha do MFG acrescenta.
+Por isso não entram na classificação nem na conta: o portal recalcula as quatro
+a partir de Item, Vl Materiais e Quantidade, que vêm do Datasul. (No Acabado, só
+`Qtd` é fórmula.) É o que faz a planilha solta bastar.
+
+#### ⚠️ Sem cadastro não existe teórico — e é por isso que o arquivo completo vem uma vez
+
+**Base de Dados** e **Densidades** são o que diz espessura, densidade, largura
+útil e os índices de aço/filme/alumínio. Sem elas o teórico é 0 e a análise não
+existe. Mas elas mudam raramente, e o que chega toda semana é só Acabado +
+Consumo — exatamente o que o pedido descreve.
+
+Então o cadastro do último arquivo completo fica **guardado no navegador**
+(`localStorage`, ~600 KB para 3.571 produtos), e as importações seguintes usam
+o guardado. A tela diz, em cima, se há cadastro e de quando — sem isso a pessoa
+clicaria no botão e só descobriria no erro. Quando as duas planilhas chegam sem
+cadastro nenhum, a mensagem diz o que fazer, em vez de só falhar.
+
+- ⚠️ **Só o que faltou vem do guardado.** Subir o arquivo completo junto com uma
+  planilha solta usa a Base de Dados **do arquivo**, que é a mais nova.
+- **`localStorage`, e não banco**: é dado de referência (espessura e densidade de
+  produto), cabe com folga, e guardá-lo no Supabase pediria mais uma tabela e
+  mais um script para rodar — para resolver uma conveniência. O preço é ser por
+  navegador, e a tela escreve isso com a data.
+- **Cota estourada não atrapalha a análise**: o cadastro continua valendo nesta
+  sessão (está em memória), só não sobrevive ao F5. Vira `console.warn`.
+
+Conferido no navegador, partindo o arquivo real em duas planilhas soltas **com a
+aba renomeada para "Planilha1"** (é o caso real): sem cadastro guardado, as duas
+soltas são recusadas com a explicação; o arquivo completo calcula e guarda o
+cadastro (3.571 produtos, 596 KB); as duas soltas sozinhas então produzem
+**exatamente o mesmo resultado** — 959 OPs, 15 sem apontamento, e **R$
+−159.752,95 idêntico ao do arquivo completo**. A tela abre na unidade do
+cabeçalho (202 OPs da 106, R$ 32.724,12) e todas as linhas filtradas são dela; o
+quadro comparativo continua com as cinco fábricas mais o total; clicar na 103
+aponta a tela (R$ −159.898,60) e move o destaque; clicar em "Todas as unidades"
+volta ao consolidado; `trocarUnidade('101')` de verdade reaponta o filtro sem
+reler o arquivo. **Zero texto abaixo de 4,5:1 nos dois temas**, e no celular nada
+estoura a largura. Zero erro de console.
+
+### Aço e químico em abas separadas, e o comparador de índices (15/09/2026)
+
+O Victor: *"Separar aço e quimico. Pode manter o valor em reais de perca e ganho
+somando os dois, porém para analises, separe o aço e o quimico."* E: *"Percebi
+que a unidade 105 teve ganho no quimico, enquanto a unidade 106 teve uma perca
+enorme. Ambas unidades trabalham com a robor. Preciso descobrir pq a unidade 106
+ta tendo tanta perca e com isso, quero comparar os indices e descobrir se tem
+algum errado."*
+
+A tela ganhou cinco abas: **📊 Resumo · 🧪 Químico · 🔩 Aço e filme · ⚖️ Comparar
+unidades · 🚨 Consumo sem OP** (esta última era um botão de alternância e virou
+aba, para o padrão ser um só).
+
+#### Por que separar muda a análise
+
+São problemas de naturezas diferentes, e misturá-los esconde os dois. O
+**químico é processo** — densidade da espuma, proporção MDI/poliol,
+temperatura; quem resolve é a produção. O **aço é corte e sobra** — largura de
+bobina, refile, ponta perdida; quem resolve é o planejamento. Uma OP pode estar
+ótima num e péssima no outro.
+
+O **dinheiro continua somado** no Resumo (a fábrica não tem dois caixas), mas
+cada aba mede a **sua** divergência: `mfgSituacaoDim(l, tol, dim)` decide se a
+OP diverge olhando só a dimensão da aba, e as colunas da tabela são montadas em
+JS por aba (no Químico aparece densidade teórica × realizada; no Aço, os
+índices de aço e filme). Conferido no arquivo real: **químico −R$ 177.340,27 +
+aço/filme +R$ 17.587,32 = −R$ 159.752,95**, exatamente o total do Resumo.
+
+⚠️ E a separação já respondeu meia pergunta: **a perda do período é inteirinha
+do químico** — o aço, somado, está positivo.
+
+#### ⚠️ A descoberta que mudou para onde a investigação da 106 aponta
+
+**A largura útil se CANCELA na fórmula do químico.** O MFG calcula
+`(m² ÷ largura) × largura × altura × densidade × 1,01` — a largura entra e sai.
+
+Consequência direta: **PM × RB não explica diferença nenhuma no químico.** A
+máquina só muda a largura, e a largura não está na conta. Sobram três causas
+possíveis, e é isto que a aba separa:
+
+1. a densidade **realizada** é de fato maior (processo);
+2. a densidade **cadastrada** está errada para os produtos daquela fábrica;
+3. o **m² apontado** está a menos (todo o químico dividido por um denominador
+   menor).
+
+#### O comparador
+
+Índice = **quanto de material por unidade de produto**: químico em kg/m³
+(densidade), aço e filme em kg/m². Os dois lados usam o **mesmo denominador**,
+então a comparação é honesta mesmo com volumes muito diferentes. A média é
+**ponderada pelo volume** — somar densidades de OP e dividir por N daria o mesmo
+peso a uma OP de 20 m² e a uma de 2.000.
+
+- ⚠️ **O teórico é do cadastro e é o MESMO para todas as fábricas.** Quem muda é
+  o realizado. Por isso a coluna que importa é a **Discordância**: a distância,
+  em pontos percentuais, entre a fábrica que mais gasta e a que menos gasta *no
+  mesmo produto*. **A lista é ordenada por ela**, não alfabeticamente — é ela
+  que aponta índice errado ou processo fora de controle.
+- **Só entra o que foi feito em duas ou mais unidades**: com uma só não há
+  comparação.
+- Agrupa por **classe** ou por **código do item**, e a célula da fábrica que mais
+  gasta fica marcada — é onde a conversa começa.
+
+**Dois defeitos meus que o próprio comparador mostrou, no arquivo real:**
+
+1. ⚠️ **Índice real NEGATIVO existe de verdade**: no período, uma unidade
+   devolveu mais material do que consumiu daquele produto. Não é índice de
+   processo, é artefato do corte de datas — e comparar `−4,76 kg/m²` com um
+   índice normal dava 166 pp de discordância, jogando lixo para o topo da lista.
+   Agora aparece marcado como "devolução líq." e fica **fora** da conta da
+   discordância.
+2. **O m² de cada fábrica entra na célula.** Um desvio de +138% em 396 m² é uma
+   OP só; +9% em 8.000 m² é dinheiro. Sem o volume ao lado, os dois se parecem
+   na tela — e o de cima rouba a atenção.
+
+⚠️ **O piso de m² tem padrão ZERO, e isso é decisão.** Era tentador filtrar o
+volume pequeno de saída, mas **101 kg/m³ de espuma PIR é fisicamente
+impossível** — ou seja, aquela linha é o achado mais grave do arquivo (químico
+lançado em OP errada, ou m² muito subapontado), não ruído. Esconder por padrão
+tiraria da tela justamente o pior caso. Quem quer olhar só o que move o mês
+levanta o piso, e a tela diz **quantas linhas saíram**.
+
+#### O que o comparador respondeu sobre a 106
+
+Com o arquivo real, 105 e 106 (as duas Robor):
+
+| | densidade teórica | realizada | desvio | R$ químico |
+|---|---|---|---|---|
+| 105 | 32,02 | **30,90** | −3,5% | +47.472 |
+| 106 | 32,24 | **34,72** | +7,7% | −126.070 |
+
+As teóricas são praticamente iguais (32,02 × 32,24), então **o mix de produtos
+não explica**. E a 106 está pior em **todas** as classes que as duas fazem
+(Painel Frigo +15% × +3%, Isotelha PRE/Filme +9% × −6%, Isotelha PRE/PRE +8% ×
+−16%, Painel SL +15% × +3%, Placa de PIR +14% × +4%). **Um desvio uniforme em
+todas as classes não é índice errado** — índice errado apareceria em produtos
+específicos. Aponta para algo sistêmico na 106.
+
+⚠️ E o comparador levanta a suspeita inversa também: a Isotelha PRE/PRE da 105
+realizou **25,6 kg/m³ contra 30,4 de receita (−16%, em 22.919 m²)**. Espuma PIR
+16% abaixo da densidade nominal é improvável fisicamente — parte do "ganho" da
+105 pode ser consumo subapontado ou m² superapontado, e não ganho de verdade.
+Os dois extremos merecem conferência de chão de fábrica.
+
+Conferido no navegador com o arquivo real: as cinco abas trocam sem erro; as
+colunas mudam por aba; **químico + aço fecham com o Resumo ao centavo**; a
+contagem de divergentes é diferente em cada aba (654 no químico, 741 no aço, 878
+no combinado), que é o ponto de separar; o comparador monta uma coluna por
+fábrica com a máquina no cabeçalho, ordena por discordância, marca a pior
+célula, tira a devolução líquida do topo e do cálculo; o piso de 1.000 m² reduz
+de 9 para 4 classes **dizendo que 5 saíram**; a exportação segue a aba (14
+colunas na comparação, 36 na planilha completa); o detalhe da OP abre nas três
+abas de lista; `trocarUnidade()` continua reapontando o filtro. **Zero texto
+abaixo de 4,5:1 nos dois temas** e nada estoura a largura no celular, nas cinco
+abas. Zero erro de console.
+
+#### Confronto cara a cara entre duas unidades (15/09/2026)
+
+O Victor: *"Quero poder selecionar a primeira unidade e dps selecionar a segunda
+unidade e a partir dai fazer a comparação. Pegue os itens em comum das duas
+unidades e faça a comparação dos indices, faça uma média de indice."*
+
+Dois seletores na aba Comparar (**"Comparar [1ª] com [2ª]"**, com a máquina no
+rótulo — `Unidade 105 — Cambuí (MG) · RB` — porque o pedido nasceu de comparar
+duas fábricas da MESMA máquina), mais um **⇄** que troca os lados. Com as duas
+preenchidas a aba vira confronto; com a segunda em branco continua o panorama de
+todas — as duas visões respondem perguntas diferentes e nenhuma substitui a
+outra. A primeira já nasce na unidade do cabeçalho: quem investiga começa pela
+própria fábrica.
+
+⚠️ **SÓ OS ITENS EM COMUM, e é isso que faz a comparação valer.** Comparar a
+média geral de duas fábricas mistura duas coisas: o quanto cada uma gasta a mais
+que a receita, e o **mix de produtos** que cada uma faz. Uma fábrica que só faz
+painel denso pareceria pior que uma que só faz isotelha, sem gastar um grama a
+mais. Preso aos produtos que as duas fazem, o que sobra é diferença de processo.
+
+⚠️ **A média é `Σ real ÷ Σ teórico`, e NÃO a média dos índices de cada produto.**
+Somar os percentuais e dividir por N daria o mesmo peso a um produto de 200 m² e
+a um de 20.000 — e é o grande que faz o mês. Feita assim, ela também fica
+**neutra ao mix**: cada produto é comparado com o teórico DELE.
+
+O painel de cima mostra, para cada lado, o índice médio realizado, o desvio
+contra o teórico, e quantas OPs/m² entraram; a fábrica que roda mais apertado
+leva um filete verde. No meio, a **diferença em pontos percentuais** e o **custo
+dela** — quanto a pior gastou a mais do que teria gasto rodando no índice da
+melhor, nos mesmos produtos, ao preço da pior.
+
+⚠️ **O custo tem um aviso que eu só escrevi depois de olhar o número.** A lacuna
+é medida contra a OUTRA FÁBRICA, não contra a receita. No arquivo real isso dá
+**R$ 218.337** entre 105 e 106 — maior que a própria perda da 106 contra o
+teórico (R$ 126.070), porque a 105 está **4,4% ABAIXO** da receita. Perseguir
+esse número como meta seria perseguir um artefato: consumir menos que a receita
+pode ser ganho real, mas também pode ser consumo subapontado. Quando a melhor
+está abaixo do teórico, a tela escreve isso e aponta a régua mais segura (o
+desvio de cada uma contra o teórico). **O valor não é escondido — o que ele mede
+é que fica explícito.**
+
+A tabela lista os produtos em comum ordenados pela **diferença entre as duas em
+módulo** (maior discordância em cima), com o m² de cada fábrica em cada célula e
+a coluna **A − B** em pp. O ⇄ troca os lados e o sinal da coluna vira junto.
+Devolução líquida (índice real negativo) e o piso de m² valem aqui igual ao
+panorama. A **exportação segue a forma na tela**: confronto exporta o confronto
+(9 colunas, uma por lado), panorama exporta o panorama.
+
+#### O que o confronto respondeu sobre a 106
+
+| | índice realizado | vs teórico | OPs · m² em comum |
+|---|---|---|---|
+| 105 Cambuí (RB) | **30,85** kg/m³ | −4,4% | 184 · 47.789 m² |
+| 106 Araquari (RB) | **34,59** kg/m³ | +10,6% | 196 · 60.961 m² |
+| **Diferença** | | **15,0 pp** | **R$ 218.337** |
+
+E a 106 está pior em quase toda classe em comum: Isotelha PRE/PRE (−16,0% ×
++0,3%), Isotelha PRE/Filme (−6,2% × +8,5%), Painel Frigo (+2,8% × +15,2%). A
+exceção é **Isotelha Fachada**, onde a 105 gasta mais (−7,7% × −34,0%, +26,3 pp)
+— mas em 342 m² na 106, volume pequeno, e é por isso que o m² está na célula.
+
+⚠️ **No AÇO o resultado se inverte**: no mesmo par, quem roda pior é a **105**
+(2,1 pp, R$ 43.006). É exatamente o que separar as duas dimensões existe para
+mostrar — uma fábrica pode estar ótima num material e ruim no outro, e a soma
+esconderia as duas coisas.
+
+Conferido no navegador com o arquivo real: os seletores nascem com a máquina no
+rótulo e a 1ª na unidade do cabeçalho; sem a 2ª continua o panorama; escolhendo
+105 × 106 o painel monta com os números acima; o aviso de "leia com cuidado"
+aparece porque a 105 está abaixo do teórico; o ⇄ troca os lados **e o sinal da
+coluna A − B** (+26,3 → −26,3); escolher a mesma unidade dos dois lados recusa
+com explicação; trocar o índice para aço refaz o confronto (e inverte quem está
+pior); a exportação sai com 9 colunas e só os itens em comum; o confronto
+sobrevive a sair da aba e voltar; os totais das outras abas não mudaram
+(**químico −177.340,27 + aço +17.587,32 = −159.752,95**). **Zero texto abaixo de
+4,5:1 nos dois temas**, e no celular os três blocos empilham sem estourar a
+largura. Zero erro de console.

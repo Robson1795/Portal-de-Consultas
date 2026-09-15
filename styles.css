@@ -745,6 +745,8 @@
 .stat-icone.azul  { background: var(--azul-fundo); }
 .stat-icone.verde { background: var(--ok-fundo); }
 .stat-icone.roxo  { background: var(--roxo-fundo); }
+.stat-icone.vermelho { background: var(--erro-fundo); }
+.stat-icone.laranja  { background: var(--aviso-fundo); }
 .stat-texto { min-width: 0; }
 .stat-rotulo {
   font-size: 10.5px; font-weight: 700; letter-spacing: 0.7px;
@@ -1337,6 +1339,111 @@ td.col-acoes { white-space: nowrap; text-align: center; }
   border-radius: 10px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.35);
 }
 
+   Consumo teorico x reportado por OP, e o dinheiro que a diferenca custou.
+   As cores aqui sao SEMANTICAS e sao as mesmas em toda a tela: vermelho e
+   sempre "consumiu a mais / perdeu dinheiro", verde e sempre o contrario.
+   Vem dos tokens (--erro-texto / --ok-texto), entao acompanham o tema claro
+   e escuro sem uma segunda regra -- ver a secao 16 do CLAUDE.md. */
+.mfg-bad  { color: var(--erro-texto); }
+.mfg-good { color: var(--ok-texto); }
+.mfg-ok   { color: var(--muted); }
+.mfg-gray { color: var(--muted); }
+.mfg-num  { text-align: right; white-space: nowrap; }
+.mfg-sub  { font-size: 11px; color: var(--muted); line-height: 1.3; }
+
+.mfg-badge {
+  display: inline-block; padding: 2px 9px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 700; white-space: nowrap;
+  border: 1px solid currentColor;
+}
+.mfg-badge.mfg-bad  { background: var(--erro-fundo); }
+.mfg-badge.mfg-good { background: var(--ok-fundo); }
+.mfg-badge.mfg-ok   { background: var(--panel-2); }
+.mfg-badge.mfg-gray { background: var(--panel-2); }
+
+.mfg-h4 {
+  margin: 16px 0 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.6px;
+  text-transform: uppercase; color: var(--muted);
+}
+
+/* ⚠️ Estas duas tabelas rolam DENTRO da própria caixa. Sem isto, no celular
+   (396px de largura útil) a tabela por unidade ia até 645px e ficava cortada:
+   a coluna "Resultado" -- justamente a que responde a pergunta -- sumia da
+   tela, e o corpo da página não rolava para o lado para compensar. É a mesma
+   regra que a tabela principal já segue por estar dentro de .scroll-area. */
+#mfgPorUnidade, #mfgHistorico { overflow-x: auto; }
+
+.mfg-tabela-unidade, .mfg-tabela-detalhe {
+  width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 14px;
+}
+/* ⚠️ A cor do texto TEM de ser --sobre-acento, e não --muted. Existe uma regra
+   global `thead th` que pinta TODO cabeçalho de tabela do portal de azul
+   (--blue) com texto branco. Trocar só a cor do texto por --muted deixava
+   cinza sobre azul: 1,49:1 no tema claro, contra o mínimo de 4,5:1 que a
+   seção 16 do CLAUDE.md fixou -- e o auditor de contraste pegou. Mantendo o
+   azul, estas duas tabelas ficam iguais a todas as outras do portal. */
+.mfg-tabela-unidade th, .mfg-tabela-detalhe th {
+  text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--sobre-acento); padding: 6px 8px;
+}
+.mfg-tabela-unidade td, .mfg-tabela-detalhe td {
+  padding: 6px 8px; border-bottom: 1px solid var(--border); color: var(--ink);
+}
+.mfg-tabela-unidade th:not(:first-child), .mfg-tabela-unidade td:not(:first-child),
+.mfg-tabela-detalhe th:not(:first-child), .mfg-tabela-detalhe td:not(:first-child) {
+  text-align: right; white-space: nowrap;
+}
+.mfg-linha-total td { border-top: 2px solid var(--border-forte); }
+
+/* Linha do quadro comparativo: clicar aponta a tela para aquela unidade. */
+.mfg-linha-unidade { cursor: pointer; }
+.mfg-linha-unidade:hover td { background: var(--panel-2); }
+/* A unidade em foco. `box-shadow` como filete lateral em vez de `border-left`,
+   que empurraria a célula e faria a tabela tremer ao trocar de unidade. */
+.mfg-unidade-ativa td { background: var(--azul-fundo); }
+.mfg-unidade-ativa td:first-child { box-shadow: inset 3px 0 0 var(--blue); }
+
+/* O botao de lupa por linha: pequeno, so abre o detalhe, nao decide nada. */
+.btn-mini {
+  padding: 2px 8px; font-size: 13px; line-height: 1.5;
+}
+
+/* Comparador de indices: a celula da unidade que mais gasta naquele produto.
+   E o ponto de partida da investigacao ("por que a 106 gasta mais que a 105
+   no mesmo painel?"), entao ela e marcada -- mas com um filete e um fundo
+   suave, nao com vermelho cheio: a linha inteira ja tem numero vermelho, e
+   mais uma mancha forte competiria com ele em vez de guiar o olho. */
+.mfg-celula-pior {
+  background: var(--erro-fundo);
+  box-shadow: inset 0 -2px 0 var(--erro-texto);
+}
+/* ===== Confronto entre duas unidades =====
+   Tres blocos lado a lado (fabrica A, fabrica B, e a diferenca), que viram
+   coluna no celular. O `minmax(0, 1fr)` -- e nao `1fr` -- porque um numero
+   longo dentro de um item de grid impede a coluna de encolher abaixo do
+   proprio conteudo, e ai o painel estoura a largura da tela. */
+.mfg-duelo {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px; margin-bottom: 14px;
+}
+.mfg-duelo-lado, .mfg-duelo-lacuna {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+  padding: 14px 16px; min-width: 0;
+}
+/* A fabrica que roda mais apertado leva um filete verde -- o lado a imitar. */
+.mfg-duelo-melhor { border-color: var(--ok-texto); box-shadow: inset 3px 0 0 var(--ok-texto); }
+.mfg-duelo-lacuna { background: var(--panel-2); }
+.mfg-duelo-indice {
+  font-size: 26px; font-weight: 700; color: var(--ink); line-height: 1.2; margin: 4px 0 2px;
+}
+
+/* A primeira coluna (produto) e a segunda (teorico) ficam visiveis ao rolar
+   a tabela pro lado -- sem elas, as colunas das unidades viram numeros soltos
+   sem dizer de que produto sao. */
+.mfg-tabela-comparar td:first-child, .mfg-tabela-comparar th:first-child {
+  position: sticky; left: 0; background: var(--panel); z-index: 1;
+}
+=======
 /* Selo CIF/FOB (fase42) -- cor é só "de quem é o frete", não é
    semântica bom/ruim como o resto do painel, por isso as duas cores não
    seguem o padrão verde/vermelho de status. */
@@ -1420,3 +1527,5 @@ td.col-acoes { white-space: nowrap; text-align: center; }
 }
 .avisoprep-urgencia-imediata { background: var(--erro-borda); color: #fff; }
 .avisoprep-urgencia-prazo { background: var(--azul-fundo); color: var(--blue-texto); }
+
+/* ===================== ANALISE MFG (15/09/2026) ==============

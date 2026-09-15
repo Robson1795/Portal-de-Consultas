@@ -1160,7 +1160,8 @@ const TABELAS_BACKUP = [
   'docas', 'editores_bobinas', 'estoque', 'estoque_localizacao_historico',
   'exp_acessorios', 'exp_conferencia_fisica', 'exp_controle_itens',
   'exp_pedido_faturamento_confirmado', 'exp_pedido_status', 'fichas_tecnicas', 'fotos',
-  'gerentes_unidade', 'itens_requisicao', 'log_movimentacao', 'pedido_itens', 'pedidos',
+  'gerentes_unidade', 'inventario_itens', 'inventarios', 'itens_requisicao',
+  'log_movimentacao', 'mfg_analises', 'mfg_ops', 'pedido_itens', 'pedidos',
   'registro_saida', 'requisicoes_alm', 'requisicoes_alm_itens', 'reservas_aco',
   'sugestoes_melhoria', 'usuarios_permitidos'
 ];

@@ -20,9 +20,9 @@
 // da Requisicao (que e so pedir). Quem faz esse fluxo e o ALM da unidade.
 const PERFIS = {
   consultor:   { rotulo: 'Consultor',   paginas: ['painel', 'estoque'] },
-  estoque_alm: { rotulo: 'Estoque ALM', paginas: ['painel', 'estoque', 'sesmt', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'analise'] },
+  estoque_alm: { rotulo: 'Estoque ALM', paginas: ['painel', 'estoque', 'sesmt', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'analise', 'mfg'] },
   estoque_aco: { rotulo: 'Estoque Aço', paginas: ['painel', 'bobinas', 'requisicao'] },
-  admin:       { rotulo: 'Admin',       paginas: ['painel', 'estoque', 'sesmt', 'bobinas', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'analise', 'config'] }
+  admin:       { rotulo: 'Admin',       paginas: ['painel', 'estoque', 'sesmt', 'bobinas', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'analise', 'mfg', 'config'] }
 };
 
 const PAGINAS = {
@@ -61,6 +61,12 @@ const PAGINAS = {
   // Demanda dos pedidos x saldo do almoxarifado: o que falta comprar.
   // Só lê o estoque -- não mexe em saldo nenhum (ver js/analise.js).
   analise: { rotulo: 'Análise de Compras', icone: '📊', elemento: 'analiseComprasContent' },
+  // Análise MFG: consumo teórico x reportado por OP, e o dinheiro que isso
+  // custou ou economizou. Vem logo depois da Análise de Compras porque é a
+  // outra metade da mesma pergunta -- aquela olha o que falta ENTRAR, esta
+  // olha o que saiu a mais do que devia. Não escreve em estoque nenhum: lê
+  // um arquivo, calcula e guarda só o resultado (ver js/mfg.js).
+  mfg: { rotulo: 'Análise MFG', icone: '📐', elemento: 'mfgContent' },
   config:  { rotulo: 'Configurações',     icone: '⚙️', elemento: 'configContent' }
 };
 
@@ -157,6 +163,7 @@ function mostrarPagina(id) {
   if (id === 'painel') { carregarPainel(); }
   if (id === 'bobinas') { abrirTelaBobinas(); }
   if (id === 'requisicao') { carregarRequisicao(); }
+  if (id === 'mfg') { carregarMfg(); }
   if (id === 'programacao') { carregarProgramacao(); }
   // Catálogo EXP primeiro, DEPOIS a Programação -- buscarDescricoesItens()
   // olha catalogoExpItens em memória (não busca de novo), então se essa
