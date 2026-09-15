@@ -5244,3 +5244,110 @@ corretamente clicando quatro vezes seguidas, o rótulo do botão muda a cada
 clique, e `reportado` (vindo de planilha) avança pra `falta_reporte` igual a
 `separado` — sem passar por um quarto estado só pra ele. Sem erro no
 console.
+
+## Popup de "pedido avisado pra preparar", em tempo real (15/09/2026)
+
+O Robson: *"Crie um sistema de notificação em tempo real para 'Pedidos
+preparados para separar' no mesmo sistema de Pop up de novos cadastros de
+usuários"*. Perguntado o gatilho exato, mandou o print do card do Painel do
+Dia (seção 25) e disse *"dessa aba que o encarregado da expediçao
+alimenta"*: é a aba Preparar (aviso de preparo, 14/09/2026), tabela
+`exp_pedido_aviso_preparo`. Até aqui esse aviso só existia como card
+pull-based no Painel do Dia — quem não estivesse com aquela tela aberta não
+via nada até abrir o portal e reparar.
+
+**Reaproveitado ponta a ponta o desenho de `iniciarAvisoCadastro()`**
+(seção 21), sem inventar um segundo jeito de fazer a mesma coisa:
+
+- `dispararAlertaPreparo({ pedidos, avisadoPor, urgente })`
+  (`js/programacao.js`, ao lado do upsert em `exp_pedido_aviso_preparo`) —
+  broadcast, não bloqueia o aviso se falhar, mesmo desenho de
+  `dispararAlertaCadastro()` (`js/auth.js`).
+- `iniciarAvisoPreparo()` (`js/notificacoes.js`) faz as mesmas duas coisas:
+  conta quem já está esperando (mesma consulta do card do painel, pra
+  alcançar quem entrou no portal depois do aviso) e assina o broadcast pro
+  que vier daqui pra frente.
+- `notificarPedidoPreparo()` empilha no mesmo `mostrarNotificacao()`
+  genérico — não é um segundo canto, é o mesmo card de sempre com outro
+  ícone e texto.
+- Gate por perfil: `estoque_alm` e `admin` (mesmo recorte do card no
+  painel; quem cadastra usa `perfilAtual === 'admin'`, aqui é outro
+  público — quem separa material, não quem aprova gente).
+
+### ⚠️ Diferença do cadastro: canal É por unidade
+
+O aviso de cadastro usa um canal global (`alertas-cadastro`) porque quem
+aprova (admin) pode cuidar de qualquer unidade. Este aviso é sobre um
+pedido de uma fábrica específica — igual a toda tabela deste projeto, RLS
+inclusive (`minha_unidade()`). Canal `alertas-preparo-<unidade>`, não
+`alertas-preparo` sozinho: sem o recorte, quem está na unidade 105
+receberia popup de um pedido da 106.
+
+Consequência prática: o canal precisa ser reassinado toda vez que a
+unidade ativa muda, ou a pessoa continuaria ouvindo (ou deixaria de ouvir)
+a unidade errada. `trocarUnidade()` (`js/estoque.js`) ganhou uma chamada a
+`iniciarAvisoPreparo()` no fim — a própria função já cuida de fechar o
+canal anterior (`sb.removeChannel`) antes de abrir o novo, então religar
+de novo é seguro mesmo chamando várias vezes.
+
+### ⚠️ Armadilha de teste, registrada pra não repetir
+
+Testando local (dois `python -m http.server`, uma aba mandando e outra
+recebendo): a primeira tentativa, mandando e recebendo na MESMA aba, não
+entregou nada — parecia bug. Não era: o cliente do Supabase não entrega de
+volta pro mesmo socket que mandou. É o comportamento real de produção
+também (quem avisa não precisa ver o próprio aviso), só que numa aba só
+isso mascara qualquer teste. Testado de novo com duas abas (dois clientes
+de verdade, como duas pessoas em dois computadores) — aí sim o card
+chegou, com pedidos, texto e o nome de quem avisou certos, o clique em
+"Abrir Preparar" foi para `expacessorios` → aba `avisoprep`, e o resumo de
+pendentes apareceu certo pra quem "chega depois". Perfil sem permissão
+(`consultor`) não assina o canal. Sem erro no console nas duas sessões.
+
+## Som + notificação do sistema em toda notificação (15/09/2026)
+
+O Robson: *"Consegue fazer com que o app envie aviso sonoro e notificação do
+chrome tanto no pc quanto no android"*. Perguntado antes de mexer, porque
+tinha um limite técnico real: **funciona com o portal aberto numa aba**
+(minimizada, ou noutra aba, PC ou Android) — sem servidor novo, é só Web
+Notifications API + um bipe por Web Audio, os dois nativos do navegador.
+**Não alcança navegador fechado nem celular bloqueado sem o Chrome aberto**
+— isso é push de verdade (service worker + servidor de push), obra bem
+maior, fora do desenho deste projeto (sem backend, só Supabase+Vercel).
+Confirmada a versão possível hoje.
+
+Entrou dentro do **empilhador genérico** (`mostrarNotificacao()`,
+`js/notificacoes.js`), não em cada aviso: toda notificação que já existe
+(cadastro pendente, seção 21) e a que acabou de entrar (pedido pra preparar,
+acima) ganham som e notificação do sistema de graça, sem tocar nos dois
+call sites.
+
+- **`tocarSomAviso()`**: bipe de 880Hz por ~0,35s via `AudioContext` — sem
+  arquivo de áudio pra hospedar. Sobe e desce o volume em rampa (não liga/
+  desliga seco) pra não estalar, e fecha o contexto sozinho no `onended`
+  (`AudioContext` não reaproveita depois de um `stop()`, por isso é um
+  contexto novo a cada bipe, não um só reusado).
+- **`notificarSistema()`**: `new Notification(...)`, ícone `logo.png`. **Só
+  dispara quando a aba NÃO está em primeiro plano**
+  (`document.visibilityState`/`hasFocus()`) — quem já está olhando o popup
+  no canto não precisa de um segundo aviso do sistema em cima, mesmo padrão
+  do Slack e de todo app de chat.
+- **`garantirPermissaoNotificacao()`** é chamada cedo, dentro de
+  `iniciarAvisoCadastro()` e `iniciarAvisoPreparo()` (logo depois do
+  login/troca de unidade), não só na hora do primeiro aviso de verdade —
+  pedir permissão é assíncrono, e perguntar só na hora H deixaria aquele
+  primeiro aviso sem som mesmo que a pessoa aceite na hora. Só pergunta uma
+  vez (`permissaoNotifPedida`), e nunca insiste se a pessoa negou.
+- **Duplicata (`chave` já existente) não toca som nem reabre notificação do
+  sistema** — o `return` antecipado do dedupe em `mostrarNotificacao()`
+  acontece antes do aviso sonoro, então reabrir a mesma aba, ou o mesmo
+  evento chegando duas vezes, fica silencioso.
+
+Testado localmente: `Notification.permission` no ambiente de teste vem
+`'denied'` por padrão (sandbox de automação) — conferido que
+`garantirPermissaoNotificacao()` devolve `false` sem perguntar de novo e
+`notificarSistema()` não faz nada nesse caso, sem lançar erro; o bipe toca
+sem exceção; e o dedupe por `chave` não dispara som/notificação na segunda
+chamada. Não deu pra testar o caminho "permissão concedida" dentro do
+sandbox — é o comportamento padrão e bem estabelecido da Notification API,
+mas vale conferir uma vez em produção (PC e Android) depois do deploy.

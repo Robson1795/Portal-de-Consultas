@@ -4519,6 +4519,27 @@ document.getElementById('avisoPrepUrgencia').addEventListener('change', (e) => {
   document.getElementById('avisoPrepPrazoHora').style.display = e.target.value === 'prazo' ? 'inline-block' : 'none';
 });
 
+// Avisa quem cuida do EXP em tempo real -- popup no canto (js/notificacoes.js:
+// iniciarAvisoPreparo), mesmo desenho de dispararAlertaCadastro() (js/auth.js):
+// broadcast, e não trava o cadastro se falhar (quem está avisando não pode
+// ficar preso porque o popup não saiu -- o Painel do Dia continua contando
+// de qualquer jeito, é só a notificação ao vivo que se perde).
+//
+// ⚠️ Canal POR UNIDADE (`alertas-preparo-<unidade>`), diferente do de
+// cadastro (que é global): gente de outra fábrica não pode receber popup de
+// um pedido que não é dela -- mesma separação que a RLS já aplica em toda
+// tabela deste projeto (`minha_unidade()`).
+function dispararAlertaPreparo({ pedidos, avisadoPor, urgente }) {
+  try {
+    sb.channel(`alertas-preparo-${unidadeAtual}`).send({
+      type: 'broadcast', event: 'pedido_preparo',
+      payload: { pedidos: pedidos || [], unidade: unidadeAtual, avisadoPor: avisadoPor || null, urgente: !!urgente, quando: new Date().toISOString() }
+    });
+  } catch (e) {
+    console.warn('Não foi possível avisar sobre o pedido pra preparar:', e.message);
+  }
+}
+
 // "coloca o numero do pedido... abre um aviso" -- upsert por (unidade,
 // numero_pedido): avisar de novo um pedido já preparado volta ele pra
 // pendente (pode ter chegado item novo, ou foi engano marcar preparado).
@@ -4575,6 +4596,8 @@ document.getElementById('avisoPrepAvisarBtn').addEventListener('click', async ()
     msg.className = 'status-msg status-err';
     return;
   }
+
+  dispararAlertaPreparo({ pedidos, avisadoPor: nomeUsuarioAtual, urgente: urgencia !== 'prazo' });
 
   const horaEscolhida = campoHora.value;
   campo.value = '';
