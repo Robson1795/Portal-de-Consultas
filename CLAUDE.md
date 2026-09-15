@@ -4543,7 +4543,7 @@ só que melhor. Preciso TAMBÉM que ele mostre quais OPs estao com divergencias,
 tanto pra mais quanto pra menos no consumo. Se puder também detalhar quanto a
 unidade ta perdendo ou ganhando, valores, etc."*
 
-Vive em **`js/mfg.js`**. Script: `sql/fase42-analise-mfg.sql` (**ainda não
+Vive em **`js/mfg.js`**. Script: `sql/fase50-analise-mfg.sql` (**ainda não
 rodado** — e a tela funciona sem ele, ver abaixo).
 
 ### ⚠️ O modelo não foi deduzido: foi extraído do arquivo e depois conferido
@@ -4640,7 +4640,7 @@ faixa", e os totais não mudaram (a classificação mudou, a aritmética não).
 
 Subir o arquivo, calcular, filtrar, abrir o detalhe de cada OP e exportar **não
 dependem de tabela nenhuma**: a conta inteira acontece no navegador, e o arquivo
-não sai da máquina. O `fase42` acrescenta só o **histórico** — guardar o
+não sai da máquina. O `fase50` acrescenta só o **histórico** — guardar o
 resultado de cada semana para responder "a unidade está melhorando?". Enquanto
 não rodar, o botão "Guardar esta análise" avisa que a tabela não existe e a
 análise na tela continua valendo.

@@ -1785,7 +1785,7 @@ async function mfgSalvarAnalise() {
     btn.disabled = false;
     msg.className = 'status-msg erro';
     msg.textContent = (e1 && /relation .* does not exist|mfg_analises/i.test(e1.message || ''))
-      ? 'A tabela do histórico ainda não existe. Rode sql/fase42-analise-mfg.sql no painel do Supabase. '
+      ? 'A tabela do histórico ainda não existe. Rode sql/fase50-analise-mfg.sql no painel do Supabase. '
         + 'A análise na tela continua valendo — só não fica guardada.'
       : 'Não consegui guardar: ' + ((e1 && e1.message) || 'o banco não confirmou a gravação.');
     return;
@@ -1835,7 +1835,7 @@ async function carregarHistoricoMfg() {
     .select('id, arquivo, periodo_inicio, periodo_fim, ops_analisadas, ops_divergentes, valor_liquido, importado_por, criado_em')
     .order('criado_em', { ascending: false }).limit(20);
   if (error) {
-    // Histórico é cortesia: o fase42 pode não ter rodado ainda, e a tela
+    // Histórico é cortesia: o fase50 pode não ter rodado ainda, e a tela
     // principal não pode deixar de funcionar por causa disso.
     console.warn('Análise MFG: histórico indisponível.', error.message);
     alvo.innerHTML = '';
