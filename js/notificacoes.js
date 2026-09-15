@@ -63,27 +63,37 @@ async function garantirPermissaoNotificacao() {
   }
 }
 
-// Bipe curto por Web Audio -- sem arquivo de áudio pra hospedar/carregar.
-// Precisa de AudioContext NOVO a cada bipe: um contexto já usado uma vez e
-// parado (`stop()`) não toca de novo.
+// Jingle de 3 notas por Web Audio -- sem arquivo de áudio pra hospedar/
+// carregar. O Robson: "COLOQUE UM SOM CHAMATIVO TIPO DO IPHONE" -- um bipe
+// só (versão anterior) passava despercebido no barulho do galpão; um
+// arpejo curto (Lá5-Ré6-Sol6, tipo "campainha" de notificação de celular)
+// chama mais atenção sem virar sirene. Cada nota é um AudioContext próprio
+// porque um contexto já usado uma vez e parado (`stop()`) não toca de novo.
 function tocarSomAviso() {
   try {
     const Ctx = window.AudioContext || window.webkitAudioContext;
     if (!Ctx) return;
     const ctx = new Ctx();
-    const osc = ctx.createOscillator();
-    const ganho = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.value = 880;
-    // Sobe e desce o volume em vez de ligar/desligar seco -- toc-toc limpo,
-    // sem o estalo de clique que um degrau abrupto de volume causa.
-    ganho.gain.setValueAtTime(0.0001, ctx.currentTime);
-    ganho.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.01);
-    ganho.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
-    osc.connect(ganho).connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.4);
-    osc.onended = () => ctx.close();
+    const notas = [880, 1174.66, 1567.98]; // Lá5, Ré6, Sol6 -- soa "alerta", não "erro"
+    const duracaoNota = 0.22;
+    const intervaloNota = 0.13; // sobreposição leve: soa "campainha", não staccato
+    notas.forEach((freq, i) => {
+      const inicio = ctx.currentTime + i * intervaloNota;
+      const osc = ctx.createOscillator();
+      const ganho = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      // Sobe e desce o volume em vez de ligar/desligar seco -- toc-toc
+      // limpo, sem o estalo de clique que um degrau abrupto de volume causa.
+      ganho.gain.setValueAtTime(0.0001, inicio);
+      ganho.gain.exponentialRampToValueAtTime(0.28, inicio + 0.01);
+      ganho.gain.exponentialRampToValueAtTime(0.0001, inicio + duracaoNota);
+      osc.connect(ganho).connect(ctx.destination);
+      osc.start(inicio);
+      osc.stop(inicio + duracaoNota + 0.02);
+    });
+    const duracaoTotal = (notas.length - 1) * intervaloNota + duracaoNota + 0.05;
+    setTimeout(() => ctx.close(), duracaoTotal * 1000);
   } catch (e) {
     console.warn('Não foi possível tocar o aviso sonoro:', e.message);
   }

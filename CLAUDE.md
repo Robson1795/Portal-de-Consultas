@@ -5351,3 +5351,14 @@ sem exceção; e o dedupe por `chave` não dispara som/notificação na segunda
 chamada. Não deu pra testar o caminho "permissão concedida" dentro do
 sandbox — é o comportamento padrão e bem estabelecido da Notification API,
 mas vale conferir uma vez em produção (PC e Android) depois do deploy.
+
+### Som trocado por um jingle de 3 notas (15/09/2026)
+
+O Robson: *"COLOQUE UM SOM CHAMATIVO TIPO DO IPHONE"* — o bipe único (880Hz,
+~0,35s) passava despercebido no barulho do galpão. `tocarSomAviso()` agora
+toca um arpejo curto de 3 notas em sequência com leve sobreposição (Lá5,
+Ré6, Sol6 — sobem, não caem, pra soar "alerta" e não "erro"), lembrando o
+"ding-ding-ding" de notificação de celular em vez de um bipe de forno
+micro-ondas. Continua sem arquivo de áudio (só osciladores do Web Audio,
+um `AudioContext` por chamada, fechado sozinho depois da última nota) —
+mesma limitação de antes: som só sai com o portal aberto numa aba.
