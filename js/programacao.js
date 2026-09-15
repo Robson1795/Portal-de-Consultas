@@ -1121,7 +1121,36 @@ async function buscarDescricoesItens(codigos) {
       if (!mapa.has(chave)) mapa.set(chave, { descricao: r.descricao, um: r.um });
     });
   }
+
+  // Robson, 15/09/2026: "esses itens pode deixar no banco de dados, na
+  // proxima vez que digitar ele ja vai puxar a descrição" -- último
+  // recorte, só quando nenhum dos três catálogos oficiais tinha o código:
+  // descrição que ELE digitou na mão numa entrada anterior
+  // (exp_item_descricao_avulsa, fase48). Tabela própria e não
+  // catalogo_exp_itens porque aquela é apagada e recriada inteira a cada
+  // "Importar" -- uma descrição digitada na mão hoje sumiria no próximo
+  // Importar, bem quando ele mais espera que ela já esteja lá.
+  const faltandoAvulsa = unicos.filter(c => !mapa.has(normalizaCodigoItem(c)));
+  if (faltandoAvulsa.length) {
+    const { data: doAvulsa } = await sb.from('exp_item_descricao_avulsa')
+      .select('codigo_item, descricao, um').eq('unidade', unidadeAtual).in('codigo_item', faltandoAvulsa);
+    (doAvulsa || []).forEach(r => {
+      const chave = normalizaCodigoItem(r.codigo_item);
+      if (!mapa.has(chave)) mapa.set(chave, { descricao: r.descricao, um: r.um });
+    });
+  }
   return mapa;
+}
+
+// Grava a descrição digitada na mão -- silencioso no erro (mesmo padrão de
+// carregarConferirExpNotas): se o fase48 ainda não rodou, o item ainda
+// assim é registrado no Controle EXP, só não fica lembrado pra próxima vez.
+async function salvarDescricaoAvulsa(codigoItem, descricao, um) {
+  const { error } = await sb.from('exp_item_descricao_avulsa').upsert({
+    unidade: unidadeAtual, codigo_item: codigoItem.trim(), descricao: descricao.trim(),
+    um: (um || '').trim() || null, cadastrado_por: nomeUsuarioAtual
+  }, { onConflict: 'unidade,codigo_item' });
+  if (error) console.warn('Não foi possível salvar a descrição avulsa do item:', error.message);
 }
 
 document.getElementById('expCtrlConferirBtn').addEventListener('click', async () => {
@@ -2553,15 +2582,24 @@ document.getElementById('expCtrlMarcarTodos').addEventListener('change', (e) => 
 // nenhuma (a pessoa esta com o material na mao e so quer registrar o
 // local). Duas interfaces (formulario completo e passo-a-passo) chamam
 // esta MESMA funcao pra nao duplicar a gravacao.
-async function gravarMovimentacaoManual({ codigo, pedido, quantidadeTexto, local, op, lote, ref, tipo }) {
+async function gravarMovimentacaoManual({ codigo, pedido, quantidadeTexto, local, op, lote, ref, tipo, descricaoManual }) {
   codigo = (codigo || '').trim();
   if (!codigo) return { ok: false, mensagem: 'Informe o código do item.' };
-  // Trava repetida aqui (defesa em profundidade): o formulário completo já
-  // barra pelo blur do campo Item, mas o passo-a-passo confirma o Item num
-  // passo e só chega aqui bem depois -- sem checar de novo na gravação, um
-  // código digitado errado no wizard passaria batido.
-  if (!itemExisteNoCatalogoExp(codigo)) {
-    return { ok: false, mensagem: `NÃO SALVOU: o item ${codigo} não está no Catálogo EXP desta unidade — confira o código.` };
+
+  // Robson, 15/09/2026: "não consigo inserir itens que nao esta na
+  // planilha do exp, preciso que libere para eu digitar o que nao caiu
+  // ainda no sistema, as vezes é só por falta de reporte ou eu nao
+  // atualizei a planilha" -- não trava mais por não estar no Catálogo
+  // EXP (ver itemExisteNoCatalogoExp(), agora só usado como dica visual,
+  // não como bloqueio). Busca em cascata (Catálogo EXP -> Requisição ALM
+  // -> estoque -> descrição avulsa de uma entrada anterior) pra saber se
+  // já existe descrição; se não achar em lugar nenhum e a pessoa tiver
+  // digitado uma na hora, ela fica salva (exp_item_descricao_avulsa,
+  // fase48) pra já vir pronta da próxima vez.
+  const chave = normalizaCodigoItem(codigo);
+  const jaTemDescricao = (await buscarDescricoesItens([codigo])).get(chave);
+  if (!jaTemDescricao && (descricaoManual || '').trim()) {
+    await salvarDescricaoAvulsa(codigo, descricaoManual.trim());
   }
 
   const linha = {
@@ -2596,7 +2634,7 @@ async function gravarMovimentacaoManual({ codigo, pedido, quantidadeTexto, local
   // (o item já foi embora), não sinaliza nada sobre o pedido anterior.
   if (tipo !== 'saida') await atualizarPedidoProntoAoRegistrar(linha.numero_pedido);
 
-  const semDescricao = !(await buscarDescricoesItens([codigo])).get(codigo);
+  const semDescricao = !jaTemDescricao && !(descricaoManual || '').trim();
   const rotuloTipo = tipo === 'saida' ? 'Saída' : 'Entrada';
   await carregarProgramacao();
   trocarAbaExpAcessorios(tipo === 'saida' ? 'saida' : 'entrada');
@@ -2643,7 +2681,8 @@ document.getElementById('expManualAdicionarBtn').addEventListener('click', async
     op: document.getElementById('expManualOp').value,
     lote: document.getElementById('expManualLote').value,
     ref: document.getElementById('expManualRef').value,
-    tipo: document.getElementById('expManualTipo').value
+    tipo: document.getElementById('expManualTipo').value,
+    descricaoManual: document.getElementById('expManualDescricaoInput').value
   });
 
   btn.disabled = false;
@@ -2663,6 +2702,8 @@ document.getElementById('expManualAdicionarBtn').addEventListener('click', async
   document.getElementById('expManualExtras').style.display = 'none';
   document.getElementById('expManualExtrasToggleBtn').textContent = '+ Referência / Lote / Nº da OP';
   document.getElementById('expManualDescricao').textContent = '';
+  document.getElementById('expManualDescricaoInput').style.display = 'none';
+  document.getElementById('expManualDescricaoInput').value = '';
   document.getElementById('expManualCatalogoDica').textContent = '';
   campoItem.focus();
 });
@@ -2738,15 +2779,18 @@ function salvarPassoAtual() {
     document.getElementById('expWizMsg').className = 'status-msg status-err';
     return false;
   }
-  // Mesma trava do formulário completo (travarFormularioManual/
-  // itemExisteNoCatalogoExp): sem ela, a pessoa preencheria os seis passos
-  // seguintes antes de descobrir, só na revisão final, que o item nem
-  // existe no Catálogo EXP desta unidade.
+  // Robson, 15/09/2026: "preciso que libere para eu digitar o que nao
+  // caiu ainda no sistema" -- não trava mais aqui (era bloqueio duro até
+  // 15/09/2026). Só avisa: o wizard não tem campo de descrição próprio
+  // (diferente do formulário completo, que deixa digitar uma e ela fica
+  // salva pra próxima vez -- ver expManualDescricaoInput), então quem
+  // continuar por aqui com um código fora de todo catálogo vai gravar sem
+  // descrição, igual à colagem em lote.
   if (passo.campo === 'codigo_item' && valor && !itemExisteNoCatalogoExp(valor)) {
     document.getElementById('expWizMsg').textContent =
-      'Este código não está no Catálogo EXP desta unidade — confira o código.';
+      '⚠ Este código não está no Catálogo EXP desta unidade -- vai ser registrado mesmo assim, '
+      + 'mas sem descrição garantida (ela pode vir de outro catálogo). Pra digitar a descrição na mão, use o formulário completo.';
     document.getElementById('expWizMsg').className = 'status-msg status-err';
-    return false;
   }
 
   // Mesmo aviso do formulário completo (pedidoConflitanteNaLocalizacao) --
@@ -5112,15 +5156,6 @@ function pedidoConflitanteNaLocalizacao(localizacao, pedidoAtual) {
   return linha ? (linha.numero_pedido || '').trim() : null;
 }
 
-// Trava/destrava os campos que vêm DEPOIS do Item no formulário completo,
-// conforme o código bater ou não com o Catálogo EXP desta unidade. Chamada
-// no blur do Item (ver mais abaixo) -- então a pessoa só digita o resto
-// depois de o código já ter sido conferido.
-function travarFormularioManual(bloquear) {
-  ['expManualQtd', 'expManualLocal', 'expManualAdicionarBtn', 'expManualExtrasToggleBtn']
-    .forEach(id => { document.getElementById(id).disabled = bloquear; });
-}
-
 function lotesDoItemNoCatalogo(codigo) {
   return catalogoExpItens.filter(l => l.codigo_item === codigo && (l.referencia || l.lote));
 }
@@ -5160,24 +5195,40 @@ document.getElementById('expManualExtrasToggleBtn').addEventListener('click', ()
 document.getElementById('expManualItem').addEventListener('blur', async () => {
   const codigo = document.getElementById('expManualItem').value.trim();
   const descricaoEl = document.getElementById('expManualDescricao');
+  const descricaoInput = document.getElementById('expManualDescricaoInput');
   const dica = document.getElementById('expManualCatalogoDica');
-  if (!codigo) { descricaoEl.textContent = ''; dica.textContent = ''; travarFormularioManual(false); return; }
-
-  if (!itemExisteNoCatalogoExp(codigo)) {
-    descricaoEl.textContent = '⚠ Este código não está no Catálogo EXP desta unidade — confira o código, ou cole a planilha do sistema na aba Catálogo.';
-    descricaoEl.className = 'status-msg status-err';
-    dica.textContent = '';
-    travarFormularioManual(true);
+  if (!codigo) {
+    descricaoEl.textContent = ''; dica.textContent = '';
+    descricaoInput.style.display = 'none'; descricaoInput.value = '';
     return;
   }
-  travarFormularioManual(false);
+
+  // Robson, 15/09/2026: "não consigo inserir itens que nao esta na
+  // planilha do exp, preciso que libere para eu digitar o que nao caiu
+  // ainda no sistema" -- não trava mais o formulário quando o código não
+  // está no Catálogo EXP. `itemExisteNoCatalogoExp` vira só uma DICA
+  // (pra saber se veio de lá ou de outro catálogo), a busca em cascata
+  // completa (buscarDescricoesItens) decide se libera ou pede descrição.
+  const semCatalogoExp = !itemExisteNoCatalogoExp(codigo);
 
   const mapaDescricoes = await buscarDescricoesItens([codigo]);
-  const achou = mapaDescricoes.get(codigo);
-  descricaoEl.textContent = achou && achou.descricao
-    ? `${achou.descricao}${achou.um ? ' — ' + achou.um : ''}`
-    : '⚠ Descrição não encontrada — confira o código.';
-  descricaoEl.className = achou && achou.descricao ? 'status-msg status-ok' : 'status-msg status-err';
+  const achou = mapaDescricoes.get(normalizaCodigoItem(codigo));
+
+  if (achou && achou.descricao) {
+    descricaoEl.textContent = `${achou.descricao}${achou.um ? ' — ' + achou.um : ''}`
+      + (semCatalogoExp ? ' (achada em outro catálogo, não no Catálogo EXP)' : '');
+    descricaoEl.className = 'status-msg status-ok';
+    descricaoInput.style.display = 'none';
+    descricaoInput.value = '';
+  } else {
+    // Nenhum dos catálogos tem esse código -- deixa digitar a descrição na
+    // mão em vez de barrar o registro. Ela fica salva (fase48) pra próxima
+    // vez que esse código for digitado já vir pronta sozinha.
+    descricaoEl.textContent = '⚠ Item não encontrado em nenhum catálogo (EXP, Requisição ALM ou estoque). '
+      + 'Digite a descrição abaixo pra registrar mesmo assim -- ela fica salva pras próximas vezes.';
+    descricaoEl.className = 'status-msg status-err';
+    descricaoInput.style.display = 'block';
+  }
 
   const lotes = lotesDoItemNoCatalogo(codigo);
   if (!lotes.length) { dica.textContent = ''; return; }

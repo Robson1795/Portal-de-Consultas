@@ -3074,6 +3074,71 @@ provando a normalização) num `delete().in('id', [...])` só; recusar a
 confirmação não chama nada. Zero erro de console (o 404 de `reservas_aco`
 que aparece nos testes é falta de tabela do Victor, não deste código).
 
+## Registrar item fora do Catálogo EXP, sem travar (15/09/2026)
+
+O Robson: *"não consigo inserir itens que nao esta na planilha do exp,
+preciso que libere para eu digitar o que nao caiu ainda no sistema, as
+vezes é só por falta de reporte ou eu nao atualizei a planilha, esses
+itens pode deixar no banco de dados, na proxima vez que digitar ele ja
+vai puxar a descrição"*.
+
+Registrar um item no Controle EXP (formulário completo e passo-a-passo)
+travava se o código não estivesse em `catalogo_exp_itens` -- e essa
+tabela é apagada e recriada inteira a cada "Importar" na aba Catálogo
+(fonte da verdade é sempre a planilha mais recente), então item ainda
+não "reportado" no Datasul, ou relatório que ele ainda não atualizou,
+não tinha como ser cadastrado. Pior: **não existia campo de descrição em
+lugar nenhum do Controle EXP** -- quem preenche isso é sempre a busca em
+cascata (`buscarDescricoesItens()`), então nem digitando manualmente daria
+pra contornar.
+
+### Como ficou
+
+`itemExisteNoCatalogoExp()` continua existindo, mas virou só uma DICA
+("achada em outro catálogo, não no Catálogo EXP") -- parou de travar em
+qualquer lugar. `gravarMovimentacaoManual()` agora sempre faz a busca em
+cascata completa antes de gravar; se nenhum catálogo tiver a descrição
+(nem Catálogo EXP, nem Requisição ALM, nem estoque) **e** a pessoa tiver
+digitado uma na hora, ela é salva numa tabela nova,
+`exp_item_descricao_avulsa` (`sql/fase48-exp-item-descricao-avulsa.sql`)
+-- e essa entra como **4º andar** da cascata em `buscarDescricoesItens()`,
+então a próxima vez que o código for digitado (aqui ou na Entrada,
+aba Conferir, exportação -- é a mesma função em todo lugar) já vem
+pronta.
+
+⚠️ **Tabela própria, não `catalogo_exp_itens`** -- pelo mesmo motivo que a
+Análise de Compras ganhou tabela própria pra "não repor": gravar direto
+no Catálogo EXP faria a descrição digitada na mão sumir no próximo
+"Importar", bem quando ele mais espera que ela já esteja lá.
+
+No formulário completo, um campo `expManualDescricaoInput` aparece
+**só quando** o código não bate com nenhum catálogo, com o texto
+explicando o porquê. No passo-a-passo (wizard), o bloqueio virou só um
+aviso -- ele não ganhou o mesmo campo de descrição inline (o Item ali é
+um passo isolado antes dos demais, e um passo extra condicional
+complicaria a navegação "voltar" do wizard sem ganho proporcional); quem
+precisar digitar a descrição na mão usa o formulário completo, que é a
+interface principal.
+
+Aproveitando a reescrita: corrigido um bug de normalização que já existia
+nos dois lugares (`.get(codigo)` cru em vez de `.get(normalizaCodigoItem(codigo))`)
+-- o aviso "sem descrição" podia disparar mesmo com a descrição existindo,
+se o código tivesse sido digitado com caixa/espaço diferente do catálogo.
+`travarFormularioManual()` (só travava campos quando o item não existia no
+Catálogo EXP) foi removida -- não sobrava nenhum caso que ainda a chamasse
+com `true`.
+
+Conferido no navegador: item fora de todo catálogo libera o formulário
+inteiro e mostra o campo de descrição; item do catálogo não mostra o
+campo; salvar com descrição manual grava `exp_item_descricao_avulsa`
+ANTES do item, e o aviso de "sem descrição" não aparece; salvar sem
+descrição avisa mas grava o item do mesmo jeito; item que JÁ tinha
+descrição em outro catálogo não tenta gravar a descrição avulsa mesmo se
+o campo estiver preenchido (não sobrescreve fonte oficial); o wizard
+avança com aviso em vez de bloquear. Zero erro de console (os erros que
+apareceram durante o teste eram do MOCK de teste incompleto, não do
+código -- confirmados chamando a função direto, sem o mock quebrado).
+
 ## "✓ Preparado" já manda o pedido pra doca (15/09/2026)
 
 O Robson, olhando a aba Preparar em uso: *"depois daqui de preparado o

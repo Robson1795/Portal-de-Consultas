@@ -866,6 +866,15 @@
             <button class="btn btn-primary" id="expManualAdicionarBtn">Registrar</button>
           </div>
           <div class="status-msg" id="expManualDescricao" style="margin-top:4px;"></div>
+          <!-- Robson, 15/09/2026: "preciso que libere para eu digitar o
+               que nao caiu ainda no sistema... esses itens pode deixar
+               no banco de dados, na proxima vez que digitar ele ja vai
+               puxar a descrição" -- só aparece quando o código não bate
+               com Catálogo EXP, Requisição ALM nem estoque (ver o blur
+               de #expManualItem em js/programacao.js). -->
+          <input type="text" id="expManualDescricaoInput" placeholder="Descrição deste item (fica salva pra próxima vez)"
+                 style="display:none; margin-top:4px; width:100%; max-width:420px; padding:8px 10px;
+                        border:1px solid var(--border); border-radius:8px; font-size:13px;">
           <!-- Robson, 11/09/2026: "esses enderecos EXP A-02 EXP CX 02 por
                exemplo nao deixe colocar numero de pedido no mesmo
                endereço, envie um aviso que ja tem pedido no mesmo
