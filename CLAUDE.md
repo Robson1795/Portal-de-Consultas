@@ -6020,3 +6020,87 @@ valores de antes; as 12 páginas do portal abrem sem erro e **nenhuma requisiç�
 falhada vem do MFG**; **zero texto abaixo de 4,5:1 nos dois temas** nas três
 visões novas; no celular nada estoura a largura e a página não rola de lado em
 nenhuma das cinco abas. Zero erro de console.
+
+## 31. Devolução: NF x conferência física (15/09/2026)
+
+O Robson pediu, de início, um Excel (Base_Sistema + Conferência Física,
+PROCV/XLOOKUP, formatação condicional) pra não perder o controle de
+mercadoria que volta dos clientes e expor divergência entre o que foi
+faturado na NF de devolução e o que chegou de verdade no físico. No meio
+da conversa, mostrando a tela "Atualizar estoques em lote" de
+Configurações: *"quero alimentar aqui de todas as unidade, conforme faço
+do exp e do alm"*. Perguntado se isso virava aba nova no portal em vez do
+Excel avulso: *"sobre ABA DEVOLUÇAO"* — confirmado.
+
+### Uma tabela só, não duas planilhas ligadas por PROCV
+
+No Excel fazia sentido separar Base_Sistema de Conferência Física, porque a
+segunda busca da primeira com fórmula. **No portal isso vira complicação à
+toa**: não existem "duas abas olhando a mesma linha" — é a MESMA linha, só
+que com dois grupos de coluna preenchidos em momentos diferentes (a NF
+quando a devolução chega, o físico quando alguém confere). `devolucao_itens`
+é uma tabela só (`sql/fase52-devolucao.sql`), e a divergência
+(`qtd_fisico - qtd_nf`) é calculada **na hora de exibir** — não precisa nem
+gravar. Esta é uma tradução deliberada do desenho em Excel pro formato
+nativo da web, não uma cópia 1:1 da planilha original.
+
+### Mescla, não substitui — e não apaga conferência já feita
+
+O Almoxarifado (Configurações > Atualizar estoques em lote) **substitui** o
+estoque porque é uma foto do saldo agora. Devolução é o oposto: **histórico
+que só cresce**. Reimportar o relatório do ERP e uma devolução antiga não
+aparecer mais não pode apagá-la — mesma lição do fase47 (Análise de
+Compras): *"não quero que desapareça"*. `mesclar_devolucao()` faz upsert
+(`ON CONFLICT (unidade, id_devolucao, cod_produto) DO UPDATE`), nunca
+`DELETE`.
+
+⚠️ **E mais crítico ainda**: reimportar a NF de uma devolução **já
+conferida fisicamente** não pode apagar a conferência. `qtd_fisico`,
+`observacoes`, `conferido_por` e `conferido_em` ficam **de fora** do
+`DO UPDATE` — só os dados que vieram da NF (cliente, descrição, quantidade)
+são atualizados; o trabalho que o operador já fez no chão continua lá.
+Testado: reimportar a mesma devolução com cliente/descrição diferentes
+atualiza os dois campos e preserva `qtd_fisico`/`observacoes`/`conferido_*`
+que já estavam gravados.
+
+### Importação multi-unidade, igual ao ALM/Catálogo EXP
+
+Mesmo padrão de `js/configuracoes.js` (Atualizar estoques em lote): cola a
+planilha de **todas as unidades juntas**, o portal lê a coluna Unidade (ou
+Estab) e separa sozinho em blocos por unidade antes de mandar pro banco
+numa chamada só (`mesclar_devolucao`, RPC `security definer`, confere
+`pode_atualizar_estoque(uni)` unidade por unidade). A prévia mostra quantos
+itens entram em cada unidade antes de confirmar — nada é gravado às cegas.
+
+⚠️ **Dicionário de colunas próprio desta tela** (`DEVOLUCAO_SINONIMOS`,
+`js/devolucao.js`), **não** reaproveita `LOTE_SINONIMOS`/`pareceCabecalho()`
+de `js/configuracoes.js`: os campos são outros (ID Devolução, NF, Data
+Emissão, Cliente não existem lá), e reusar `pareceCabecalho()` (que checa
+contra sinônimos genéricos de "item"/"descrição") teria rejeitado um
+cabeçalho como "Cod Produto"/"Descrição Produto" (compostos, não batem com
+os sinônimos soltos) — pego e corrigido ainda em desenvolvimento, antes de
+virar bug em produção. Mesmo desenho de cada tela de importação deste
+portal ter o próprio dicionário (programacao.js já faz isso pras planilhas
+A/B).
+
+### Conferência física: grava célula a célula, sem botão "Salvar"
+
+Qtd Físico e Observações gravam sozinhos ao sair do campo (`change`), igual
+ao resto do portal — o operador confere item após item, tab pro próximo já
+salvou o anterior. `conferido_por`/`conferido_em` só são carimbados quando
+**Qtd Físico está preenchida**: campo em branco é "ainda não conferido", não
+"conferido com zero" — apagar o valor volta o item pra "Pendente" de
+propósito (pode ter sido engano digitar).
+
+Status (`statusDevolucao()`) reaproveita as classes `.cfg-status` que já
+existiam (`st-pendente`, `st-ativo`, `st-atrasado`, `st-atencao`) — zero CSS
+novo. "Falta no físico" usa `st-atrasado` (vermelho) e "Sobra no físico"
+usa `st-atencao` (amarelo), o par de cores que a Programação de Separação já
+usa pra atrasado/atenção.
+
+Testado localmente (mocks de `sb.from`/`sb.rpc`, sem depender de login):
+colar uma planilha com 3 unidades (uma delas desconhecida) agrupa e avisa
+certo; mesclar grava e recarrega; os três status (OK/Falta/Sobra) saem
+certos a partir da Qtd Físico digitada; busca e filtro de status funcionam;
+reimportar a mesma devolução atualiza cliente/descrição sem apagar a
+conferência já feita. Sem erro no console.

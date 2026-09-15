@@ -20,9 +20,9 @@
 // da Requisicao (que e so pedir). Quem faz esse fluxo e o ALM da unidade.
 const PERFIS = {
   consultor:   { rotulo: 'Consultor',   paginas: ['painel', 'estoque'] },
-  estoque_alm: { rotulo: 'Estoque ALM', paginas: ['painel', 'estoque', 'sesmt', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'debitodireto', 'analise', 'mfg'] },
+  estoque_alm: { rotulo: 'Estoque ALM', paginas: ['painel', 'estoque', 'sesmt', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'debitodireto', 'devolucao', 'analise', 'mfg'] },
   estoque_aco: { rotulo: 'Estoque Aço', paginas: ['painel', 'bobinas', 'requisicao'] },
-  admin:       { rotulo: 'Admin',       paginas: ['painel', 'estoque', 'sesmt', 'bobinas', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'debitodireto', 'analise', 'mfg', 'config'] }
+  admin:       { rotulo: 'Admin',       paginas: ['painel', 'estoque', 'sesmt', 'bobinas', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'debitodireto', 'devolucao', 'analise', 'mfg', 'config'] }
 };
 
 const PAGINAS = {
@@ -66,6 +66,14 @@ const PAGINAS = {
   // (sql/fase50), não reaproveita `estoque`: aquela é sempre item de
   // código conhecido, substituída em lote a cada importação.
   debitodireto: { rotulo: 'Itens Débito Direto', icone: '🏷️', elemento: 'debitoDiretoContent' },
+  // NF de devolução x conferência física, com divergência (Robson,
+  // 15/09/2026, sobre uma planilha que ele já usava fora do portal: "sobre
+  // ABA DEVOLUÇAO" -- confirmado que é aba nova, não só o arquivo Excel).
+  // Importação multi-unidade igual ao Almoxarifado/Catálogo EXP em
+  // Configurações > Atualizar estoques em lote ("quero alimentar aqui de
+  // todas as unidade, conforme faço do exp e do alm"). Tabela própria
+  // (sql/fase52), merge por upsert -- nunca substitui (ver js/devolucao.js).
+  devolucao: { rotulo: 'Devolução', icone: '↩️', elemento: 'devolucaoContent' },
   // Demanda dos pedidos x saldo do almoxarifado: o que falta comprar.
   // Só lê o estoque -- não mexe em saldo nenhum (ver js/analise.js).
   analise: { rotulo: 'Análise de Compras', icone: '📊', elemento: 'analiseComprasContent' },
@@ -206,6 +214,7 @@ function mostrarPagina(id) {
     pararRelogioDocas();
   }
   if (id === 'debitodireto') { carregarDebitoDireto(); }
+  if (id === 'devolucao') { carregarDevolucao(); }
   if (id === 'analise') { carregarAnalise(); }
   // ⚠️ `carregarAcessos()` vai DEPOIS de `carregarUsuarios()`, encadeado e não
   // solto: ele cruza o log de login com a lista de aprovados, e disparando os

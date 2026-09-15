@@ -2639,6 +2639,7 @@ async function trocarUnidade(cod) {
   if (paginaAtual === 'mfg' && typeof mfgTrocarUnidade === 'function') mfgTrocarUnidade();
   if (paginaAtual === 'requisicao') await carregarRequisicao();
   if (paginaAtual === 'debitodireto' && typeof carregarDebitoDireto === 'function') await carregarDebitoDireto();
+  if (paginaAtual === 'devolucao' && typeof carregarDevolucao === 'function') await carregarDevolucao();
   // Se a contagem estava ativa e a unidade ja foi desbloqueada nesta sessao,
   // mantem ativa sem pedir a senha de novo.
   if (estavaContando && podeContarNestaUnidade()) {
