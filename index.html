@@ -610,15 +610,14 @@
   <!-- ================= FIM REQUISIÇÃO ALM ================= -->
 
   <!-- ================= PROGRAMAÇÃO DE SEPARAÇÃO ================= -->
-  <!-- Três telas do mesmo fluxo (separar -> endereçar -> carregar) em
-       sub-abas, para não ocupar três lugares no menu lateral. -->
+  <!-- Duas telas do mesmo fluxo (separar -> carregar) em sub-abas, para não
+       ocupar dois lugares no menu lateral. -->
   <div id="programacaoContent" style="display:none;">
     <div class="panel">
       <div class="cfg-barra">
         <div id="progAbas" style="display:flex; gap:8px; flex-wrap:wrap;">
           <button class="btn" data-prog-aba="carregamento">Carregamento</button>
           <button class="btn btn-primary" data-prog-aba="separacao">Separação</button>
-          <button class="btn" data-prog-aba="exp">Endereçamento</button>
         </div>
         <button class="btn" id="progImportarBtn" style="margin-left:auto;">Importar planilhas</button>
         <button class="btn" id="progAtualizarBtn">Atualizar</button>
@@ -677,25 +676,7 @@
         </div>
       </div>
 
-      <!-- ---- Aba 2: EXP Acessórios (visão cruzada por pedido) ---- -->
-      <div id="progExp" class="prog-aba" style="display:none;">
-        <div class="scroll-area">
-          <table>
-            <thead>
-              <tr>
-                <th>Pedido</th><th>Cliente / Destino</th><th>Carregamento</th><th>Urgência</th>
-                <th>Itens</th><th>Status consolidado</th><th>Endereço</th><th>Ação</th>
-              </tr>
-            </thead>
-            <tbody id="progExpBody"></tbody>
-          </table>
-        </div>
-        <div class="empty-msg" id="progExpVazio" style="display:none;">
-          Nenhum pedido na grade de carregamento ainda.
-        </div>
-      </div>
-
-      <!-- ---- Aba 3: Carregamento (grade por bloco e horário) ---- -->
+      <!-- ---- Aba 2: Carregamento (grade por bloco e horário) ---- -->
       <div id="progCarregamento" class="prog-aba" style="display:none;">
         <div id="progGrade" style="padding:14px 16px;"></div>
         <div class="empty-msg" id="progGradeVazio" style="display:none;">
@@ -795,6 +776,13 @@
         <div id="expAbas" style="display:flex; gap:8px; flex-wrap:wrap;">
           <button class="btn btn-primary" data-exp-aba="entrada">Entrada</button>
           <button class="btn" data-exp-aba="saida">Saída / Conferência</button>
+          <!-- Robson, 15/09/2026: "o encarregado da expedição quando
+               receber a lista do pcp, coloca o numero do pedido que a
+               gente tem que deixar na doca... abre um aviso para que a
+               gente entenda que devemos deixar o material preparado ja"
+               -- aviso ANTES do caminhão chegar (Painel de Docas é
+               depois, quando o caminhão já está no pátio). -->
+          <button class="btn" data-exp-aba="avisoprep" title="Avisa a equipe que um pedido da lista do PCP precisa ser separado e deixado pronto">🔔 Preparar</button>
           <!-- Robson, 11/09/2026: "quero uma aba só de DOCA, aí quando eu
                marcar na aba de saída da localização automaticamente o
                material é transferido pra lá" -- estado intermediário entre
@@ -859,6 +847,15 @@
             <button class="btn btn-primary" id="expManualAdicionarBtn">Registrar</button>
           </div>
           <div class="status-msg" id="expManualDescricao" style="margin-top:4px;"></div>
+          <!-- Robson, 15/09/2026: "preciso que libere para eu digitar o
+               que nao caiu ainda no sistema... esses itens pode deixar
+               no banco de dados, na proxima vez que digitar ele ja vai
+               puxar a descrição" -- só aparece quando o código não bate
+               com Catálogo EXP, Requisição ALM nem estoque (ver o blur
+               de #expManualItem em js/programacao.js). -->
+          <input type="text" id="expManualDescricaoInput" placeholder="Descrição deste item (fica salva pra próxima vez)"
+                 style="display:none; margin-top:4px; width:100%; max-width:420px; padding:8px 10px;
+                        border:1px solid var(--border); border-radius:8px; font-size:13px;">
           <!-- Robson, 11/09/2026: "esses enderecos EXP A-02 EXP CX 02 por
                exemplo nao deixe colocar numero de pedido no mesmo
                endereço, envie um aviso que ja tem pedido no mesmo
@@ -1019,6 +1016,59 @@
           <div class="empty-msg" id="confHistVazio" style="display:none;">
             Nenhuma retirada registrada ainda.
           </div>
+        </div>
+      </div>
+
+      <!-- ---- Preparar: aviso da expedição pro EXP antes do caminhão chegar
+           Robson, 15/09/2026: "o encarregado da expedição quando receber
+           a lista do pcp, coloca o numero do pedido que a gente tem que
+           deixar na doca... abre um aviso para que a gente entenda que
+           devemos deixar o material preparado ja, ai faz o mesmo esquema
+           quando ele colocar o numero do pedido aparece os itens e as
+           localiçaões, tambem pode fazer o mesmo esquema de imprimir,
+           quero que envie uma alerta bem chamativo, pode colocar o
+           alerta nesse painel que o victor criou". Fluxo simples,
+           confirmado: avisado -> preparado (sem status intermediário,
+           sem "assumir tarefa"). Ver renderAvisoPreparo() e o card novo
+           em js/painel.js. -->
+      <div id="expAvisoPrepAba" class="prog-aba" style="display:none;">
+        <div class="modal-text" style="padding:0 16px 12px;">
+          Recebeu a lista do PCP? Digite o(s) nº de pedido aqui pra avisar a equipe que o
+          material precisa ser separado e deixado pronto antes do caminhão chegar.
+        </div>
+        <div class="cfg-barra" style="flex-wrap:wrap;">
+          <input type="text" id="avisoPrepPedidos" placeholder="Nº do(s) pedido(s) — separe por vírgula"
+                 style="flex:1; min-width:230px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <!-- Robson, 15/09/2026: "tambem uma area aonde o encarregado
+               coloque se a separaçao é imediata, ou ele colloca o tempo
+               estimado que tem que deixar pronto" -- em branco (sem
+               horário escolhido) = imediata. -->
+          <select id="avisoPrepUrgencia"
+                  style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+            <option value="imediata" selected>⚡ Imediata</option>
+            <option value="prazo">Tem prazo…</option>
+          </select>
+          <input type="time" id="avisoPrepPrazoHora" style="display:none;
+                 padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <button class="btn btn-primary" id="avisoPrepAvisarBtn">🔔 Avisar equipe</button>
+        </div>
+        <div class="status-msg" id="avisoPrepMsg" style="padding:0 16px 8px;"></div>
+
+        <div class="cfg-barra">
+          <strong>Pendente de preparar</strong>
+          <span style="font-size:12px; color:var(--muted);" id="avisoPrepContagem"></span>
+        </div>
+        <div id="avisoPrepBody" style="padding:0 16px 16px;"></div>
+        <div class="empty-msg" id="avisoPrepVazio" style="display:none;">
+          Nenhum pedido avisado no momento. 🎉
+        </div>
+
+        <div style="border-top:1px solid var(--border); margin-top:10px;">
+          <div class="cfg-barra">
+            <strong>Já preparados</strong>
+            <button class="btn" id="avisoPrepHistToggle" style="margin-left:auto;">Mostrar</button>
+          </div>
+          <div id="avisoPrepHistBody" style="padding:0 16px 16px; display:none;"></div>
         </div>
       </div>
 
@@ -1310,9 +1360,22 @@
         <button class="btn" id="docasAtualizarBtn" style="margin-left:auto;">Atualizar</button>
       </div>
 
-      <!-- Chegada: o veículo entra na FILA do pátio, ainda sem doca. O
-           tempo de fila (chegada -> chamada) é indicador separado do
+      <!-- ---- PASSO 1: PORTARIA ----------------------------------------
+           Robson, 14/09/2026: "a ideia é esses dados ser preenchidos pela
+           portaria quando o veiculo entrar, dai deixa como banco de
+           dados. A parte do encarregado da expedição é colocar o numero
+           dos pedidos que vai ser carregado em cada veiculo e marcar qual
+           a doca que o veiculo encostou".
+           Aqui NÃO tem campo de pedido de propósito: a portaria não sabe
+           o que o caminhão vai levar, quem sabe é a expedição (passo 2).
+           O tempo de fila (entrada -> encostou) é indicador separado do
            tempo de carregamento -- ver fase39. -->
+      <div class="doca-passo">
+        <div class="doca-passo-cab">
+          <span class="doca-passo-num">1</span>
+          <strong>Portaria — entrada do veículo</strong>
+          <span class="doca-passo-dica">Digite a placa: se o veículo já veio antes, o resto vem preenchido.</span>
+        </div>
       <div class="cfg-barra" style="flex-wrap:wrap;">
         <input type="text" id="docaPlaca" placeholder="Placa" maxlength="10"
                style="width:120px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px; text-transform:uppercase; font-weight:700;">
@@ -1324,6 +1387,19 @@
           <option value="Bitrem">Bitrem</option>
           <option value="Outro">Outro</option>
         </select>
+        <!-- CIF (frete por conta da Kingspan) x FOB (por conta do
+             cliente/transportadora dele) -- Robson, 14/09/2026: "coloque
+             tambem cif ou fob". Sem opção em branco de propósito: o
+             conferente escolhe uma das duas ou deixa "Carreta" pré-
+             marcada de tipo de veículo passar batido, mas frete em
+             branco quer dizer "ninguém perguntou" -- melhor não gravar
+             nada do que gravar um chute. -->
+        <select id="docaFrete"
+                style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <option value="">Frete: CIF ou FOB?</option>
+          <option value="CIF">CIF (nosso frete)</option>
+          <option value="FOB">FOB (frete do cliente)</option>
+        </select>
         <input type="text" id="docaTransportadora" placeholder="Transportadora"
                style="flex:1; min-width:150px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
         <input type="text" id="docaDestino" placeholder="Destino"
@@ -1334,9 +1410,58 @@
              que é onde a chegada é registrada na prática. -->
         <input type="tel" id="docaTelefone" placeholder="Telefone do motorista"
                style="width:170px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
-        <input type="text" id="docaPedidos" placeholder="Nº do(s) pedido(s) — separe por vírgula"
-               style="flex:2; min-width:210px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
-        <button class="btn btn-primary" id="docaChegadaBtn">Registrar chegada</button>
+        <button class="btn btn-primary" id="docaChegadaBtn">Registrar entrada</button>
+      </div>
+      </div>
+
+      <!-- ---- PASSO 2: EXPEDIÇÃO --------------------------------------
+           "dai o encarregado digita só a placa, ou nome do motorista, que
+           ja vai puxar os dados". A lista só tem quem a portaria já
+           registrou e ainda não encostou -- não é busca livre no
+           histórico, é escolher entre os que estão no pátio agora. -->
+      <div class="doca-passo">
+        <div class="doca-passo-cab">
+          <span class="doca-passo-num">2</span>
+          <strong>Expedição — encostar na doca</strong>
+          <span class="doca-passo-dica">Placa ou motorista puxa os dados. Informe os pedidos e a doca.</span>
+        </div>
+        <div class="cfg-barra" style="flex-wrap:wrap;">
+          <input type="text" id="docaBuscaVeiculo" list="docaVeiculosPatio" autocomplete="off"
+                 placeholder="Placa ou nome do motorista..."
+                 style="flex:1; min-width:210px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px; font-weight:600;">
+          <datalist id="docaVeiculosPatio"></datalist>
+          <select id="docaDestinoDoca"
+                  style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;"></select>
+          <input type="text" id="docaPedidos" placeholder="Nº do(s) pedido(s) — separe por vírgula"
+                 style="flex:2; min-width:230px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <button class="btn btn-primary" id="docaEncostarBtn">Encostar na doca</button>
+        </div>
+        <!-- Os dados puxados aparecem aqui, pra conferir antes de encostar
+             (placa parecida é erro fácil de cometer com o caminhão na
+             frente e pressa no pátio). -->
+        <div id="docaVeiculoEscolhido" class="doca-escolhido" style="display:none;"></div>
+
+        <!-- Robson, 14/09/2026: "quando o encarregado da expedição colocar
+             o numero do pedido aqui abre uma tela com todos os pedidos
+             que esta no exp acessorios, ai ele pode criar um relatorio em
+             HTML dai ele entrega pra minha responsavel por deixar" --
+             prévia de tudo que está no Controle EXP pra esse(s) pedido(s),
+             com botão de gerar o relatório que o encarregado entrega pra
+             quem vai separar o material pro carregamento. -->
+        <div id="docaPedidosPreview" style="display:none; margin-top:8px;">
+          <div class="cfg-barra">
+            <strong>Neste(s) pedido(s), no Controle EXP</strong>
+            <span style="font-size:12px; color:var(--muted);" id="docaPedidosPreviewContagem"></span>
+            <button class="btn" id="docaPedidosImprimirBtn" style="margin-left:auto;">🖨️ Imprimir</button>
+            <button class="btn" id="docaPedidosExportarBtn">Gerar relatório HTML</button>
+          </div>
+          <div class="scroll-area">
+            <table>
+              <thead><tr><th>Item</th><th>Descrição</th><th>Qtd</th><th>Localização</th><th>Status</th></tr></thead>
+              <tbody id="docaPedidosPreviewBody"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <!-- O quadro: uma coluna por doca cadastrada nesta unidade -->
@@ -1363,12 +1488,13 @@
         <div class="cfg-barra">
           <strong>Carregados hoje</strong>
           <span style="font-size:12px; color:var(--muted);" id="docasHojeContagem"></span>
+          <button class="btn" id="docasExportarBtn" style="margin-left:auto;">Exportar HTML</button>
         </div>
         <div class="scroll-area">
           <table>
             <thead>
               <tr>
-                <th>Placa</th><th>Veículo</th><th>Transportadora</th><th>Destino</th><th>Pedidos</th>
+                <th>Placa</th><th>Veículo</th><th>Frete</th><th>Transportadora</th><th>Destino</th><th>Pedidos</th>
                 <th>Doca</th><th>Início</th><th>Fim</th><th>Duração</th><th>Conferente</th><th>Ação</th>
               </tr>
             </thead>

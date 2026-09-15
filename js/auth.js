@@ -273,6 +273,9 @@ async function mostrarTelaCorreta(session) {
     // Depois do menu, pelo mesmo motivo do tour: `perfilAtual` só vale a
     // partir daqui, e a notificação é recortada por perfil.
     iniciarAvisoCadastro();
+    // Mesmo motivo, e depois de montarMenu() também por causa de
+    // `unidadeAtual` (definido lá) -- o canal de preparo é por unidade.
+    iniciarAvisoPreparo();
   } else {
     authScreen.style.display = 'none';
     pendingScreen.style.display = 'block';

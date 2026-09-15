@@ -1339,8 +1339,6 @@ td.col-acoes { white-space: nowrap; text-align: center; }
   border-radius: 10px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.35);
 }
 
-
-/* ===================== ANALISE MFG (15/09/2026) =====================
    Consumo teorico x reportado por OP, e o dinheiro que a diferenca custou.
    As cores aqui sao SEMANTICAS e sao as mesmas em toda a tela: vermelho e
    sempre "consumiu a mais / perdeu dinheiro", verde e sempre o contrario.
@@ -1445,3 +1443,89 @@ td.col-acoes { white-space: nowrap; text-align: center; }
 .mfg-tabela-comparar td:first-child, .mfg-tabela-comparar th:first-child {
   position: sticky; left: 0; background: var(--panel); z-index: 1;
 }
+=======
+/* Selo CIF/FOB (fase42) -- cor é só "de quem é o frete", não é
+   semântica bom/ruim como o resto do painel, por isso as duas cores não
+   seguem o padrão verde/vermelho de status. */
+.doca-frete {
+  display: inline-block; font-size: 10.5px; font-weight: 800;
+  letter-spacing: 0.03em; padding: 1px 6px; border-radius: 5px;
+  white-space: nowrap;
+}
+.doca-frete-cif { background: var(--azul-fundo); color: var(--blue-texto); }
+.doca-frete-fob { background: var(--aviso-fundo); color: var(--aviso-texto); }
+
+/* ---- Passos do Painel de Docas: portaria x expedição (14/09/2026) ----
+   Robson: "esses dados ser preenchidos pela portaria quando o veiculo
+   entrar... A parte do encarregado da expedição é colocar o numero dos
+   pedidos e marcar qual a doca". São dois PAPÉIS diferentes na mesma
+   tela, então precisam de separação visual -- uma barra de campos
+   corrida faria a portaria digitar pedido e a expedição redigitar placa. */
+.doca-passo {
+  border: 1px solid var(--border); border-radius: 12px;
+  margin: 8px 16px; padding: 4px 0 8px; background: var(--row-alt);
+}
+.doca-passo-cab {
+  display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+  padding: 10px 16px 2px;
+}
+.doca-passo-num {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--blue); color: var(--sobre-acento);
+  font-size: 12px; font-weight: 800; flex: none;
+}
+.doca-passo-dica { font-size: 11.5px; color: var(--muted); }
+.doca-passo .cfg-barra { background: transparent; }
+
+/* Os dados que a expedição puxou pela placa/motorista. Existe pra
+   CONFERIR antes de encostar: placa parecida é erro fácil de cometer com
+   o caminhão na frente e pressa no pátio. */
+.doca-escolhido {
+  margin: 0 16px 8px; padding: 10px 12px; border-radius: 10px;
+  background: var(--panel); border: 1px solid var(--blue);
+}
+.doca-escolhido-vazio {
+  border-color: var(--aviso-borda); background: var(--aviso-fundo);
+  color: var(--aviso-texto); font-size: 12.5px; font-weight: 600;
+}
+
+/* Selo "🚛 Doca 2" ao lado do nº do pedido, no Controle EXP. É o aviso
+   pra quem cuida do EXP Acessórios: tem caminhão esperando esse material,
+   deixe na área onde o conferente busca. */
+.doca-chamado {
+  display: inline-block; font-size: 10.5px; font-weight: 800;
+  padding: 1px 6px; border-radius: 5px; white-space: nowrap;
+  background: var(--aviso-fundo); color: var(--aviso-texto);
+  border: 1px solid var(--aviso-borda);
+}
+/* Já carregando: deixou de ser "prepare" e virou "está acontecendo". */
+.doca-chamado-carregando {
+  background: var(--ok-fundo); color: var(--ok-texto); border-color: var(--ok-borda);
+}
+
+/* Card "Pedidos avisados pra preparar" pulsa quando tem pendência --
+   Robson, 15/09/2026: "quero que envie uma alerta bem chamativo".
+   Escopado pelo id (só este card, não os outros seis avisos do Painel do
+   Dia, que usam .painel-card-alerta sem animação nenhuma). */
+@media (prefers-reduced-motion: no-preference) {
+  #painel-card-avisoprep.painel-card-alerta {
+    animation: avisoPrepPulsar 1.6s ease-in-out infinite;
+  }
+}
+@keyframes avisoPrepPulsar {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(214, 69, 51, 0.35); }
+  50% { box-shadow: 0 0 0 7px rgba(214, 69, 51, 0); }
+}
+
+/* Selo de urgência no cartão da aba Preparar (fase46) -- "Imediata"/prazo
+   vencido usa o mesmo vermelho de urgente; prazo futuro usa o azul de
+   informação (ainda dá tempo, mas já está marcado). */
+.avisoprep-urgencia {
+  display: inline-block; font-size: 11px; font-weight: 800;
+  padding: 2px 8px; border-radius: 999px; white-space: nowrap;
+}
+.avisoprep-urgencia-imediata { background: var(--erro-borda); color: #fff; }
+.avisoprep-urgencia-prazo { background: var(--azul-fundo); color: var(--blue-texto); }
+
+/* ===================== ANALISE MFG (15/09/2026) ==============

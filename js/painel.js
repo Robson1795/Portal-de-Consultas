@@ -169,6 +169,33 @@ const AVISOS_PAINEL = [
       .in('prioridade', ['atrasado', 'urgente']))
   },
   {
+    // Robson, 15/09/2026: "o encarregado da expedição quando receber a
+    // lista do pcp, coloca o numero do pedido... abre um aviso para que
+    // a gente entenda que devemos deixar o material preparado ja...
+    // quero que envie uma alerta bem chamativo, pode colocar o alerta
+    // nesse painel que o victor criou". CSS própria em styles.css faz
+    // este cartão pulsar quando tem pendência -- os outros seis só
+    // ganham o fundo amarelo estático (.painel-card-alerta); este pediu
+    // "bem chamativo" explicitamente, então tem tratamento a mais.
+    id: 'avisoprep',
+    icone: '🔔',
+    titulo: 'Pedidos avisados pra preparar',
+    nota: 'O encarregado da expedição avisou -- separe e deixe pronto antes do caminhão chegar.',
+    perfis: ['estoque_alm', 'admin'],
+    acaoRotulo: 'Abrir Preparar',
+    acao: () => {
+      mostrarPagina('expacessorios');
+      if (typeof trocarAbaExpAcessorios === 'function') trocarAbaExpAcessorios('avisoprep');
+    },
+    // Tabela nasce em sql/fase45-aviso-preparo-pedido.sql -- se ainda não
+    // rodou, contarPainel() joga o erro pra cima e o try/catch de
+    // carregarPainel() desenha "—" neste card só, sem derrubar os outros
+    // seis (mesmo cuidado de todo aviso desta lista).
+    contar: () => contarPainel(() => sb.from('exp_pedido_aviso_preparo')
+      .select('id', { count: 'exact', head: true })
+      .eq('unidade', unidadeAtual).eq('status', 'pendente'))
+  },
+  {
     id: 'doca',
     icone: '📦',
     titulo: 'Itens parados na doca',

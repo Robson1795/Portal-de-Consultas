@@ -154,7 +154,6 @@ async function carregarProgramacao() {
   }
 
   renderSeparacao();
-  renderExp();
   renderCarregamento();
   renderExpControle(expCtrl.error ? expCtrl.error.message : null);
   if (!expCtrl.error) {
@@ -197,7 +196,6 @@ function trocarAbaProgramacao(aba) {
     b.className = b.dataset.progAba === aba ? 'btn btn-primary' : 'btn';
   });
   document.getElementById('progSeparacao').style.display = aba === 'separacao' ? 'block' : 'none';
-  document.getElementById('progExp').style.display = aba === 'exp' ? 'block' : 'none';
   document.getElementById('progCarregamento').style.display = aba === 'carregamento' ? 'block' : 'none';
 }
 
@@ -221,7 +219,7 @@ function trocarAbaExpAcessorios(aba) {
   // a outra é o confronto entre as duas pontas. Registrar movimentação a partir
   // de uma tela de conferência seria mexer no que se está medindo.
   document.getElementById('expRegistroContainer').style.display =
-    (aba === 'catalogo' || aba === 'conferir' || aba === 'auditoria' || aba === 'doca' || aba === 'parados') ? 'none' : 'block';
+    (aba === 'catalogo' || aba === 'conferir' || aba === 'auditoria' || aba === 'doca' || aba === 'parados' || aba === 'avisoprep') ? 'none' : 'block';
   document.getElementById('expEntradaAba').style.display = aba === 'entrada' ? 'block' : 'none';
   document.getElementById('progConferencia').style.display = aba === 'saida' ? 'block' : 'none';
   document.getElementById('expCatalogoAba').style.display = aba === 'catalogo' ? 'block' : 'none';
@@ -229,6 +227,7 @@ function trocarAbaExpAcessorios(aba) {
   document.getElementById('expAuditoriaAba').style.display = aba === 'auditoria' ? 'block' : 'none';
   document.getElementById('expDocaAba').style.display = aba === 'doca' ? 'block' : 'none';
   document.getElementById('expParadosAba').style.display = aba === 'parados' ? 'block' : 'none';
+  document.getElementById('expAvisoPrepAba').style.display = aba === 'avisoprep' ? 'block' : 'none';
   if (aba === 'saida') renderConferencia();
   if (aba === 'conferir') {
     renderConferirExp(); // mostra rápido com o que já tem em memória (a 1ª vez, sem observação/exclusão ainda)
@@ -252,6 +251,9 @@ function trocarAbaExpAcessorios(aba) {
     renderParadosExp(); // mostra rápido com o que já tem em memória
     carregarProgramacao(); // mesma lógica do DOCA: busca de novo ao abrir
   }
+  if (aba === 'avisoprep') {
+    carregarAvisosPreparo().then(renderAvisosPreparo);
+  }
 }
 
 // Catálogo antes da Programação, mesmo motivo do carregamento inicial em
@@ -260,12 +262,34 @@ function trocarAbaExpAcessorios(aba) {
 document.getElementById('expAtualizarBtn').addEventListener('click', () => carregarCatalogoExp().then(carregarProgramacao));
 
 // ---- Helpers ----------------------------------------------------------------
-// 'separado' e 'reportado' contam os dois como concluído: a planilha A traz o
-// status como o rótulo único "SEPARADO/REPORTADO". Se um dia "reportado" virar
-// um estágio anterior, é só tirar daqui e do gatilho no SQL.
+// 'separado', 'reportado' e 'falta_reporte' contam os três como concluído.
+// Os dois primeiros vêm da planilha A com o rótulo único "SEPARADO/REPORTADO".
+// 'falta_reporte' entrou em 15/09/2026 como estado marcável à mão na tela
+// (antes só vinha da planilha) -- o Robson: material já separado, só falta o
+// registro no sistema, então o caminhão pode sair igual. Se um dia
+// "reportado" ou "falta_reporte" virarem estágio anterior de verdade, é só
+// tirar daqui e do gatilho em sql/programacao-02 (`recalcular_status_pedido`).
 function itemConcluido(item) {
-  return item.status_separacao === 'separado' || item.status_separacao === 'reportado';
+  return item.status_separacao === 'separado' || item.status_separacao === 'reportado'
+    || item.status_separacao === 'falta_reporte';
 }
+
+// Ciclo do botão manual da Separação (15/09/2026): Pendente -> Separado/
+// Reportado -> Falta reporte -> Pendente de novo. 'reportado' (só chega por
+// importação da planilha) avança pra 'falta_reporte' igual a 'separado' --
+// não tem um quarto clique só pra ele.
+function proximoStatusSeparacao(atual) {
+  if (atual === 'aguardando') return 'separado';
+  if (atual === 'separado' || atual === 'reportado') return 'falta_reporte';
+  return 'aguardando';
+}
+
+const ROTULO_BOTAO_SEPARACAO = {
+  aguardando: 'Marcar separado/reportado',
+  separado: 'Marcar falta reporte',
+  reportado: 'Marcar falta reporte',
+  falta_reporte: 'Reabrir (pendente)'
+};
 
 function pedidoDoNumero(numero) {
   return progPedidos.find(p => p.numero_pedido === numero);
@@ -363,9 +387,7 @@ function renderSeparacao() {
   const ROTULO_STATUS_ITEM = { aguardando: 'Pendente', separado: 'Separado', reportado: 'Separado', falta_reporte: 'Falta reporte' };
   const CLASSE_STATUS_ITEM = { aguardando: 'st-pendente', separado: 'st-ativo', reportado: 'st-ativo', falta_reporte: 'st-atencao' };
 
-  corpo.innerHTML = linhas.map(({ item, pedido }) => {
-    const feito = itemConcluido(item);
-    return `
+  corpo.innerHTML = linhas.map(({ item, pedido }) => `
     <tr>
       <td class="item">${escapeHtml(pedido ? pedido.numero_pedido : '—')}</td>
       <td>${escapeHtml(pedido && pedido.cliente ? pedido.cliente : '—')}</td>
@@ -379,11 +401,10 @@ function renderSeparacao() {
       <td><span class="cfg-status ${CLASSE_STATUS_ITEM[item.status_separacao] || 'st-pendente'}">${escapeHtml(ROTULO_STATUS_ITEM[item.status_separacao] || 'Pendente')}</span></td>
       <td class="col-acoes">
         <button class="btn prog-alternar" data-id="${escapeHtml(item.id)}">
-          ${feito ? 'Desmarcar' : 'Marcar separado'}
+          ${escapeHtml(ROTULO_BOTAO_SEPARACAO[item.status_separacao] || ROTULO_BOTAO_SEPARACAO.aguardando)}
         </button>
       </td>
-    </tr>`;
-  }).join('');
+    </tr>`).join('');
 }
 
 document.getElementById('progBusca').addEventListener('input', renderSeparacao);
@@ -399,8 +420,8 @@ async function alternarItemSeparado(itemId, botao) {
   const item = progItens.find(i => String(i.id) === String(itemId));
   if (!item) return;
   const msg = document.getElementById('progMsg');
-  const novo = itemConcluido(item) ? 'aguardando' : 'separado';
-  const concluindo = novo === 'separado';
+  const novo = proximoStatusSeparacao(item.status_separacao);
+  const concluindo = novo !== 'aguardando';
 
   botao.disabled = true;
   const { error } = await sb.from('pedido_itens').update({
@@ -449,75 +470,6 @@ function statusConsolidado(pedido) {
   if (feitos < itens.length) return { chave: 'parcial', rotulo: 'Parcial', classe: 'st-pendente' };
   return { chave: 'total', rotulo: 'Totalmente separado', classe: 'st-ativo' };
 }
-
-function renderExp() {
-  // Só os pedidos que estão na grade de carregamento (vieram da Planilha B).
-  // Ordenado pelo mesmo criterio da Separacao: caminhao que sai antes, primeiro.
-  const naGrade = progPedidos
-    .filter(p => p.horario_carregamento || p.tipo_veiculo)
-    .sort(compararPorUrgencia);
-  const corpo = document.getElementById('progExpBody');
-  const vazio = document.getElementById('progExpVazio');
-  vazio.style.display = naGrade.length ? 'none' : 'block';
-
-  corpo.innerHTML = naGrade.map(p => {
-    const st = statusConsolidado(p);
-    const itens = itensDoPedido(p.id);
-    const feitos = itens.filter(itemConcluido).length;
-    const destino = [p.cidade, p.uf].filter(Boolean).join('/');
-    const podeEnderecar = st.chave === 'total' && p.status_geral !== 'pronto' && p.status_geral !== 'carregado';
-    return `
-    <tr>
-      <td class="item">${escapeHtml(p.numero_pedido)}</td>
-      <td>${escapeHtml(p.cliente || '—')}${destino ? `<div class="cad-desc">${escapeHtml(destino)}</div>` : ''}</td>
-      <td class="loc">${dataCurta(p.data_carregamento)} ${horaCurta(p.horario_carregamento)}
-        <div class="cad-desc">${escapeHtml(p.tipo_veiculo || '—')}</div></td>
-      <td>${tagPrioridade(p)}</td>
-      <td class="num">${itens.length ? `${feitos} de ${itens.length}` : '—'}</td>
-      <td><span class="cfg-status ${st.classe}">${st.rotulo}</span></td>
-      <td>
-        <input type="text" class="prog-endereco" data-id="${escapeHtml(p.id)}"
-               placeholder="Doca 3, Pallet 12..." style="width:150px;">
-      </td>
-      <td class="col-acoes">
-        <button class="btn prog-enderecar" data-id="${escapeHtml(p.id)}" ${podeEnderecar ? '' : 'disabled'}>
-          Confirmar endereço
-        </button>
-      </td>
-    </tr>`;
-  }).join('');
-}
-
-document.getElementById('progExpBody').addEventListener('click', async (e) => {
-  const btn = e.target.closest('.prog-enderecar');
-  if (!btn) return;
-  const id = btn.dataset.id;
-  const campo = document.querySelector(`.prog-endereco[data-id="${CSS.escape(id)}"]`);
-  const endereco = campo ? campo.value.trim() : '';
-  const msg = document.getElementById('progMsg');
-
-  if (!endereco) {
-    msg.textContent = 'Informe o endereço na expedição antes de confirmar.';
-    msg.className = 'status-msg status-err';
-    return;
-  }
-
-  btn.disabled = true;
-  // Duas escritas: o endereçamento em si e o status do pedido. O unique em
-  // exp_acessorios.pedido_id impede duplicata se clicarem duas vezes.
-  const { error: erroExp } = await sb.from('exp_acessorios').upsert({
-    pedido_id: id, endereco, responsavel_id: userIdAtual, status: 'pronto_para_carregamento'
-  }, { onConflict: 'pedido_id' });
-  if (erroExp) { btn.disabled = false; return falhaEscrita(erroExp.message); }
-
-  const { error: erroPedido } = await sb.from('pedidos').update({ status_geral: 'pronto' }).eq('id', id);
-  if (erroPedido) { btn.disabled = false; return falhaEscrita(erroPedido.message); }
-
-  await registrarLogProgramacao(id, 'endereco_definido', { endereco });
-  msg.textContent = 'Endereço confirmado — o pedido foi para a aba Carregamento.';
-  msg.className = 'status-msg status-ok';
-  await carregarProgramacao();
-});
 
 function falhaEscrita(mensagem) {
   const msg = document.getElementById('progMsg');
@@ -568,6 +520,9 @@ function renderCarregamento() {
 
 function cardPedidoCarregamento(p) {
   const st = statusConsolidado(p);
+  // 'sem' = pedido não tem nenhum acessório da Planilha A pra separar --
+  // não há o que esperar, libera a saída direto. 'total' = tudo separado.
+  const podeSair = st.chave === 'total' || st.chave === 'sem';
   const destino = [p.cidade, p.uf].filter(Boolean).join('/');
   const critica = observacaoCritica(p.observacao_carregamento);
   const carregado = p.status_geral === 'carregado';
@@ -589,8 +544,8 @@ function cardPedidoCarregamento(p) {
         ${carregado
           ? '<span class="cfg-status st-inativo">Saída registrada</span>'
           : `<button class="btn prog-saida" data-id="${escapeHtml(p.id)}"
-                     ${p.status_geral === 'pronto' ? '' : 'disabled'}
-                     title="${p.status_geral === 'pronto' ? '' : 'Confirme o endereço na aba EXP Acessórios primeiro'}">
+                     ${podeSair ? '' : 'disabled'}
+                     title="${podeSair ? '' : 'Ainda faltam itens sendo separados'}">
                Registrar saída
              </button>`}
       </div>
@@ -677,7 +632,7 @@ function trocarAbaImport(aba) {
   });
   document.getElementById('progImportFormato').innerHTML = aba === 'A'
     ? 'Colunas, nesta ordem: <b>Nº Pedido, Cliente, Seq, Item, Descrição, UM, Qtde, Nº OS/OP, Observação, Status</b>. Linha em branco entre pedidos é ignorada.'
-    : 'Colunas, nesta ordem: <b>Bloco do veículo, Horário, Nº Pedido, Cliente, Cidade, UF, Modalidade, Descrição, Quantidade, Valor, Sim/Não, Observação, Vendedor</b>. As duas primeiras (bloco e horário) só vêm preenchidas na primeira linha de cada grupo — cole exatamente como está na planilha, sem tirar essas colunas.';
+    : 'Colunas, nesta ordem: <b>Veículo, Horário, Nº Pedido, Cliente</b> (Cidade, UF, Modalidade, Descrição, Quantidade, Valor, Sim/Não, Observação e Vendedor continuam aceitas se vierem, mas não são obrigatórias). As duas primeiras (veículo e horário) só vêm preenchidas na primeira linha de cada grupo — cole exatamente como está na planilha.';
   document.getElementById('progImportTexto').value = '';
   document.getElementById('progImportPrevia').innerHTML = '';
   document.getElementById('progImportMsg').textContent = '';
@@ -912,6 +867,11 @@ async function importarPlanilhaA(linhas, dataRef) {
 //   col 10 Sim/Nao                     "Não"
 //   col 11 observacao                  "Engenharia" / "Avulso" / vazio
 //   col 12 vendedor/representante       "RACHEL RUBIANE STOCK"
+//
+// A partir de 2026-09-15 o Robson simplificou a planilha que ele mesmo
+// preenche pra so ter as 4 primeiras colunas (Veiculo, Horario, Pedido,
+// Cliente) -- as demais colunas (4 a 12) ficam undefined nesse caso, e o
+// codigo abaixo ja trata isso: `col[indice] || null` vira null sem quebrar.
 const COL_B = {
   bloco: 0, horario: 1, pedido: 2, cliente: 3, cidade: 4, uf: 5,
   frete: 6, produto: 7, quantidade: 8, valor: 9, flag: 10,
@@ -1117,7 +1077,36 @@ async function buscarDescricoesItens(codigos) {
       if (!mapa.has(chave)) mapa.set(chave, { descricao: r.descricao, um: r.um });
     });
   }
+
+  // Robson, 15/09/2026: "esses itens pode deixar no banco de dados, na
+  // proxima vez que digitar ele ja vai puxar a descrição" -- último
+  // recorte, só quando nenhum dos três catálogos oficiais tinha o código:
+  // descrição que ELE digitou na mão numa entrada anterior
+  // (exp_item_descricao_avulsa, fase48). Tabela própria e não
+  // catalogo_exp_itens porque aquela é apagada e recriada inteira a cada
+  // "Importar" -- uma descrição digitada na mão hoje sumiria no próximo
+  // Importar, bem quando ele mais espera que ela já esteja lá.
+  const faltandoAvulsa = unicos.filter(c => !mapa.has(normalizaCodigoItem(c)));
+  if (faltandoAvulsa.length) {
+    const { data: doAvulsa } = await sb.from('exp_item_descricao_avulsa')
+      .select('codigo_item, descricao, um').eq('unidade', unidadeAtual).in('codigo_item', faltandoAvulsa);
+    (doAvulsa || []).forEach(r => {
+      const chave = normalizaCodigoItem(r.codigo_item);
+      if (!mapa.has(chave)) mapa.set(chave, { descricao: r.descricao, um: r.um });
+    });
+  }
   return mapa;
+}
+
+// Grava a descrição digitada na mão -- silencioso no erro (mesmo padrão de
+// carregarConferirExpNotas): se o fase48 ainda não rodou, o item ainda
+// assim é registrado no Controle EXP, só não fica lembrado pra próxima vez.
+async function salvarDescricaoAvulsa(codigoItem, descricao, um) {
+  const { error } = await sb.from('exp_item_descricao_avulsa').upsert({
+    unidade: unidadeAtual, codigo_item: codigoItem.trim(), descricao: descricao.trim(),
+    um: (um || '').trim() || null, cadastrado_por: nomeUsuarioAtual
+  }, { onConflict: 'unidade,codigo_item' });
+  if (error) console.warn('Não foi possível salvar a descrição avulsa do item:', error.message);
 }
 
 document.getElementById('expCtrlConferirBtn').addEventListener('click', async () => {
@@ -1277,6 +1266,20 @@ function aindaNoEndereco(status) {
 // outra, e "kv876431 " não pode deixar de casar com "KV876431".
 let carregamentoAbertoPorPedido = new Map();
 
+// Pedido que tem caminhão ENCOSTADO numa doca esperando (já chamado, mas
+// ainda não necessariamente carregando) -- Robson, 14/09/2026: "a
+// responsavel pelo exp acessoris ja sabe que tem que deixar o material na
+// parte que o conferente busca o material". É o aviso que faz o material
+// ser separado ANTES do conferente ir buscar.
+//
+// Mapa SEPARADO do de cima, mesmo saindo da mesma consulta, porque
+// respondem perguntas diferentes: este é só aviso na tela (inclui o
+// veículo que encostou e ainda não começou), o de cima decide em qual
+// caminhão a baixa vai ser carimbada (só quem está carregando de fato --
+// carimbar num carregamento que nem começou faria a barra de progresso
+// dele andar antes da hora).
+let pedidoChamadoParaDoca = new Map();   // numero_pedido -> { doca, carregando }
+
 function chavePedidoCarregamento(numeroPedido) {
   return String(numeroPedido == null ? '' : numeroPedido).trim().toUpperCase();
 }
@@ -1286,21 +1289,91 @@ function carregamentoAbertoDoPedido(numeroPedido) {
   return chave ? (carregamentoAbertoPorPedido.get(chave) || null) : null;
 }
 
+function chamadoParaDocaDoPedido(numeroPedido) {
+  const chave = chavePedidoCarregamento(numeroPedido);
+  return chave ? (pedidoChamadoParaDoca.get(chave) || null) : null;
+}
+
+// Selo "🚛 Doca 2" ao lado do nº do pedido, onde quer que o Controle EXP
+// mostre um pedido. Vazio quando não há caminhão esperando por ele.
+function seloDocaDoPedido(numeroPedido) {
+  const chamado = chamadoParaDocaDoPedido(numeroPedido);
+  if (!chamado) return '';
+  const titulo = chamado.carregando
+    ? `Carregando agora na ${chamado.doca} — o conferente está buscando este material`
+    : `Veículo encostado na ${chamado.doca} esperando — deixe o material na área de carregamento`;
+  return ` <span class="doca-chamado${chamado.carregando ? ' doca-chamado-carregando' : ''}"
+                 title="${escapeHtml(titulo)}">🚛 ${escapeHtml(chamado.doca)}</span>`;
+}
+
+// Três consultas pequenas em vez de um embed aninhado
+// (doca_carregamento_pedidos -> doca_carregamentos -> docas): o aninhado
+// depende de o PostgREST resolver duas relações de uma vez, e quando
+// falha, falha silencioso -- aqui é preferível previsível.
+// As 3 docas cadastradas, pro select do botão 🚚 DOCA (ver
+// marcarDocaFisica() e opcoesDocaFisicaHtml()) -- alimentado pela mesma
+// consulta de baixo, sem busca própria.
+let docasParaEscolha = [];
+
+// Select "qual doca" repetido em três lugares (Entrada, Saída/Conferência
+// item a item, e o "Tudo pra DOCA" por localização) -- função só, pra não
+// desalinhar as opções entre eles.
+function opcoesDocaFisicaHtml(selecionadoId) {
+  if (!docasParaEscolha.length) return '<option value="">Sem doca cadastrada</option>';
+  return '<option value="">Qual doca?</option>'
+    + docasParaEscolha.map(d => `<option value="${escapeHtml(d.id)}"${d.id === selecionadoId ? ' selected' : ''}>${escapeHtml(d.nome)}</option>`).join('');
+}
+
+// Se todo item do grupo já está na mesma doca, o select nasce marcado
+// nela (confirma o que já foi feito); se estão em docas diferentes (ou
+// ainda sem nenhuma), nasce em branco -- marcar "Doca 1" por padrão
+// quando os itens divergem inventaria um dado que ninguém confirmou.
+function docaComumDoGrupo(linhas) {
+  const valores = new Set(linhas.map(l => l.doca_id || ''));
+  return valores.size === 1 ? [...valores][0] : '';
+}
+
 async function carregarCarregamentosAbertos() {
   carregamentoAbertoPorPedido = new Map();
-  const { data, error } = await sb.from('doca_carregamento_pedidos')
-    .select('numero_pedido, carregamento_id, doca_carregamentos!inner(status, unidade)')
-    .eq('doca_carregamentos.status', 'carregando')
-    .eq('doca_carregamentos.unidade', unidadeAtual);
-  if (error) {
+  pedidoChamadoParaDoca = new Map();
+
+  const [carregamentos, docas] = await Promise.all([
+    sb.from('doca_carregamentos').select('id, status, doca_id')
+      .eq('unidade', unidadeAtual).in('status', ['aguardando', 'carregando']).not('doca_id', 'is', null),
+    sb.from('docas').select('id, nome').eq('unidade', unidadeAtual)
+  ]);
+
+  if (carregamentos.error || docas.error) {
     // Silencioso de propósito (mesmo padrão de carregarConferirExpNotas):
     // se o fase39 ainda não rodou no Supabase, o Controle EXP continua
-    // funcionando inteiro -- só não carimba o caminhão.
-    console.warn('Não foi possível carregar os carregamentos abertos:', error.message);
+    // funcionando inteiro -- só não mostra o aviso da doca, e o botão
+    // 🚚 DOCA não tem doca pra oferecer (ver marcarDocaFisica()).
+    console.warn('Não foi possível carregar os carregamentos das docas:',
+                 (carregamentos.error || docas.error).message);
     return;
   }
-  (data || []).forEach(r => {
-    carregamentoAbertoPorPedido.set(chavePedidoCarregamento(r.numero_pedido), r.carregamento_id);
+  // Mesma consulta alimenta o select "qual doca" do botão 🚚 DOCA (fase43)
+  // -- é a mesma lista de docas, não precisa buscar de novo.
+  docasParaEscolha = docas.data || [];
+  if (!(carregamentos.data || []).length) return;
+
+  const nomeDaDoca = new Map((docas.data || []).map(d => [d.id, d.nome]));
+  const porCarregamento = new Map((carregamentos.data || []).map(c => [c.id, c]));
+
+  const { data: vinculos, error } = await sb.from('doca_carregamento_pedidos')
+    .select('numero_pedido, carregamento_id')
+    .in('carregamento_id', [...porCarregamento.keys()]);
+  if (error) { console.warn('Não foi possível carregar os pedidos das docas:', error.message); return; }
+
+  (vinculos || []).forEach(v => {
+    const c = porCarregamento.get(v.carregamento_id);
+    if (!c) return;
+    const chave = chavePedidoCarregamento(v.numero_pedido);
+    if (c.status === 'carregando') carregamentoAbertoPorPedido.set(chave, c.id);
+    pedidoChamadoParaDoca.set(chave, {
+      doca: nomeDaDoca.get(c.doca_id) || 'doca',
+      carregando: c.status === 'carregando'
+    });
   });
 }
 
@@ -1528,7 +1601,7 @@ function renderExpControle(erroCarregamento) {
       <td class="num"><input type="text" class="expctrl-qtd-input" data-id="${escapeHtml(l.id)}"
              value="${l.quantidade != null ? escapeHtml(l.quantidade) : ''}" placeholder="—"
              style="width:70px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px; text-align:right;"></td>
-      <td class="loc">${escapeHtml(l.numero_pedido || '—')}</td>
+      <td class="loc">${escapeHtml(l.numero_pedido || '—')}${seloDocaDoPedido(l.numero_pedido)}</td>
       <td class="loc">${escapeHtml(l.numero_os_op || '—')}</td>
       <td class="loc">${escapeHtml(l.lote || '—')}</td>
       <td class="loc">${escapeHtml(l.referencia || '—')}</td>
@@ -1971,12 +2044,19 @@ async function gravarEtiquetaEmLote(linhas) {
 // sequência (entrou na doca, depois carregou), e usar as mesmas colunas
 // pras duas coisas apagaria "há quanto tempo ficou na doca antes de
 // carregar" assim que a segunda etapa acontecesse.
-async function marcarSaidaExpControle(id, conferente, novoStatus) {
+async function marcarSaidaExpControle(id, conferente, novoStatus, docaFisicaId) {
   const status = novoStatus || 'retirado';
   const linha = progExpControle.find(l => l.id === id);
   let patch;
   if (status === 'na_doca') {
-    patch = { status, na_doca_por: conferente, na_doca_em: new Date().toISOString() };
+    // Robson, 14/09/2026: "a minha responsavel que deixou o material la
+    // ela coloca o numero da doca" -- quem carrega o material já sabe pra
+    // qual das 3 docas físicas está indo; `doca_id` registra isso no
+    // mesmo instante (ver sql/fase43-exp-item-doca-fisica.sql). Diferente
+    // de `doca_carregamento_id` (fase39): aquele é o CAMINHÃO específico
+    // que carrega o pedido; este é só o ENDEREÇO FÍSICO (Doca 1/2/3), e
+    // pode existir antes de qualquer caminhão estar registrado ali.
+    patch = { status, na_doca_por: conferente, na_doca_em: new Date().toISOString(), doca_id: docaFisicaId || null };
   } else if (status === 'retirado') {
     patch = { status, retirado_por: conferente, retirado_em: new Date().toISOString() };
     // Painel de Docas (fase39): carimba em QUAL caminhão este item subiu,
@@ -1994,7 +2074,7 @@ async function marcarSaidaExpControle(id, conferente, novoStatus) {
     // O vínculo com o carregamento sai junto: o item não subiu naquele
     // caminhão, então não pode continuar contando na barra dele.
     patch = { status, na_doca_por: null, na_doca_em: null, retirado_por: null, retirado_em: null,
-              doca_carregamento_id: null };
+              doca_carregamento_id: null, doca_id: null };
   }
   const { error } = await sb.from('exp_controle_itens').update(patch).eq('id', id);
   if (error) { alert('Não foi possível salvar: ' + error.message); return false; }
@@ -2458,15 +2538,24 @@ document.getElementById('expCtrlMarcarTodos').addEventListener('change', (e) => 
 // nenhuma (a pessoa esta com o material na mao e so quer registrar o
 // local). Duas interfaces (formulario completo e passo-a-passo) chamam
 // esta MESMA funcao pra nao duplicar a gravacao.
-async function gravarMovimentacaoManual({ codigo, pedido, quantidadeTexto, local, op, lote, ref, tipo }) {
+async function gravarMovimentacaoManual({ codigo, pedido, quantidadeTexto, local, op, lote, ref, tipo, descricaoManual }) {
   codigo = (codigo || '').trim();
   if (!codigo) return { ok: false, mensagem: 'Informe o código do item.' };
-  // Trava repetida aqui (defesa em profundidade): o formulário completo já
-  // barra pelo blur do campo Item, mas o passo-a-passo confirma o Item num
-  // passo e só chega aqui bem depois -- sem checar de novo na gravação, um
-  // código digitado errado no wizard passaria batido.
-  if (!itemExisteNoCatalogoExp(codigo)) {
-    return { ok: false, mensagem: `NÃO SALVOU: o item ${codigo} não está no Catálogo EXP desta unidade — confira o código.` };
+
+  // Robson, 15/09/2026: "não consigo inserir itens que nao esta na
+  // planilha do exp, preciso que libere para eu digitar o que nao caiu
+  // ainda no sistema, as vezes é só por falta de reporte ou eu nao
+  // atualizei a planilha" -- não trava mais por não estar no Catálogo
+  // EXP (ver itemExisteNoCatalogoExp(), agora só usado como dica visual,
+  // não como bloqueio). Busca em cascata (Catálogo EXP -> Requisição ALM
+  // -> estoque -> descrição avulsa de uma entrada anterior) pra saber se
+  // já existe descrição; se não achar em lugar nenhum e a pessoa tiver
+  // digitado uma na hora, ela fica salva (exp_item_descricao_avulsa,
+  // fase48) pra já vir pronta da próxima vez.
+  const chave = normalizaCodigoItem(codigo);
+  const jaTemDescricao = (await buscarDescricoesItens([codigo])).get(chave);
+  if (!jaTemDescricao && (descricaoManual || '').trim()) {
+    await salvarDescricaoAvulsa(codigo, descricaoManual.trim());
   }
 
   const linha = {
@@ -2501,7 +2590,7 @@ async function gravarMovimentacaoManual({ codigo, pedido, quantidadeTexto, local
   // (o item já foi embora), não sinaliza nada sobre o pedido anterior.
   if (tipo !== 'saida') await atualizarPedidoProntoAoRegistrar(linha.numero_pedido);
 
-  const semDescricao = !(await buscarDescricoesItens([codigo])).get(codigo);
+  const semDescricao = !jaTemDescricao && !(descricaoManual || '').trim();
   const rotuloTipo = tipo === 'saida' ? 'Saída' : 'Entrada';
   await carregarProgramacao();
   trocarAbaExpAcessorios(tipo === 'saida' ? 'saida' : 'entrada');
@@ -2548,7 +2637,8 @@ document.getElementById('expManualAdicionarBtn').addEventListener('click', async
     op: document.getElementById('expManualOp').value,
     lote: document.getElementById('expManualLote').value,
     ref: document.getElementById('expManualRef').value,
-    tipo: document.getElementById('expManualTipo').value
+    tipo: document.getElementById('expManualTipo').value,
+    descricaoManual: document.getElementById('expManualDescricaoInput').value
   });
 
   btn.disabled = false;
@@ -2568,6 +2658,8 @@ document.getElementById('expManualAdicionarBtn').addEventListener('click', async
   document.getElementById('expManualExtras').style.display = 'none';
   document.getElementById('expManualExtrasToggleBtn').textContent = '+ Referência / Lote / Nº da OP';
   document.getElementById('expManualDescricao').textContent = '';
+  document.getElementById('expManualDescricaoInput').style.display = 'none';
+  document.getElementById('expManualDescricaoInput').value = '';
   document.getElementById('expManualCatalogoDica').textContent = '';
   campoItem.focus();
 });
@@ -2643,15 +2735,18 @@ function salvarPassoAtual() {
     document.getElementById('expWizMsg').className = 'status-msg status-err';
     return false;
   }
-  // Mesma trava do formulário completo (travarFormularioManual/
-  // itemExisteNoCatalogoExp): sem ela, a pessoa preencheria os seis passos
-  // seguintes antes de descobrir, só na revisão final, que o item nem
-  // existe no Catálogo EXP desta unidade.
+  // Robson, 15/09/2026: "preciso que libere para eu digitar o que nao
+  // caiu ainda no sistema" -- não trava mais aqui (era bloqueio duro até
+  // 15/09/2026). Só avisa: o wizard não tem campo de descrição próprio
+  // (diferente do formulário completo, que deixa digitar uma e ela fica
+  // salva pra próxima vez -- ver expManualDescricaoInput), então quem
+  // continuar por aqui com um código fora de todo catálogo vai gravar sem
+  // descrição, igual à colagem em lote.
   if (passo.campo === 'codigo_item' && valor && !itemExisteNoCatalogoExp(valor)) {
     document.getElementById('expWizMsg').textContent =
-      'Este código não está no Catálogo EXP desta unidade — confira o código.';
+      '⚠ Este código não está no Catálogo EXP desta unidade -- vai ser registrado mesmo assim, '
+      + 'mas sem descrição garantida (ela pode vir de outro catálogo). Pra digitar a descrição na mão, use o formulário completo.';
     document.getElementById('expWizMsg').className = 'status-msg status-err';
-    return false;
   }
 
   // Mesmo aviso do formulário completo (pedidoConflitanteNaLocalizacao) --
@@ -2814,8 +2909,12 @@ document.getElementById('expCtrlBody').addEventListener('click', async (e) => {
   }
   const btnSaida = e.target.closest('.expctrl-saida');
   if (btnSaida) {
-    // Vai pra doca, não direto pro carregamento -- mesmo fluxo de 3 estados
-    // do botão DOCA da aba Saída/Conferência (sql/fase36-doca.sql).
+    // Robson, 14/09/2026, depois de ver o seletor de doca nesta tela:
+    // "a parte em qual doca so na aba que coloquei a flecha, me importa
+    // mais a doca la de fora do carregamento" -- escolher a doca saiu
+    // daqui (e da Saída/Conferência) e virou só um seletor por PEDIDO
+    // dentro da própria aba DOCA (ver renderDoca()), pra não travar o
+    // clique rápido de quem está esvaziando o endereço.
     const ok = await marcarSaidaExpControle(btnSaida.dataset.id, nomeUsuarioAtual, 'na_doca');
     if (ok) await carregarProgramacao();
   }
@@ -3328,7 +3427,7 @@ ${scriptAutoImprimir ? '<script>window.onload = () => window.print();<' + '/scri
 // e `subtitulo` já chegam prontos pra ir direto no HTML (o subtítulo em
 // especial já vem com o que precisar de escapeHtml feito por quem chamou,
 // porque mistura texto fixo com `—` e afins).
-function montarHtmlTabelaGenerica({ titulo, cabecalho, linhas, subtitulo }) {
+function montarHtmlTabelaGenerica({ titulo, cabecalho, linhas, subtitulo, imprimir }) {
   const impressoEm = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
   const linhasHtml = linhas.map(linha => `<tr>${
     linha.map(v => `<td>${escapeHtml(v != null && v !== '' ? v : '—')}</td>`).join('')
@@ -3352,6 +3451,7 @@ function montarHtmlTabelaGenerica({ titulo, cabecalho, linhas, subtitulo }) {
   <thead><tr>${cabecalho.map(c => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead>
   <tbody>${linhasHtml}</tbody>
 </table>
+${imprimir ? '<script>window.onload = () => window.print();<' + '/script>' : ''}
 </body></html>`;
 }
 
@@ -3630,7 +3730,7 @@ function renderConferencia() {
                   <td class="item">${escapeHtml(l.codigo_item)}</td>
                   <td>${desc && desc.descricao ? escapeHtml(desc.descricao) : '—'}</td>
                   <td class="num">${l.quantidade != null ? escapeHtml(l.quantidade) : '—'}</td>
-                  <td class="loc">${escapeHtml(l.numero_pedido || '—')}</td>
+                  <td class="loc">${escapeHtml(l.numero_pedido || '—')}${seloDocaDoPedido(l.numero_pedido)}</td>
                   <td class="col-acoes">
                     <button class="btn conf-retirar-item" data-id="${escapeHtml(l.id)}"
                             title="Saiu deste endereço pra área de carregamento">🚚 DOCA</button>
@@ -3655,6 +3755,12 @@ document.getElementById('confBody').addEventListener('click', async (e) => {
   // aba de saída da localização automaticamente o material é transferido
   // pra lá" -- vai pra 'na_doca', não direto pro 'retirado' (fim de linha
   // fica pro botão ✓ Carregou, na aba DOCA). Ver sql/fase36-doca.sql.
+  // Robson, 14/09/2026, depois de ver o seletor de doca nesta tela: "a
+  // parte em qual doca so na aba que coloquei a flecha, me importa mais
+  // a doca la de fora do carregamento" -- escolher a doca saiu daqui (e
+  // da Entrada) e virou um seletor por PEDIDO dentro da própria aba DOCA
+  // (ver renderDoca()), pra não travar o clique rápido de quem está
+  // esvaziando o endereço.
   const btnItem = e.target.closest('.conf-retirar-item');
   if (btnItem) {
     btnItem.disabled = true;
@@ -3901,6 +4007,13 @@ document.getElementById('docaConferenteInput').addEventListener('input', (e) => 
   } catch (err) { /* idem */ }
 })();
 
+// Nome da doca física (Doca 1/2/3) a partir do id gravado no item --
+// mesma lista de docasParaEscolha que alimenta o select do botão 🚚 DOCA.
+function nomeDaDocaFisica(docaId) {
+  if (!docaId) return '—';
+  return (docasParaEscolha.find(d => d.id === docaId) || {}).nome || '—';
+}
+
 function linhasNaDoca() {
   const busca = normalizaBuscaLocal(buscaDoca);
   return linhasDoSetorAtual().filter(l => {
@@ -3947,13 +4060,23 @@ function renderDoca() {
       <div class="cfg-barra">
         <span class="loc-chip">${chave === '(sem pedido)' ? 'Sem nº de pedido' : 'Pedido ' + escapeHtml(chave)}</span>
         <span style="font-size:12px; color:var(--muted);">${linhas.length} item(ns)</span>
-        <button class="btn btn-primary doca-tudo-carregou" data-pedido="${escapeHtml(chave)}" style="margin-left:auto;">
+        <!-- Robson, 14/09/2026: "a parte em qual doca so na aba que
+             coloquei a flecha, me importa mais a doca la de fora do
+             carregamento" -- um seletor por PEDIDO aqui na aba DOCA
+             (não mais item a item na Entrada/Saída-Conferência): marca
+             de uma vez a doca física de todo o pedido, sem travar o
+             clique rápido de quem esvazia o endereço. -->
+        <select class="doca-grupo-select" data-pedido="${escapeHtml(chave)}" style="margin-left:auto;
+                padding:5px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px;">
+          ${opcoesDocaFisicaHtml(docaComumDoGrupo(linhas))}
+        </select>
+        <button class="btn btn-primary doca-tudo-carregou" data-pedido="${escapeHtml(chave)}">
           ✓ Todo pedido carregou
         </button>
       </div>
       <div class="scroll-area">
         <table>
-          <thead><tr><th>Item</th><th>Descrição</th><th>Qtd</th><th>Veio de</th><th>Levou pra doca</th><th>Ação</th></tr></thead>
+          <thead><tr><th>Item</th><th>Descrição</th><th>Qtd</th><th>Veio de</th><th>Doca</th><th>Levou pra doca</th><th>Ação</th></tr></thead>
           <tbody>
             ${linhas.map(l => {
               const desc = expCtrlDescMap.get(normalizaCodigoItem(l.codigo_item));
@@ -3968,6 +4091,7 @@ function renderDoca() {
                 <td>${desc && desc.descricao ? escapeHtml(desc.descricao) : '—'}</td>
                 <td class="num">${l.quantidade != null ? escapeHtml(l.quantidade) : '—'}</td>
                 <td class="loc">${escapeHtml(l.localizacao || '—')}</td>
+                <td class="loc"><span class="loc-chip">${escapeHtml(nomeDaDocaFisica(l.doca_id))}</span></td>
                 <td class="loc">${quemLevou}<div style="font-size:11px; color:var(--muted);">${escapeHtml(desde)}</div></td>
                 <td class="col-acoes">
                   <button class="btn doca-carregou" data-id="${escapeHtml(l.id)}">✓ Carregou</button>
@@ -3983,6 +4107,28 @@ function renderDoca() {
 
   renderHistoricoRetiradasDoca();
 }
+
+// Marca a doca física de TODO o pedido de uma vez (um update só, não um
+// por item) -- não é transição de status, é só o dado "onde está
+// fisicamente parado", então não passa por marcarSaidaExpControle().
+document.getElementById('docaBody').addEventListener('change', async (e) => {
+  const select = e.target.closest('.doca-grupo-select');
+  if (!select) return;
+  const docaId = select.value;
+  if (!docaId) return; // voltou pro "Qual doca?" -- nada a gravar
+
+  const pedido = select.dataset.pedido;
+  const itens = linhasNaDoca().filter(l => chavePedidoFolha(l.numero_pedido) === pedido);
+  if (!itens.length) return;
+
+  select.disabled = true;
+  const { error } = await sb.from('exp_controle_itens')
+    .update({ doca_id: docaId }).in('id', itens.map(l => l.id));
+  select.disabled = false;
+
+  if (error) { alert('Não foi possível marcar a doca: ' + error.message); return; }
+  await carregarProgramacao();
+});
 
 document.getElementById('docaBusca').addEventListener('input', (e) => {
   buscaDoca = e.target.value;
@@ -4203,6 +4349,349 @@ document.getElementById('avisoParadosGerarBtn').addEventListener('click', async 
   if (!resultado.ok) return;
 
   window.location.href = resultado.href;
+});
+
+// ---- Aba Preparar: aviso da expedição pro EXP antes do caminhão chegar ----
+// Robson, 15/09/2026: "o encarregado da expedição quando receber a lista
+// do pcp, coloca o numero do pedido... abre um aviso para que a gente
+// entenda que devemos deixar o material preparado ja". É ANTES do Painel
+// de Docas: lá o caminhão já está no pátio; aqui é só a lista do PCP
+// avisando o que vai precisar sair, pra dar tempo de separar com calma.
+//
+// Fluxo simples, confirmado pelo Robson: avisado -> preparado. Sem status
+// intermediário, sem "assumir tarefa" -- é uma anotação reversível, mesmo
+// espírito de conferir_exp_notas/exp_pedido_faturamento_confirmado.
+let avisosPreparoMap = new Map();      // numero_pedido (normalizado) -> registro
+let avisoPrepHistVisivel = false;
+
+async function carregarAvisosPreparo() {
+  avisosPreparoMap = new Map();
+  const { data, error } = await sb.from('exp_pedido_aviso_preparo')
+    .select('*').eq('unidade', unidadeAtual);
+  if (error) {
+    // Silencioso de propósito (mesmo padrão de carregarConferirExpNotas):
+    // se o fase45 ainda não rodou, a aba abre vazia em vez de travar o
+    // resto do Controle EXP.
+    console.warn('Não foi possível carregar os avisos de preparo:', error.message);
+    return;
+  }
+  (data || []).forEach(r => avisosPreparoMap.set(chavePedidoCarregamento(r.numero_pedido), r));
+}
+
+// Robson, 15/09/2026: "uma area aonde o encarregado coloque se a
+// separaçao é imediata, ou ele colloca o tempo estimado que tem que
+// deixar pronto" -- `prazo_em` nulo = imediata. "Urgência" de ordenação:
+// imediata e prazo já vencido pesam igual (os dois são "precisa agora"),
+// prazo futuro ordena pelo relógio (quem vence primeiro sobe), e dentro do
+// mesmo nível o mais antigo avisado vem primeiro -- é quem espera há mais
+// tempo.
+function urgenciaDoAviso(a) {
+  if (!a.prazo_em) return 0;                              // imediata
+  if (new Date(a.prazo_em).getTime() <= Date.now()) return 0; // prazo já vencido conta como imediata
+  return new Date(a.prazo_em).getTime();                  // prazo futuro: quanto mais cedo, mais urgente
+}
+
+function avisosPendentes() {
+  return [...avisosPreparoMap.values()].filter(a => a.status === 'pendente')
+    .sort((a, b) => {
+      const ua = urgenciaDoAviso(a), ub = urgenciaDoAviso(b);
+      if (ua !== ub) return ua - ub;
+      return new Date(a.avisado_em) - new Date(b.avisado_em);
+    });
+}
+
+// Selo de urgência do cartão -- "⚡ Imediata" ou "Prazo: até HH:mm", com o
+// mesmo vermelho de urgente quando é imediata OU o prazo já passou (as
+// duas situações pedem a mesma atenção agora).
+function seloUrgenciaAviso(a) {
+  const vencido = a.prazo_em && new Date(a.prazo_em).getTime() <= Date.now();
+  if (!a.prazo_em || vencido) {
+    return `<span class="avisoprep-urgencia avisoprep-urgencia-imediata">⚡ ${vencido ? 'Prazo vencido' : 'Imediata'}</span>`;
+  }
+  const hora = new Date(a.prazo_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  return `<span class="avisoprep-urgencia avisoprep-urgencia-prazo">🕒 Até ${escapeHtml(hora)}</span>`;
+}
+
+function avisosJaPreparados() {
+  return [...avisosPreparoMap.values()].filter(a => a.status === 'preparado')
+    .sort((a, b) => new Date(b.preparado_em || 0) - new Date(a.preparado_em || 0));
+}
+
+// Itens + localização de um pedido no Controle EXP -- mesma pergunta feita
+// pelo preview do Painel de Docas (itensDosPedidosDigitados em
+// js/docas.js), aqui reaproveitada com sua própria fonte (linhasDoSetorAtual).
+function itensDoPedidoAvisado(numeroPedido) {
+  const chave = chavePedidoCarregamento(numeroPedido);
+  return linhasDoSetorAtual().filter(l => chavePedidoCarregamento(l.numero_pedido) === chave);
+}
+
+function tabelaItensPedidoHtml(numeroPedido) {
+  const itens = itensDoPedidoAvisado(numeroPedido);
+  if (!itens.length) {
+    return `<div style="padding:8px 0; color:var(--muted); font-size:12.5px;">Nenhum item deste pedido no Controle EXP desta unidade.</div>`;
+  }
+  return `
+  <div class="scroll-area">
+    <table>
+      <thead><tr><th>Item</th><th>Descrição</th><th>Qtd</th><th>Localização</th><th>Status</th></tr></thead>
+      <tbody>
+        ${itens.map(l => {
+          const desc = expCtrlDescMap.get(normalizaCodigoItem(l.codigo_item));
+          return `
+          <tr>
+            <td class="item">${escapeHtml(l.codigo_item)}</td>
+            <td>${desc && desc.descricao ? escapeHtml(desc.descricao) : '—'}</td>
+            <td class="num">${l.quantidade != null ? escapeHtml(l.quantidade) : '—'}</td>
+            <td class="loc">${escapeHtml(l.localizacao || '—')}</td>
+            <td>${rotuloStatusExp(l.status).rotulo}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+function renderAvisosPreparo() {
+  const pendentes = avisosPendentes();
+  const corpo = document.getElementById('avisoPrepBody');
+  const vazio = document.getElementById('avisoPrepVazio');
+  const contagem = document.getElementById('avisoPrepContagem');
+
+  contagem.textContent = pendentes.length ? `${pendentes.length} pedido(s)` : '';
+  vazio.style.display = pendentes.length ? 'none' : 'block';
+
+  corpo.innerHTML = pendentes.map(a => `
+    <div style="border:1px solid var(--erro-borda); border-radius:10px; margin-top:12px; overflow:hidden;">
+      <div class="cfg-barra" style="background:var(--erro-fundo); flex-wrap:wrap;">
+        <span class="loc-chip">Pedido ${escapeHtml(a.numero_pedido)}</span>
+        ${seloUrgenciaAviso(a)}
+        <span style="font-size:12px; color:var(--erro-texto);" title="${a.avisado_por ? escapeHtml(a.avisado_por) : ''}">
+          avisado ${escapeHtml(formatarDataHoraBR(a.avisado_em))}${a.avisado_por ? ' por ' + escapeHtml(a.avisado_por) : ''}
+        </span>
+        <span style="margin-left:auto; display:flex; gap:6px;">
+          <button class="btn avisoprep-imprimir" data-pedido="${escapeHtml(a.numero_pedido)}">🖨️ Imprimir</button>
+          <button class="btn btn-primary avisoprep-preparado" data-pedido="${escapeHtml(a.numero_pedido)}">✓ Preparado</button>
+          <button class="acao-btn avisoprep-cancelar" data-pedido="${escapeHtml(a.numero_pedido)}"
+                  title="Não precisa mais separar -- remove o aviso">↺</button>
+        </span>
+      </div>
+      ${tabelaItensPedidoHtml(a.numero_pedido)}
+    </div>`).join('');
+
+  renderAvisosPreparoHistorico();
+}
+
+function renderAvisosPreparoHistorico() {
+  const corpo = document.getElementById('avisoPrepHistBody');
+  const preparados = avisosJaPreparados();
+  if (!preparados.length) {
+    corpo.innerHTML = '<div style="color:var(--muted); font-size:12.5px; padding:6px 0;">Nenhum pedido preparado ainda.</div>';
+    return;
+  }
+  corpo.innerHTML = `
+  <div class="scroll-area">
+    <table>
+      <thead><tr><th>Pedido</th><th>Avisado</th><th>Preparado</th><th>Ação</th></tr></thead>
+      <tbody>
+        ${preparados.map(a => `
+        <tr>
+          <td class="item">${escapeHtml(a.numero_pedido)}</td>
+          <td class="loc">${a.avisado_por ? escapeHtml(a.avisado_por) + ' — ' : ''}${escapeHtml(formatarDataHoraBR(a.avisado_em))}</td>
+          <td class="loc">${a.preparado_por ? escapeHtml(a.preparado_por) + ' — ' : ''}${a.preparado_em ? escapeHtml(formatarDataHoraBR(a.preparado_em)) : '—'}</td>
+          <td class="col-acoes">
+            <button class="acao-btn avisoprep-reabrir" data-pedido="${escapeHtml(a.numero_pedido)}" title="Avisar de novo -- volta pra pendente">↺</button>
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+document.getElementById('avisoPrepHistToggle').addEventListener('click', (e) => {
+  avisoPrepHistVisivel = !avisoPrepHistVisivel;
+  document.getElementById('avisoPrepHistBody').style.display = avisoPrepHistVisivel ? 'block' : 'none';
+  e.target.textContent = avisoPrepHistVisivel ? 'Esconder' : 'Mostrar';
+});
+
+// Campo de horário só aparece quando a urgência escolhida é "Tem prazo" --
+// "imediata" não tem hora nenhuma pra preencher.
+document.getElementById('avisoPrepUrgencia').addEventListener('change', (e) => {
+  document.getElementById('avisoPrepPrazoHora').style.display = e.target.value === 'prazo' ? 'inline-block' : 'none';
+});
+
+// Avisa quem cuida do EXP em tempo real -- popup no canto (js/notificacoes.js:
+// iniciarAvisoPreparo), mesmo desenho de dispararAlertaCadastro() (js/auth.js):
+// broadcast, e não trava o cadastro se falhar (quem está avisando não pode
+// ficar preso porque o popup não saiu -- o Painel do Dia continua contando
+// de qualquer jeito, é só a notificação ao vivo que se perde).
+//
+// ⚠️ Canal POR UNIDADE (`alertas-preparo-<unidade>`), diferente do de
+// cadastro (que é global): gente de outra fábrica não pode receber popup de
+// um pedido que não é dela -- mesma separação que a RLS já aplica em toda
+// tabela deste projeto (`minha_unidade()`).
+function dispararAlertaPreparo({ pedidos, avisadoPor, urgente }) {
+  try {
+    sb.channel(`alertas-preparo-${unidadeAtual}`).send({
+      type: 'broadcast', event: 'pedido_preparo',
+      payload: { pedidos: pedidos || [], unidade: unidadeAtual, avisadoPor: avisadoPor || null, urgente: !!urgente, quando: new Date().toISOString() }
+    });
+  } catch (e) {
+    console.warn('Não foi possível avisar sobre o pedido pra preparar:', e.message);
+  }
+}
+
+// "coloca o numero do pedido... abre um aviso" -- upsert por (unidade,
+// numero_pedido): avisar de novo um pedido já preparado volta ele pra
+// pendente (pode ter chegado item novo, ou foi engano marcar preparado).
+document.getElementById('avisoPrepAvisarBtn').addEventListener('click', async () => {
+  const msg = document.getElementById('avisoPrepMsg');
+  const btn = document.getElementById('avisoPrepAvisarBtn');
+  const campo = document.getElementById('avisoPrepPedidos');
+  const urgencia = document.getElementById('avisoPrepUrgencia').value;
+  const campoHora = document.getElementById('avisoPrepPrazoHora');
+
+  const pedidos = campo.value.split(/[,;\s]+/).map(p => p.trim().toUpperCase()).filter(Boolean);
+  if (!pedidos.length) {
+    msg.textContent = 'Informe o(s) nº de pedido da lista do PCP.';
+    msg.className = 'status-msg status-err';
+    return;
+  }
+
+  // "ele colloca o tempo estimado que tem que deixar pronto" -- combina o
+  // horário digitado com a data de HOJE (é sempre um prazo do próprio
+  // turno). Sem hora escolhida com "Tem prazo" marcado, avisa em vez de
+  // gravar um prazo vazio que pareceria "imediata" sem realmente ser a
+  // escolha feita.
+  let prazoEm = null;
+  if (urgencia === 'prazo') {
+    if (!campoHora.value) {
+      msg.textContent = 'Informe o horário do prazo, ou troque pra "Imediata".';
+      msg.className = 'status-msg status-err';
+      return;
+    }
+    const [h, m] = campoHora.value.split(':').map(Number);
+    const alvo = new Date();
+    alvo.setHours(h, m, 0, 0);
+    prazoEm = alvo.toISOString();
+  }
+
+  btn.disabled = true;
+  msg.textContent = 'Avisando a equipe...';
+  msg.className = 'status-msg';
+
+  const { error } = await sb.from('exp_pedido_aviso_preparo').upsert(
+    pedidos.map(numero_pedido => ({
+      unidade: unidadeAtual, numero_pedido, status: 'pendente', prazo_em: prazoEm,
+      avisado_por: nomeUsuarioAtual, avisado_em: new Date().toISOString(),
+      preparado_por: null, preparado_em: null
+    })),
+    { onConflict: 'unidade,numero_pedido' }
+  );
+
+  btn.disabled = false;
+
+  if (error) {
+    msg.textContent = 'Não foi possível avisar: ' + error.message
+      + (/does not exist|relation|column/i.test(error.message) ? ' — rode sql/fase45-aviso-preparo-pedido.sql e sql/fase46-aviso-preparo-prazo.sql no Supabase.' : '');
+    msg.className = 'status-msg status-err';
+    return;
+  }
+
+  dispararAlertaPreparo({ pedidos, avisadoPor: nomeUsuarioAtual, urgente: urgencia !== 'prazo' });
+
+  const horaEscolhida = campoHora.value;
+  campo.value = '';
+  campoHora.value = '';
+  await carregarAvisosPreparo();
+  renderAvisosPreparo();
+  msg.textContent = `${pedidos.length} pedido(s) avisado(s)${prazoEm ? ' -- prazo até ' + horaEscolhida : ' (imediata)'} -- vai aparecer no Painel do Dia pra quem cuida do EXP.`;
+  msg.className = 'status-msg status-ok';
+});
+
+// "um botao de retornar caso nao precise mais separar" -- diferente de
+// "✓ Preparado" (que É fato, fica no histórico): cancelar apaga a linha
+// de vez, porque o pedido nunca chegou a ser preparado -- não é
+// resultado, é "isso não devia estar na lista".
+document.getElementById('avisoPrepBody').addEventListener('click', async (e) => {
+  const btnPreparado = e.target.closest('.avisoprep-preparado');
+  const btnImprimir = e.target.closest('.avisoprep-imprimir');
+  // "um botao de retornar caso nao precise mais separar" -- diferente de
+  // "✓ Preparado" (que É fato, fica no histórico): cancelar apaga a linha
+  // de vez, porque o pedido nunca chegou a ser preparado -- não é
+  // resultado, é "isso não devia estar na lista".
+  const btnCancelar = e.target.closest('.avisoprep-cancelar');
+
+  if (btnCancelar) {
+    const pedido = btnCancelar.dataset.pedido;
+    if (!confirm(`Cancelar o aviso do pedido ${pedido}? Ele some da lista -- use quando não precisar mais separar.`)) return;
+    btnCancelar.disabled = true;
+    const { error } = await sb.from('exp_pedido_aviso_preparo')
+      .delete().eq('unidade', unidadeAtual).eq('numero_pedido', pedido);
+    if (error) { alert('Não foi possível cancelar: ' + error.message); btnCancelar.disabled = false; return; }
+    await carregarAvisosPreparo();
+    renderAvisosPreparo();
+    return;
+  }
+
+  if (btnPreparado) {
+    const pedido = btnPreparado.dataset.pedido;
+    btnPreparado.disabled = true;
+    const { error } = await sb.from('exp_pedido_aviso_preparo').update({
+      status: 'preparado', preparado_por: nomeUsuarioAtual, preparado_em: new Date().toISOString()
+    }).eq('unidade', unidadeAtual).eq('numero_pedido', pedido);
+    if (error) { alert('Não foi possível marcar como preparado: ' + error.message); btnPreparado.disabled = false; return; }
+
+    // Robson, 15/09/2026: "depois daqui de preparado o pedido vai para aba
+    // doca" -- confirmado que é automático: quem prepara o material
+    // fisicamente já está confirmando que foi levado pra doca, não faz
+    // sentido repetir o mesmo clique no 🚚 DOCA da Entrada/Saída-Conferência
+    // logo em seguida. Só move quem ainda está `na_expedicao` -- item já
+    // na_doca ou retirado não regride nem duplica carimbo.
+    const itensParaDoca = itensDoPedidoAvisado(pedido).filter(l => l.status === 'na_expedicao');
+    for (const item of itensParaDoca) {
+      await marcarSaidaExpControle(item.id, nomeUsuarioAtual, 'na_doca');
+    }
+    if (itensParaDoca.length) await carregarProgramacao(); // atualiza a aba DOCA com o que acabou de entrar
+
+    await carregarAvisosPreparo();
+    renderAvisosPreparo();
+    return;
+  }
+
+  if (btnImprimir) {
+    const pedido = btnImprimir.dataset.pedido;
+    const itens = itensDoPedidoAvisado(pedido);
+    if (!itens.length) { alert('Nenhum item deste pedido no Controle EXP.'); return; }
+
+    const aba = window.open('', '_blank');
+    if (!aba) { alert('O navegador bloqueou a nova aba. Libere pop-ups pra este site e tente de novo.'); return; }
+    const linhas = itens.map(l => {
+      const desc = expCtrlDescMap.get(normalizaCodigoItem(l.codigo_item));
+      return [l.codigo_item, desc && desc.descricao ? desc.descricao : '',
+               l.quantidade != null ? l.quantidade : '', l.localizacao || '', rotuloStatusExp(l.status).rotulo];
+    });
+    const html = montarHtmlTabelaGenerica({
+      titulo: `Separar material — Pedido ${pedido} — ${rotuloUnidade(unidadeAtual)}`,
+      cabecalho: ['Item', 'Descrição', 'Qtd', 'Localização', 'Status'],
+      linhas,
+      imprimir: true
+    });
+    aba.document.write(html);
+    aba.document.close();
+  }
+});
+
+document.getElementById('avisoPrepHistBody').addEventListener('click', async (e) => {
+  const btn = e.target.closest('.avisoprep-reabrir');
+  if (!btn) return;
+  const pedido = btn.dataset.pedido;
+  btn.disabled = true;
+  const { error } = await sb.from('exp_pedido_aviso_preparo').update({
+    status: 'pendente', preparado_por: null, preparado_em: null
+  }).eq('unidade', unidadeAtual).eq('numero_pedido', pedido);
+  if (error) { alert('Não foi possível reabrir: ' + error.message); btn.disabled = false; return; }
+  await carregarAvisosPreparo();
+  renderAvisosPreparo();
 });
 
 // ---- Aba Auditoria: caminhada física pela expedição --------------------
@@ -4646,15 +5135,6 @@ function pedidoConflitanteNaLocalizacao(localizacao, pedidoAtual) {
   return linha ? (linha.numero_pedido || '').trim() : null;
 }
 
-// Trava/destrava os campos que vêm DEPOIS do Item no formulário completo,
-// conforme o código bater ou não com o Catálogo EXP desta unidade. Chamada
-// no blur do Item (ver mais abaixo) -- então a pessoa só digita o resto
-// depois de o código já ter sido conferido.
-function travarFormularioManual(bloquear) {
-  ['expManualQtd', 'expManualLocal', 'expManualAdicionarBtn', 'expManualExtrasToggleBtn']
-    .forEach(id => { document.getElementById(id).disabled = bloquear; });
-}
-
 function lotesDoItemNoCatalogo(codigo) {
   return catalogoExpItens.filter(l => l.codigo_item === codigo && (l.referencia || l.lote));
 }
@@ -4694,24 +5174,40 @@ document.getElementById('expManualExtrasToggleBtn').addEventListener('click', ()
 document.getElementById('expManualItem').addEventListener('blur', async () => {
   const codigo = document.getElementById('expManualItem').value.trim();
   const descricaoEl = document.getElementById('expManualDescricao');
+  const descricaoInput = document.getElementById('expManualDescricaoInput');
   const dica = document.getElementById('expManualCatalogoDica');
-  if (!codigo) { descricaoEl.textContent = ''; dica.textContent = ''; travarFormularioManual(false); return; }
-
-  if (!itemExisteNoCatalogoExp(codigo)) {
-    descricaoEl.textContent = '⚠ Este código não está no Catálogo EXP desta unidade — confira o código, ou cole a planilha do sistema na aba Catálogo.';
-    descricaoEl.className = 'status-msg status-err';
-    dica.textContent = '';
-    travarFormularioManual(true);
+  if (!codigo) {
+    descricaoEl.textContent = ''; dica.textContent = '';
+    descricaoInput.style.display = 'none'; descricaoInput.value = '';
     return;
   }
-  travarFormularioManual(false);
+
+  // Robson, 15/09/2026: "não consigo inserir itens que nao esta na
+  // planilha do exp, preciso que libere para eu digitar o que nao caiu
+  // ainda no sistema" -- não trava mais o formulário quando o código não
+  // está no Catálogo EXP. `itemExisteNoCatalogoExp` vira só uma DICA
+  // (pra saber se veio de lá ou de outro catálogo), a busca em cascata
+  // completa (buscarDescricoesItens) decide se libera ou pede descrição.
+  const semCatalogoExp = !itemExisteNoCatalogoExp(codigo);
 
   const mapaDescricoes = await buscarDescricoesItens([codigo]);
-  const achou = mapaDescricoes.get(codigo);
-  descricaoEl.textContent = achou && achou.descricao
-    ? `${achou.descricao}${achou.um ? ' — ' + achou.um : ''}`
-    : '⚠ Descrição não encontrada — confira o código.';
-  descricaoEl.className = achou && achou.descricao ? 'status-msg status-ok' : 'status-msg status-err';
+  const achou = mapaDescricoes.get(normalizaCodigoItem(codigo));
+
+  if (achou && achou.descricao) {
+    descricaoEl.textContent = `${achou.descricao}${achou.um ? ' — ' + achou.um : ''}`
+      + (semCatalogoExp ? ' (achada em outro catálogo, não no Catálogo EXP)' : '');
+    descricaoEl.className = 'status-msg status-ok';
+    descricaoInput.style.display = 'none';
+    descricaoInput.value = '';
+  } else {
+    // Nenhum dos catálogos tem esse código -- deixa digitar a descrição na
+    // mão em vez de barrar o registro. Ela fica salva (fase48) pra próxima
+    // vez que esse código for digitado já vir pronta sozinha.
+    descricaoEl.textContent = '⚠ Item não encontrado em nenhum catálogo (EXP, Requisição ALM ou estoque). '
+      + 'Digite a descrição abaixo pra registrar mesmo assim -- ela fica salva pras próximas vezes.';
+    descricaoEl.className = 'status-msg status-err';
+    descricaoInput.style.display = 'block';
+  }
 
   const lotes = lotesDoItemNoCatalogo(codigo);
   if (!lotes.length) { dica.textContent = ''; return; }

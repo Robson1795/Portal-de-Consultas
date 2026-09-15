@@ -34,12 +34,101 @@ function caixaNotificacoes() {
   return document.getElementById('notificacoes');
 }
 
+// ---- Som + notificação do sistema (Chrome/Android), 15/09/2026 ------------
+//
+// O Robson: *"Consegue fazer com que o app envie aviso sonoro e notificação
+// do chrome tanto no pc quanto no android"*. Funciona com o portal ABERTO
+// numa aba (minimizada, ou noutra aba, PC ou Android) -- sem servidor
+// novo, é só Web Notifications API + um bipe curto por Web Audio, os dois
+// nativos do navegador. NÃO alcança navegador fechado nem celular
+// bloqueado sem o Chrome aberto: isso é push de verdade (service worker +
+// servidor de push), obra bem maior, fora do desenho deste projeto
+// (sem backend, só Supabase+Vercel) -- avisado antes de começar.
+let permissaoNotifPedida = false;
+
+// Pedida uma vez só, proativamente, logo depois do login (iniciarAvisoCadastro
+// e iniciarAvisoPreparo chamam) -- pedir só na hora do primeiro aviso de
+// verdade deixaria a primeira notificação sem som, porque o navegador não
+// resolve a pergunta a tempo.
+async function garantirPermissaoNotificacao() {
+  if (!('Notification' in window)) return false;
+  if (Notification.permission === 'granted') return true;
+  if (Notification.permission === 'denied' || permissaoNotifPedida) return false;
+  permissaoNotifPedida = true;
+  try {
+    return (await Notification.requestPermission()) === 'granted';
+  } catch (e) {
+    console.warn('Não foi possível pedir permissão de notificação:', e.message);
+    return false;
+  }
+}
+
+// Jingle de 3 notas por Web Audio -- sem arquivo de áudio pra hospedar/
+// carregar. O Robson: "COLOQUE UM SOM CHAMATIVO TIPO DO IPHONE" -- um bipe
+// só (versão anterior) passava despercebido no barulho do galpão; um
+// arpejo curto (Lá5-Ré6-Sol6, tipo "campainha" de notificação de celular)
+// chama mais atenção sem virar sirene. Cada nota é um AudioContext próprio
+// porque um contexto já usado uma vez e parado (`stop()`) não toca de novo.
+function tocarSomAviso() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const notas = [880, 1174.66, 1567.98]; // Lá5, Ré6, Sol6 -- soa "alerta", não "erro"
+    const duracaoNota = 0.22;
+    const intervaloNota = 0.13; // sobreposição leve: soa "campainha", não staccato
+    notas.forEach((freq, i) => {
+      const inicio = ctx.currentTime + i * intervaloNota;
+      const osc = ctx.createOscillator();
+      const ganho = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      // Sobe e desce o volume em vez de ligar/desligar seco -- toc-toc
+      // limpo, sem o estalo de clique que um degrau abrupto de volume causa.
+      ganho.gain.setValueAtTime(0.0001, inicio);
+      ganho.gain.exponentialRampToValueAtTime(0.28, inicio + 0.01);
+      ganho.gain.exponentialRampToValueAtTime(0.0001, inicio + duracaoNota);
+      osc.connect(ganho).connect(ctx.destination);
+      osc.start(inicio);
+      osc.stop(inicio + duracaoNota + 0.02);
+    });
+    const duracaoTotal = (notas.length - 1) * intervaloNota + duracaoNota + 0.05;
+    setTimeout(() => ctx.close(), duracaoTotal * 1000);
+  } catch (e) {
+    console.warn('Não foi possível tocar o aviso sonoro:', e.message);
+  }
+}
+
+// Tira as tags simples que `texto` costuma trazer (<b>, <br>) -- a notificação
+// do sistema é texto puro, não HTML.
+function textoPlano(html) {
+  return String(html || '').replace(/<br\s*\/?>/gi, ' — ').replace(/<[^>]+>/g, '').trim();
+}
+
+// Só quando a aba NÃO está em primeiro plano: quem já está olhando o popup
+// no canto não precisa de um segundo aviso empilhado em cima pelo sistema
+// operacional -- mesmo padrão do Slack e da maioria dos apps de chat.
+function notificarSistema({ titulo, texto, chave }) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  if (document.visibilityState === 'visible' && document.hasFocus()) return;
+  try {
+    const n = new Notification(titulo || 'Portal de Estoque', {
+      body: textoPlano(texto), icon: 'logo.png', tag: chave || undefined
+    });
+    n.onclick = () => { window.focus(); n.close(); };
+  } catch (e) {
+    console.warn('Não foi possível mostrar a notificação do sistema:', e.message);
+  }
+}
+
 function mostrarNotificacao({ icone, titulo, texto, acaoRotulo, aoClicarAcao, chave }) {
   const caixa = caixaNotificacoes();
   if (!caixa) return null;
 
   // `chave` evita duplicata: o mesmo cadastro chegando pelo aviso ao vivo e
   // pela conferência de quem entrou depois viraria dois cartões iguais.
+  // Duplicata não tem por que tocar som nem reabrir a notificação do
+  // sistema de novo -- por isso o `return` sai ANTES do aviso sonoro/SO.
   if (chave) {
     const jaTem = caixa.querySelector(`[data-chave="${CSS.escape(chave)}"]`);
     if (jaTem) return jaTem;
@@ -70,6 +159,10 @@ function mostrarNotificacao({ icone, titulo, texto, acaoRotulo, aoClicarAcao, ch
   // estoura o teto.
   caixa.prepend(cartao);
   while (caixa.children.length > MAX_NOTIFICACOES) caixa.lastElementChild.remove();
+
+  tocarSomAviso();
+  notificarSistema({ titulo, texto, chave });
+
   return cartao;
 }
 
@@ -132,6 +225,12 @@ async function contarCadastrosPendentes() {
 async function iniciarAvisoCadastro() {
   if (!podeVerAvisoCadastro()) return;
 
+  // Pedida aqui e não só na hora do primeiro aviso: pedir permissão é
+  // assíncrono, e a pessoa pode demorar pra responder -- se só perguntasse
+  // na hora H, aquele primeiro aviso sairia sem som/notificação mesmo que
+  // ela aceite. Não bloqueia o resto (sem `await`).
+  garantirPermissaoNotificacao();
+
   // --- 1) o que JÁ está esperando ---
   //
   // ⚠️ Sem isto a notificação só funcionaria para quem estivesse com o portal
@@ -170,6 +269,106 @@ async function iniciarAvisoCadastro() {
       // A lista da aba Configurações já estava aberta atrás? Atualiza ela
       // também, pra pessoa não precisar lembrar de clicar em "Recarregar".
       if (typeof carregarUsuarios === 'function' && paginaAtual === 'config') carregarUsuarios();
+    })
+    .subscribe();
+}
+
+// ---- Pedido avisado pra preparar (15/09/2026) -----------------------------
+//
+// Mesmo desenho de cima, ponta a ponta: conta quem já está esperando (pra
+// alcançar quem chegou depois do aviso), assina broadcast pro que vier daqui
+// pra frente, dedupe por chave, nunca some sozinha. A diferença é o público
+// (quem separa material, não quem aprova cadastro) e o canal, que é POR
+// UNIDADE -- ver o comentário em cima de dispararAlertaPreparo()
+// (js/programacao.js): gente de outra fábrica não pode saber de um pedido
+// que não é da unidade dela.
+//
+// O Robson, mostrando o card do Painel do Dia (seção 25) que já existia pra
+// isso: *"dessa aba que o encarregado da expediçao alimenta"* -- ou seja,
+// mesma fonte de dado (exp_pedido_aviso_preparo), só que como popup em
+// qualquer tela em vez de só aparecer pra quem está no Painel do Dia.
+function podeVerAvisoPreparo() {
+  return perfilAtual === 'estoque_alm' || perfilAtual === 'admin';
+}
+
+function irParaPreparar() {
+  if (typeof mostrarPagina === 'function') mostrarPagina('expacessorios');
+  if (typeof trocarAbaExpAcessorios === 'function') trocarAbaExpAcessorios('avisoprep');
+}
+
+function notificarPedidoPreparo({ pedidos, avisadoPor, urgente }) {
+  const lista = (pedidos || []).filter(Boolean);
+  if (!lista.length) return;
+  const plural = lista.length > 1;
+
+  mostrarNotificacao({
+    icone: urgente ? '🔔' : '⏰',
+    titulo: plural ? `${lista.length} pedidos avisados pra preparar` : 'Pedido avisado pra preparar',
+    texto: `<b>${escapeHtml(lista.join(', '))}</b> -- separe e deixe pronto antes do caminhão chegar.`
+      + (avisadoPor ? `<br><span class="notif-detalhe">Avisado por ${escapeHtml(avisadoPor)}</span>` : ''),
+    acaoRotulo: 'Abrir Preparar',
+    aoClicarAcao: irParaPreparar,
+    // Chave por conjunto de pedidos + instante: reavisar o mesmo pedido mais
+    // tarde (ver "↺ Avisar de novo" na tela) é evento novo, não duplicata do
+    // primeiro -- diferente do cadastro, que é uma pessoa só, uma vez só.
+    chave: 'preparo:' + lista.join(',') + ':' + Date.now()
+  });
+}
+
+// Quantos pedidos pendentes JÁ estão na fila -- mesma consulta do card
+// "avisoprep" em js/painel.js (contarPainel), pra quem entrou no portal
+// depois de o aviso ter sido disparado.
+async function contarAvisosPreparoPendentes() {
+  if (!unidadeAtual) return 0;
+  const { count, error } = await sb.from('exp_pedido_aviso_preparo')
+    .select('id', { count: 'exact', head: true })
+    .eq('unidade', unidadeAtual).eq('status', 'pendente');
+  if (error) {
+    // Silencioso: aviso de cortesia, e a tabela é nova (fase45) -- se ainda
+    // não rodou no banco, isto não pode virar erro no meio do trabalho.
+    console.warn('Não foi possível contar os avisos de preparo pendentes:', error.message);
+    return 0;
+  }
+  return count || 0;
+}
+
+let canalAvisoPreparo = null;
+
+// Chamado por js/auth.js (junto de iniciarAvisoCadastro) e de novo por
+// js/estoque.js (trocarUnidade) sempre que a unidade ativa muda -- o canal é
+// por unidade, então trocar de fábrica sem reassinar deixaria a pessoa
+// ouvindo o aviso da unidade errada (ou nenhuma).
+async function iniciarAvisoPreparo() {
+  if (canalAvisoPreparo) { sb.removeChannel(canalAvisoPreparo); canalAvisoPreparo = null; }
+  if (!podeVerAvisoPreparo() || !unidadeAtual) return;
+
+  // Mesmo motivo do iniciarAvisoCadastro(): pedir cedo, não só na hora do
+  // primeiro aviso. `garantirPermissaoNotificacao()` já se protege contra
+  // perguntar duas vezes (esta função roda de novo a cada troca de unidade).
+  garantirPermissaoNotificacao();
+
+  const pendentes = await contarAvisosPreparoPendentes();
+  if (pendentes > 0) {
+    mostrarNotificacao({
+      icone: '⏳',
+      titulo: pendentes === 1 ? '1 pedido aguardando preparo'
+                              : `${pendentes} pedidos aguardando preparo`,
+      texto: 'O encarregado da expedição avisou -- separe e deixe pronto antes do caminhão chegar.',
+      acaoRotulo: 'Abrir Preparar',
+      aoClicarAcao: irParaPreparar,
+      // Chave fixa (sem unidade): entrar de novo na mesma aba, ou trocar de
+      // unidade e voltar, não empilha um segundo resumo.
+      chave: 'avisoprep-pendentes'
+    });
+  }
+
+  canalAvisoPreparo = sb.channel(`alertas-preparo-${unidadeAtual}`)
+    .on('broadcast', { event: 'pedido_preparo' }, (msg) => {
+      if (!podeVerAvisoPreparo()) return;
+      notificarPedidoPreparo(msg.payload || {});
+      // O Painel do Dia já estava aberto atrás? Atualiza o card, pra não
+      // precisar lembrar de clicar em "Atualizar".
+      if (typeof carregarPainel === 'function' && paginaAtual === 'painel') carregarPainel();
     })
     .subscribe();
 }

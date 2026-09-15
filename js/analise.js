@@ -872,6 +872,8 @@ function renderAnalise() {
           ? `<button class="acao-btn analise-restaurar" data-item="${escapeHtml(l.codigo_item)}" title="Voltar este item pra análise">↺</button>`
           : solicitacaoHtml(l)
             + `<button class="acao-btn analise-ignorar" data-item="${escapeHtml(l.codigo_item)}" title="Não preciso repor este item — some da análise, inclusive nas próximas planilhas">🚫</button>`}
+        <button class="acao-btn analise-remover" data-item="${escapeHtml(l.codigo_item)}"
+                title="Remover da análise -- use quando o pedido já foi faturado/cancelado e não é mais demanda de verdade">🗑</button>
       </td>
     </tr>`;
   }).join('');
@@ -928,7 +930,22 @@ document.getElementById('analiseBody').addEventListener('click', async (e) => {
   const btnIgnorar = e.target.closest('.analise-ignorar');
   if (btnIgnorar) { await marcarItemAnalise(btnIgnorar, btnIgnorar.dataset.item, true); return; }
   const btnRestaurar = e.target.closest('.analise-restaurar');
-  if (btnRestaurar) await marcarItemAnalise(btnRestaurar, btnRestaurar.dataset.item, false);
+  if (btnRestaurar) { await marcarItemAnalise(btnRestaurar, btnRestaurar.dataset.item, false); return; }
+
+  const btnRemover = e.target.closest('.analise-remover');
+  if (btnRemover) {
+    const codigoItem = btnRemover.dataset.item;
+    if (!confirm(`Remover ${codigoItem} da análise? Diferente de "não repor" -- isso apaga a demanda\n`
+      + `deste item (todos os pedidos somados nela). Use só quando confirmar que não é mais demanda real\n`
+      + `(pedido já faturado/cancelado). Se a próxima planilha colada trouxer o item de novo, ele volta.`)) return;
+    btnRemover.disabled = true;
+    const msg = document.getElementById('analiseMsg');
+    const ok = await removerItemDaAnalise(codigoItem);
+    if (!ok) { btnRemover.disabled = false; return; }
+    msg.textContent = `Item ${codigoItem} removido da análise.`;
+    msg.className = 'status-msg status-ok';
+    await carregarAnalise();
+  }
 });
 
 async function marcarItemAnalise(botao, codigoItem, ignorar) {
@@ -1088,11 +1105,17 @@ document.getElementById('analiseConferirBtn').addEventListener('click', () => {
     </table>
     ${analisePendentes.length > 10 ? `<div class="modal-text" style="padding:8px 0 0;">…e mais ${analisePendentes.length - 10} linha(s).</div>` : ''}
     <div class="cfg-barra" style="padding:10px 0 0;">
-      <button class="btn btn-primary" id="analiseGravarBtn">Substituir análise por estas ${analisePendentes.length} linha(s)</button>
+      <button class="btn btn-primary" id="analiseGravarBtn">Juntar estas ${analisePendentes.length} linha(s) na análise</button>
     </div>`;
   document.getElementById('analiseGravarBtn').addEventListener('click', gravarAnalise);
 });
 
+// Robson, 15/09/2026, vendo a prévia listar 23 itens que sumiriam:
+// "não quero que desapareça". Trocado de substituir_analise_demanda
+// (apaga a unidade inteira e regrava) pra mesclar_analise_demanda (fase47,
+// upsert por pedido+item+etapa) -- pedido/item que já estava na análise e
+// não veio nesta colagem CONTINUA lá. Só some quando alguém clica em
+// "🗑 Remover" na própria linha (ver analise-remover, mais abaixo).
 async function gravarAnalise() {
   const msg = document.getElementById('analiseColarMsg');
   const btn = document.getElementById('analiseGravarBtn');
@@ -1105,10 +1128,11 @@ async function gravarAnalise() {
   msg.textContent = 'Gravando...';
   msg.className = 'status-msg';
 
-  // Uma chamada, uma transação -- apaga a análise anterior da unidade e
-  // regrava. Se falhar no meio, o Postgres desfaz e a análise de ontem
-  // continua no lugar (mesmo motivo de substituir_estoque, AUDITORIA.md A2).
-  const { error } = await sb.rpc('substituir_analise_demanda', {
+  // Uma chamada, uma transação -- atualiza quem já existia e insere quem é
+  // novo, sem apagar nada que não veio nesta colagem. Se falhar no meio, o
+  // Postgres desfaz e a análise de antes continua no lugar (mesmo motivo
+  // de substituir_estoque, AUDITORIA.md A2).
+  const { error } = await sb.rpc('mesclar_analise_demanda', {
     payload: { unidade: unidadeAtual, importado_por: nomeUsuarioAtual, linhas: analisePendentes }
   });
   if (btn) btn.disabled = false;
@@ -1116,19 +1140,44 @@ async function gravarAnalise() {
   if (error) {
     msg.textContent = 'NÃO GRAVOU: ' + error.message
       + ' — nada foi alterado, a análise anterior continua no lugar.'
-      + ' Se a mensagem falar em função inexistente, sql/fase19-analise-compras.sql'
+      + ' Se a mensagem falar em função inexistente, sql/fase47-analise-demanda-mesclar.sql'
       + ' ainda não foi rodado no Supabase.';
     msg.className = 'status-msg status-err';
     console.error('Falha ao gravar análise de compras:', error.message);
     return;
   }
 
-  msg.textContent = `Análise atualizada com ${analisePendentes.length} linha(s).`;
+  msg.textContent = `Análise atualizada -- ${analisePendentes.length} linha(s) desta planilha entraram/atualizaram. `
+    + 'Nada foi removido automaticamente.';
   msg.className = 'status-msg status-ok';
   document.getElementById('analiseTexto').value = '';
   document.getElementById('analisePrevia').innerHTML = '';
   analisePendentes = [];
   await carregarAnalise();
+}
+
+// "Remover da análise" -- Robson: "botao de remover por item/pedido".
+// Diferente de "🚫 não repor" (esconde, mas mantém a demanda contando):
+// remover apaga de vez as linhas de analise_demanda daquele item nesta
+// unidade -- use quando confirmar que o pedido já foi faturado/cancelado
+// e não é mais demanda de verdade. RLS já cobre DELETE (fase19, "for all"),
+// não precisa de função nova.
+// `codigoItem` aqui já vem NORMALIZADO (é a chave usada por agruparAnalise()),
+// mas a linha salva em analise_demanda pode ter vindo da planilha com espaço
+// ou minúscula -- filtra pelos ids em memória (mesma normalização de sempre,
+// normalizaCodigoItem()) em vez de um .eq() que só bateria por sorte.
+async function removerItemDaAnalise(codigoItem) {
+  const ids = analiseDemanda
+    .filter(r => normalizaCodigoItem(r.codigo_item) === codigoItem)
+    .map(r => r.id);
+  if (!ids.length) return true; // nada pra remover -- já não está lá
+
+  const { error } = await sb.from('analise_demanda').delete().in('id', ids);
+  if (error) {
+    alert('Não foi possível remover: ' + error.message);
+    return false;
+  }
+  return true;
 }
 
 // ---- Exportar (pra mandar pra Compras) ----------------------------------

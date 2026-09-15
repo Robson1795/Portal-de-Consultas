@@ -2643,5 +2643,9 @@ async function trocarUnidade(cod) {
   if (estavaContando && podeContarNestaUnidade()) {
     await ativarModoContagem();
   }
+  // O aviso de "pedido pra preparar" (js/notificacoes.js) é um canal POR
+  // UNIDADE -- sem reassinar aqui, quem trocasse de fábrica continuaria
+  // ouvindo o aviso da unidade antiga (ou nenhum, se saiu da única que tinha).
+  if (typeof iniciarAvisoPreparo === 'function') iniciarAvisoPreparo();
 }
 

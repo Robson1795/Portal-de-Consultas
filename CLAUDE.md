@@ -3,7 +3,7 @@
 Contexto do projeto para qualquer agente de IA ou pessoa que for mexer neste repositório.
 Sempre em **português do Brasil**.
 
-**Atualizado:** 15/09/2026 (Análise MFG: confronto cara a cara entre duas unidades)
+**Atualizado:** 15/09/2026 (Análise MFG + Painel de Docas/Preparar, das duas frentes)
 **Mantenedores:** Robson (dono do projeto e admin geral) · Victor Dobner (colaborador)
 
 > Este arquivo é lido automaticamente pelo Claude Code ao abrir a pasta do projeto.
@@ -519,7 +519,7 @@ Entraram em 08/09/2026, vivem em `js/programacao.js` e não estavam neste
 documento até 08/09. **Só `estoque_alm` e `admin` veem essas duas páginas**: elas
 movem material de verdade, diferente da Requisição, que é só pedir.
 
-### Programação de Separação (três sub-abas)
+### Programação de Separação (duas sub-abas — Endereçamento removido em 15/09/2026)
 
 Cruza as **duas planilhas manuais do PCP** pelo `numero_pedido`:
 Programação de Acessórios (os itens) e Pedidos Programados (o agendamento do
@@ -528,8 +528,11 @@ caminhão).
 | Sub-aba | Para quê |
 |---|---|
 | **Separação** | Item a item, ordenado pelo caminhão que sai primeiro — não pela ordem em que a planilha foi digitada. É a razão de a aba existir |
-| **Endereçamento** | Onde cada item ficou guardado na expedição |
 | **Carregamento** | Agrupado por veículo (CARRETA, TRUCK, TRUCK 8,5M) e horário, com o aviso da planilha em destaque e o botão de registrar saída |
+
+Havia uma terceira sub-aba, **Endereçamento** (onde cada item ficou guardado
+na expedição) — removida; ver "Fim do Endereçamento na Programação de
+Separação" no fim deste arquivo.
 
 Tabelas: `pedidos`, `pedido_itens`, `exp_acessorios`, `registro_saida`,
 `log_movimentacao`, e a view **`vw_pedidos_prioridade`**, que calcula no banco
@@ -3017,6 +3020,610 @@ grupo; busca por pedido continua funcionando; item retirado na mesma
 localização continua fora, mesmo buscando por ela. Zero erro de
 console.
 
+## Análise de Compras: colar planilha JUNTA, não substitui mais (15/09/2026)
+
+O Robson: *"na analise de compras deixe que eu analise os itens que eu
+preciso deixar, antes voce ja estava excluindo alguns automaticos"*.
+
+**Primeira versão** (revertida no mesmo dia, minutos depois): "Substituir
+análise" continuava apagando tudo e regravando, só que agora avisando
+antes quais itens sumiriam. Ele viu o aviso listar **23 itens reais**
+(alguns com pedido de 5.000+ unidades) e decidiu: *"não quero que
+desapareça"* — visibilidade não bastava, o apagar automático em si tinha
+que sair.
+
+### Como ficou
+
+`gravarAnalise()` trocou de RPC: `substituir_analise_demanda` (fase19,
+delete + insert da unidade inteira) virou `mesclar_analise_demanda`
+(`sql/fase47-analise-demanda-mesclar.sql`, upsert por
+`(unidade, numero_pedido, codigo_item, seq_etapa)`). Pedido/item que já
+estava na análise e não veio nesta colagem **fica exatamente como
+estava** — só é atualizado quando volta a aparecer numa planilha nova.
+Botão renomeado de "Substituir análise por estas N linha(s)" pra "Juntar
+estas N linha(s) na análise", e o quadro amarelo de "vai sumir" (a
+primeira versão) foi removido — não faz sentido avisar sobre algo que
+não acontece mais.
+
+⚠️ **NULL não bate com NULL num índice único do Postgres** — `numero_pedido`
+e `seq_etapa` podem vir em branco na planilha (o parser transforma célula
+vazia em `null`), e sem tratar isso o `ON CONFLICT` simplesmente não
+funcionaria pra essas linhas (cada uma pareceria sempre nova). A fase47
+faz backfill de NULL pra `''` nas duas colunas, dá dedupe em linhas que já
+colidiriam, e só depois cria o índice único.
+
+### E quando um pedido REALMENTE não é mais demanda?
+
+Perguntado como remover pedido faturado/cancelado já que nada mais some
+sozinho, escolheu **remoção manual**: botão **🗑 Remover** por item, ao
+lado do já existente 🚫 "não repor". São conceitos diferentes e os dois
+ficam:
+- **🚫 Não repor** — "sei que falta, mas não vou comprar isso" (decisão de
+  compra; a demanda continua contando, só fica escondida da lista).
+- **🗑 Remover** — "isso não é mais demanda de verdade" (apaga as linhas de
+  `analise_demanda` daquele item pra esta unidade). Se uma planilha futura
+  trouxer o item de novo, ele volta — remover não é um "não repor pra
+  sempre", é só tirar o que está lá agora.
+
+`removerItemDaAnalise()` filtra os ids em **memória** por
+`normalizaCodigoItem()` antes de apagar, em vez de um `.eq('codigo_item',
+...)` direto no Supabase — a linha grupada na tela usa o código já
+normalizado (maiúsculo, sem espaço), mas a linha salva pode ter vindo da
+planilha com espaço ou minúscula; um filtro exato só bateria por sorte.
+
+Conferido no navegador: colar planilha usa `mesclar_analise_demanda`, não
+a antiga; nenhum aviso de "vai sumir" aparece mais; 🗑 Remover apaga TODAS
+as linhas daquele item (inclusive uma com `codigo_item` em minúscula,
+provando a normalização) num `delete().in('id', [...])` só; recusar a
+confirmação não chama nada. Zero erro de console (o 404 de `reservas_aco`
+que aparece nos testes é falta de tabela do Victor, não deste código).
+
+## Registrar item fora do Catálogo EXP, sem travar (15/09/2026)
+
+O Robson: *"não consigo inserir itens que nao esta na planilha do exp,
+preciso que libere para eu digitar o que nao caiu ainda no sistema, as
+vezes é só por falta de reporte ou eu nao atualizei a planilha, esses
+itens pode deixar no banco de dados, na proxima vez que digitar ele ja
+vai puxar a descrição"*.
+
+Registrar um item no Controle EXP (formulário completo e passo-a-passo)
+travava se o código não estivesse em `catalogo_exp_itens` -- e essa
+tabela é apagada e recriada inteira a cada "Importar" na aba Catálogo
+(fonte da verdade é sempre a planilha mais recente), então item ainda
+não "reportado" no Datasul, ou relatório que ele ainda não atualizou,
+não tinha como ser cadastrado. Pior: **não existia campo de descrição em
+lugar nenhum do Controle EXP** -- quem preenche isso é sempre a busca em
+cascata (`buscarDescricoesItens()`), então nem digitando manualmente daria
+pra contornar.
+
+### Como ficou
+
+`itemExisteNoCatalogoExp()` continua existindo, mas virou só uma DICA
+("achada em outro catálogo, não no Catálogo EXP") -- parou de travar em
+qualquer lugar. `gravarMovimentacaoManual()` agora sempre faz a busca em
+cascata completa antes de gravar; se nenhum catálogo tiver a descrição
+(nem Catálogo EXP, nem Requisição ALM, nem estoque) **e** a pessoa tiver
+digitado uma na hora, ela é salva numa tabela nova,
+`exp_item_descricao_avulsa` (`sql/fase48-exp-item-descricao-avulsa.sql`)
+-- e essa entra como **4º andar** da cascata em `buscarDescricoesItens()`,
+então a próxima vez que o código for digitado (aqui ou na Entrada,
+aba Conferir, exportação -- é a mesma função em todo lugar) já vem
+pronta.
+
+⚠️ **Tabela própria, não `catalogo_exp_itens`** -- pelo mesmo motivo que a
+Análise de Compras ganhou tabela própria pra "não repor": gravar direto
+no Catálogo EXP faria a descrição digitada na mão sumir no próximo
+"Importar", bem quando ele mais espera que ela já esteja lá.
+
+No formulário completo, um campo `expManualDescricaoInput` aparece
+**só quando** o código não bate com nenhum catálogo, com o texto
+explicando o porquê. No passo-a-passo (wizard), o bloqueio virou só um
+aviso -- ele não ganhou o mesmo campo de descrição inline (o Item ali é
+um passo isolado antes dos demais, e um passo extra condicional
+complicaria a navegação "voltar" do wizard sem ganho proporcional); quem
+precisar digitar a descrição na mão usa o formulário completo, que é a
+interface principal.
+
+Aproveitando a reescrita: corrigido um bug de normalização que já existia
+nos dois lugares (`.get(codigo)` cru em vez de `.get(normalizaCodigoItem(codigo))`)
+-- o aviso "sem descrição" podia disparar mesmo com a descrição existindo,
+se o código tivesse sido digitado com caixa/espaço diferente do catálogo.
+`travarFormularioManual()` (só travava campos quando o item não existia no
+Catálogo EXP) foi removida -- não sobrava nenhum caso que ainda a chamasse
+com `true`.
+
+Conferido no navegador: item fora de todo catálogo libera o formulário
+inteiro e mostra o campo de descrição; item do catálogo não mostra o
+campo; salvar com descrição manual grava `exp_item_descricao_avulsa`
+ANTES do item, e o aviso de "sem descrição" não aparece; salvar sem
+descrição avisa mas grava o item do mesmo jeito; item que JÁ tinha
+descrição em outro catálogo não tenta gravar a descrição avulsa mesmo se
+o campo estiver preenchido (não sobrescreve fonte oficial); o wizard
+avança com aviso em vez de bloquear. Zero erro de console (os erros que
+apareceram durante o teste eram do MOCK de teste incompleto, não do
+código -- confirmados chamando a função direto, sem o mock quebrado).
+
+## "✓ Preparado" já manda o pedido pra doca (15/09/2026)
+
+O Robson, olhando a aba Preparar em uso: *"depois daqui de preparado o
+pedido vai para aba doca"*. Confirmado: é automático, não só descrição do
+fluxo -- quem prepara o material fisicamente já está confirmando que foi
+levado pra doca, não faz sentido repetir o mesmo clique no 🚚 DOCA da
+Entrada/Saída-Conferência logo em seguida.
+
+"✓ Preparado" agora, além de marcar `exp_pedido_aviso_preparo`, também
+chama `marcarSaidaExpControle(id, nomeUsuarioAtual, 'na_doca')` pra cada
+item do pedido que ainda estiver `na_expedicao` -- item que já está
+`na_doca` ou `retirado` não regride nem duplica carimbo (só os
+`na_expedicao` entram no laço). Só recarrega o Controle EXP
+(`carregarProgramacao()`) quando teve item pra mover -- pedido avisado
+sem nenhum item ainda registrado no Controle EXP (caso real: PCP manda a
+lista antes da Entrada ser digitada) marca preparado sem tentar mover
+nada.
+
+Isso só foi seguro de fazer AUTOMÁTICO por causa da correção anterior:
+desde que "qual doca física" virou um seletor **por pedido dentro da
+própria aba DOCA** (não mais obrigatório no momento da transição pra
+`na_doca`), marcar vários itens como `na_doca` de uma vez não trava
+esperando ninguém escolher doca — a escolha acontece depois, com calma,
+olhando o que já chegou.
+
+Conferido no navegador: pedido com um item `na_expedicao` e outro já
+`na_doca` move só o primeiro, sem tocar no segundo; pedido sem nenhum
+item no Controle EXP marca preparado sem chamar `carregarProgramacao()`
+à toa. Zero erro de console.
+
+## Prazo e cancelar na aba Preparar (15/09/2026)
+
+Com a aba "🔔 Preparar" já em uso (ver seção seguinte), o Robson: *"quero
+um botao de retornar caso nao precise mais separar e tambem uma area
+aonde o encarregado coloque se a separaçao é imediata, ou ele colloca o
+tempo estimado que tem que deixar pronto"*.
+
+**Prazo:** coluna `prazo_em` (`sql/fase46-aviso-preparo-prazo.sql`),
+nula = imediata. Select "⚡ Imediata" / "Tem prazo…" na barra de avisar;
+escolhendo "Tem prazo", aparece um `<input type="time">` (obrigatório
+nesse caso) e o horário vira `prazo_em` combinado com a data de hoje —
+são sempre prazos do próprio turno, não datas futuras arbitrárias.
+
+Cada cartão pendente ganhou um selo: **⚡ Imediata** / **⚡ Prazo vencido**
+(vermelho, mesma urgência visual) ou **🕒 Até HH:mm** (azul, ainda dá
+tempo). `urgenciaDoAviso()` reordena a lista: imediata e prazo já vencido
+pesam igual e vêm primeiro (as duas pedem atenção AGORA), prazo futuro
+ordena por quem vence mais cedo, e dentro do mesmo nível o mais antigo
+avisado vem na frente.
+
+**Botão retornar:** *"caso nao precise mais separar"* — `↺` ao lado de
+Imprimir/Preparado, com confirmação. **Diferente de "✓ Preparado"**, que
+É fato e fica no histórico: cancelar **apaga a linha de vez**, porque o
+pedido nunca chegou a ser preparado — não é resultado, é "isso não devia
+estar na lista". Os dois handlers de clique do corpo do card (preparado/
+imprimir e o cancelar, que eu tinha escrito em listeners separados) foram
+unidos num só, seguindo o padrão de delegação única já usado no resto do
+arquivo.
+
+Conferido no navegador: "Imediata" não mostra campo de hora; "Tem prazo"
+sem hora preenchida recusa; com hora no futuro grava `prazo_em` certo e
+mostra "🕒 Até HH:mm"; prazo já vencido conta como imediata na ordenação
+e no selo; cartões ordenam imediata/vencido primeiro, prazo futuro
+depois, mais antigo primeiro dentro do mesmo nível; cancelar remove a
+linha sem passar por preparado nem aparecer no histórico; recusar a
+confirmação não grava nada. Zero erro de console.
+
+## Aba "🔔 Preparar": aviso da expedição pro EXP (15/09/2026)
+
+O Robson: *"o encarregado da expedição quando receber a lista do pcp,
+coloca o numero do pedido que a gente tem que deixar na doca que os
+conferentes pegam o material, e por esse numero abre um aviso para que a
+gente entenda que devemos deixar o material preparado ja, ai faz o mesmo
+esquema quando ele colocar o numero do pedido aparece os itens e as
+localiçaões, tambem pode fazer o mesmo esquema de imprimir, quero que
+envie uma alerta bem chamativo, pode colocar o alerta nesse painel que o
+victor criou"*.
+
+### Por que é diferente do Painel de Docas
+
+O Painel de Docas começa quando o caminhão JÁ ESTÁ no pátio. Esta aba é
+o passo ANTES: o PCP manda a lista, o encarregado avisa, e a equipe tem
+tempo de separar com calma — em vez de descobrir o que precisa quando o
+caminhão encosta.
+
+### O que NÃO foi feito (e por quê)
+
+O Robson colou junto uma proposta gerada por outra IA, com leitor de
+código de barras na separação, kanban de 3 status (aguardando / em
+separação / pronto) com conferente "assumindo" tarefa pra outro não
+pegar o mesmo, e bip sonoro a cada 5s em todo dispositivo. Perguntado
+diretamente, ele escolheu o fluxo simples — **avisado → preparado** — e
+**só alerta visual, sem som**.
+
+Sobre o som, vale registrar o motivo técnico: navegador bloqueia áudio
+automático enquanto a pessoa não tiver clicado em algo na página, então
+"bip tocando sozinho em todo tablet/coletor com o painel aberto" não é
+implementável de forma confiável — é limitação do navegador, não escolha
+de escopo. Prometer isso seria entregar algo que falha justamente no
+dispositivo esquecido de lado, que é o caso que o alerta existiria pra
+resolver.
+
+### Como ficou
+
+Tabela `exp_pedido_aviso_preparo` (`sql/fase45-aviso-preparo-pedido.sql`),
+chave `(unidade, numero_pedido)`, dois estados. Mesmo padrão de anotação
+reversível de sempre (`conferir_exp_notas`,
+`exp_pedido_faturamento_confirmado`): **não mexe em `exp_controle_itens`**,
+só anota que aquele pedido foi avisado.
+
+Aba nova entre "Saída / Conferência" e "DOCA" — a ordem da barra conta a
+história do fluxo: registra → prepara → vai pra doca → carrega. Dentro
+dela: campo de pedido(s), botão "🔔 Avisar equipe", e cada pendência vira
+um cartão vermelho com a **tabela de itens e localizações embutida**
+(mesma pergunta do preview do Painel de Docas, aqui com fonte própria em
+`itensDoPedidoAvisado()`), botão 🖨️ Imprimir (reaproveita
+`montarHtmlTabelaGenerica({ imprimir: true })`) e "✓ Preparado".
+
+Avisar de novo um pedido já preparado devolve ele pra pendente (upsert
+limpando `preparado_por`/`preparado_em`): pode ter chegado item novo, ou
+alguém marcou preparado por engano. O histórico "Já preparados" tem ↺ pra
+mesma coisa.
+
+### O alerta no Painel do Dia
+
+`AVISOS_PAINEL` (js/painel.js, do Victor) é uma lista declarativa de
+cartões — adicionar um aviso é **acrescentar um objeto**, sem tocar na
+renderização, no estado de carregamento nem no try/catch por cartão.
+Entrou o `avisoprep` entre "Pedidos atrasados" e "Itens parados na doca".
+
+O "bem chamativo" virou CSS escopada **por id**
+(`#painel-card-avisoprep.painel-card-alerta`): pulsa em vermelho quando
+tem pendência, enquanto os outros seis continuam só com o fundo amarelo
+estático de sempre. Dentro de `@media (prefers-reduced-motion:
+no-preference)` — quem configurou o sistema pra não animar não recebe a
+animação. Card zerado não pulsa (nem ganha a classe de alerta).
+
+Conferido no navegador: aba aparece na ordem certa da barra; avisar grava
+o upsert certo e o cartão vermelho renderiza com itens e localizações;
+🖨️ Imprimir abre a folha com o script de auto-impressão e os itens
+certos; "✓ Preparado" tira da lista, zera a contagem e move pro
+histórico; ↺ devolve pra pendente; o cartão novo aparece na posição certa
+do Painel do Dia **sem derrubar os outros seis** mesmo com a tabela ainda
+não criada no Supabase (é o try/catch por cartão do Victor funcionando);
+a CSS de pulsar existe, escopada só a esse id, e o cartão zerado não a
+recebe.
+
+## Mais duas "docas": Benchmark e Sem doca definida (14/09/2026)
+
+O Robson: *"coloque aqui tambem, SEM DOCA DEFINIDA, BENCHMARK"* -- e, sobre
+o que cada uma significa: *"o BENCHMARK é la em cima em outro galpao, sem
+doca definida é que as vezes nao sabem em qual vao carregar ainda"*.
+Perguntado se as duas deveriam funcionar como as 3 docas de verdade
+(cronômetro, progresso, coluna no quadro) ou só uma marcação sem
+acompanhamento, confirmou que sim, iguais às três.
+
+**Nenhum código mudou.** `docas` já era a fonte única de tudo isso --
+quadro principal, "Em qual doca encostou?", o seletor por pedido na aba
+DOCA do Controle EXP -- então as duas entram como duas linhas a mais
+(`sql/fase44-docas-benchmark-sem-definida.sql`) e aparecem sozinhas em
+todo lugar que já lê essa tabela. O quadro usa grid `auto-fit`
+(`styles.css`), então cresce de 3 pra 5 cartões sem qualquer ajuste.
+
+Ordem: as 3 numeradas primeiro, depois "Sem doca definida" (mais comum --
+qualquer caminhão sem doca decidida passa por ela) e por último
+"Benchmark" (outro galpão, fisicamente longe das 3 de verdade -- não faz
+sentido aparecer misturada entre elas no meio da fileira).
+
+Conferido no navegador: as 5 aparecem como cartão no quadro principal e
+como opção no select de encostar, sem mexer em uma linha de JS/CSS. Zero
+erro de console.
+
+## Botão Imprimir na prévia do pedido (14/09/2026)
+
+O Robson, na sequência: *"pode colocar o botao de imprimir também"*.
+
+`montarHtmlTabelaGenerica()` ganhou um parâmetro `imprimir` (opcional,
+`false` por padrão -- os outros três usos dela, Entrada/Auditoria/
+Carregados-hoje, continuam exportando sem nenhum script a mais): quando
+`true`, anexa o mesmo `<script>window.onload = () => window.print()`
+que já existe em `montarHtmlExpControle()`.
+
+O botão **🖨️ Imprimir**, ao lado do "Gerar relatório HTML", segue o MESMO
+padrão do Imprimir da aba Entrada: abre a aba em branco **primeiro** e só
+depois escreve o conteúdo (`window.open('', '_blank')` → `aba.document.write(...)`)
+-- escrever antes de abrir arrisca o navegador bloquear como pop-up.
+`montarHtmlPedidosDigitados()` extraído pra função pura, reaproveitada
+pelos dois botões (baixar e imprimir), que só diferem em "salva num
+arquivo" x "abre numa aba que imprime sozinha".
+
+Conferido no navegador: Imprimir grava o script de auto-print e o
+conteúdo certo; pop-up bloqueado avisa em vez de travar; sem pedido
+informado avisa nos dois botões; o download do "Gerar relatório HTML"
+continua SEM o script de impressão (só a aba de Imprimir tem). Zero erro
+de console.
+
+## Prévia + relatório HTML do pedido, no passo 2 do Painel de Docas (14/09/2026)
+
+O Robson, apontando o campo de pedidos do passo 2 (Expedição): *"quando o
+encarregado da expedição colocar o numero do pedido aqui abre uma tela
+com todos os pedidos que esta no exp acessorios, ai ele pode criar um
+relatorio em HTML dai ele entrega pra minha responsavel por deixar na
+nossa que deixamos para o pessoal do carregameto levar"*.
+
+Ao digitar o(s) pedido(s) no campo, uma prévia aparece **ao vivo** (sem
+precisar clicar em nada) com **tudo** que está no Controle EXP desta
+unidade pra aquele(s) pedido(s) -- item, descrição, qtd, localização e
+status. "Tudo", não filtrado por status: é "abre uma tela com todos os
+pedidos que esta no exp acessorios", literal -- item já retirado ou já
+na doca aparece igual, com o status deixando claro qual é qual.
+
+Botão **"Gerar relatório HTML"** ao lado, reaproveitando
+`montarHtmlTabelaGenerica()` (mesma função da Entrada, Auditoria e
+"Carregados hoje" -- terceiro uso dela neste módulo). É o papel que o
+encarregado tira da tela e entrega pra responsável do EXP separar o
+material: ela sabe exatamente o que pegar e de onde, sem precisar abrir
+o portal ela mesma.
+
+`pedidosDigitados()` extraído do handler de "Encostar na doca" -- mesma
+regra de separador (vírgula, ponto e vírgula ou espaço) usada nos dois
+lugares agora, pra não desalinhar. Busca case/espaço-insensível dos dois
+lados (`chavePedidoCarregamento()`, já existente).
+
+Conferido no navegador: digitar um pedido mostra os itens dele na hora;
+pedido inexistente avisa "nenhum item"; campo vazio esconde a prévia;
+mais de um pedido junta os itens dos dois; o HTML exportado tem título,
+os itens certos e a descrição certa; exportar sem pedido informado avisa
+em vez de baixar vazio; a prévia some depois de "Encostar na doca" com
+sucesso (junto com o campo, que já limpava). Zero erro de console.
+
+## Qual das 3 docas físicas recebeu o material (14/09/2026)
+
+O Robson, olhando o botão 🚚 DOCA na aba Entrada: *"nessa aba das docas
+quando sai para carergar a minha responsavel que deixou o material la ela
+coloca o numero da doca, entao tem que ter as opçoes das 03 docas pra ela
+marcar o carregamento"*.
+
+Até aqui, "na_doca" (fase36) era um lugar só, indiferenciado -- o botão
+só marcava "saiu do endereço", sem dizer PRA QUAL das 3 docas físicas.
+Quem leva o material fisicamente já sabe pra qual está indo (é ela quem
+carrega a caixa até lá); a escolha vira dado nesse mesmo instante, em vez
+de ficar só na cabeça de quem carregou.
+
+Coluna nova, `exp_controle_itens.doca_id` (`sql/fase43-exp-item-doca-
+fisica.sql`), apontando pra `docas` -- a MESMA tabela que já alimenta o
+Painel de Docas (fase39). Doca 1/2/3 tem um cadastro só no sistema
+inteiro, não um texto redigitado aqui que pode divergir de lá.
+
+⚠️ **Diferente de `doca_carregamento_id`** (fase39, usado por
+`carregamentoAbertoDoPedido()`): aquela coluna aponta pra um CAMINHÃO
+específico, e só existe quando há um caminhão de verdade encostado
+carregando aquele pedido. Esta (`doca_id`) é só o ENDEREÇO FÍSICO -- o
+material pode chegar na doca ANTES de qualquer caminhão ser registrado
+ali, e mesmo assim precisa dizer em qual das três está parado. Confundir
+as duas faria a barra de progresso de um caminhão inexistente reagir a um
+material que só está esperando no lugar certo.
+
+**Primeira versão** (revertida no mesmo dia, ver correção logo abaixo):
+select "Qual doca?" obrigatório item a item, tanto na Entrada quanto na
+Saída/Conferência (individual e no "Tudo pra DOCA"), travando o clique se
+ninguém escolhesse.
+
+### Correção: o seletor saiu da Entrada/Saída-Conferência, virou um por pedido na aba DOCA
+
+Depois de ver a tela com o seletor em cada linha, o Robson apontou a
+própria aba DOCA com uma seta e corrigiu: *"a parte em qual doca so na
+aba que coloquei a flecha, me importa mais a doca la de fora do
+carregamento"*. Perguntado se o seletor deveria ficar por pedido ou por
+item dentro da aba DOCA, escolheu **por pedido**.
+
+Entrada e Saída/Conferência voltaram a ser um clique simples (sem
+escolher nada) -- `marcarSaidaExpControle(id, conferente, 'na_doca')` sem
+`docaId`, gravando `doca_id: null`. É o mesmo raciocínio de sempre: quem
+está esvaziando um endereço rápido não pode parar em cada item pra
+escolher uma doca.
+
+O seletor mudou de lugar e de escopo: agora é **um por PEDIDO**, dentro
+do cabeçalho de cada grupo na aba DOCA (`.doca-grupo-select`), ao lado do
+botão "✓ Todo pedido carregou". Ao trocar, grava `doca_id` em TODOS os
+itens daquele pedido de uma vez (`update ... in(ids)`, um request só, não
+um por item) -- não é transição de status, é só o dado "onde está
+parado", então não passa por `marcarSaidaExpControle()`.
+
+`docaComumDoGrupo()` decide o valor inicial do select: se todo item do
+pedido já está na mesma doca, nasce marcado nela (confirma o que já foi
+feito); se divergem (ou nenhum tem doca ainda), nasce em branco --
+marcar uma doca por padrão quando os itens divergem inventaria um dado
+que ninguém confirmou.
+
+`opcoesDocaFisicaHtml(selecionadoId)` ganhou o parâmetro pra isso. A
+coluna **"Doca"** por item (mostrando `nomeDaDocaFisica()`) continua na
+tabela -- é a conferência visual de que o select do grupo bateu com a
+realidade de cada linha.
+
+Conferido no navegador: Entrada e Saída/Conferência voltaram ao clique
+único, sem select, gravando `doca_id: null`; o select por pedido nasce em
+branco com dois itens sem doca, marcado quando os dois já concordam, e em
+branco de novo quando divergem; escolher uma doca grava os dois itens do
+pedido num update só. Zero erro de console (o 404 de `reservas_aco` que
+aparece nos testes é falta de tabela do Victor, não deste código).
+
+## Exportar HTML no Painel de Docas (14/09/2026)
+
+O Robson: *"Depois quero um campo que extrai o relatorio em HTM"*.
+
+Botão "Exportar HTML" ao lado de "Carregados hoje", reaproveitando
+`montarHtmlTabelaGenerica()` -- a mesma função já usada pela Entrada e
+pela Auditoria (js/programacao.js, carregado antes de docas.js) -- em vez
+de inventar layout novo. Mesmas colunas da tabela na tela.
+
+Só os carregamentos **finalizados** de hoje entram no arquivo: fila e
+docas em andamento são estado do momento, mudam no minuto seguinte, e um
+"relatório" que já nasce desatualizado no segundo em que é aberto não
+serve pra guardar nem pra mandar por e-mail. Sem carregamento finalizado
+ainda, avisa em vez de baixar um arquivo vazio.
+
+Conferido no navegador: baixa `painel-docas-106-AAAA-MM-DD.html` com
+título, cabeçalho e as 11 colunas certas (inclusive Frete e Doca); sem
+nada finalizado, avisa e não baixa nada. Zero erro de console.
+
+## Portaria x Expedição: dois papéis no Painel de Docas (14/09/2026)
+
+O Robson redesenhou o fluxo depois de usar o painel: *"a ideia é esses
+dados ser preenchidos pela portaria quando o veiculo entrar, dai deixa
+como banco de dados. A parte do encarregado da expedição é colocar o
+numero dos pedidos que vai ser carregado em cada veiculo e marcar qual a
+doca que o veiculo encostou, dai o encarregado digita só a placa, ou nome
+do motorista, que ja vai puxar os dados, dai a responsavel pelo exp
+acessoris ja sabe que tem que deixar o material na parte que o conferente
+busca o material"*.
+
+**Nenhum SQL novo** -- as colunas já existiam desde a fase39/40/42. O que
+mudou foi QUEM preenche o quê, e quando.
+
+### Passo 1 — Portaria (entrada do veículo)
+
+Placa, tipo, frete, transportadora, destino, motorista e telefone. **Sem
+campo de pedido**, de propósito: a portaria não sabe o que o caminhão vai
+levar. O veículo entra no pátio, sem doca.
+
+O *"deixa como banco de dados"* virou auto-preenchimento: ao sair do campo
+placa, o **último registro daquela placa** preenche o resto
+(`puxarUltimoVeiculoPelaPlaca()`). A mesma placa costuma voltar
+(transportadora fixa, motorista fixo), então a portaria confere em vez de
+redigitar. Só preenche campo **vazio** -- o que a pessoa já escreveu vale
+mais que o histórico (motorista trocou, telefone novo). E avisa que
+preencheu, porque dado que aparece sozinho sem explicação vira dado que
+ninguém confere.
+
+### Passo 2 — Expedição (encostar na doca)
+
+*"digita só a placa, ou nome do motorista, que ja vai puxar os dados"*: um
+campo só, com `datalist` dos veículos **que estão no pátio agora** — não é
+busca no histórico, que traria caminhão de ontem e faria o encarregado
+encostar o veículo errado sem perceber. Casa por rótulo inteiro, por placa
+exata, ou por pedaço de placa/nome (ele digita "MBA" ou "jonas").
+
+Os dados puxados aparecem num cartão **para conferir antes de encostar** —
+placa parecida é erro fácil de cometer com o caminhão na frente e pressa
+no pátio.
+
+Pedido é **obrigatório** aqui (as outras validações também recusam sem
+veículo e sem doca): é o pedido que faz o material ser separado pra doca,
+então encostar sem ele deixaria o fluxo pela metade em silêncio. A
+`meta_itens` passou a ser calculada NESTE passo, não na entrada — ela sai
+dos pedidos, que antes não existiam ainda.
+
+O botão da fila do pátio deixou de ser "Chamar" (que encostava direto) e
+virou **"Preparar carregamento"**: preenche o passo 2 com aquele veículo e
+põe o foco nos pedidos. Encostar passou a ter um caminho só, e esse
+caminho sempre passa pelos pedidos.
+
+### O aviso no Controle EXP
+
+*"a responsavel pelo exp acessoris ja sabe que tem que deixar o material
+na parte que o conferente busca"* — perguntado se era só consequência do
+fluxo ou um aviso de verdade, ele pediu o aviso.
+
+Selo **🚛 Doca 2** ao lado do nº do pedido, na aba Entrada e na
+Saída/Conferência. Amarelo quando o veículo está encostado esperando
+("deixe o material na área de carregamento"), verde quando já está
+carregando ("o conferente está buscando"). Sem caminhão, sem selo.
+
+⚠️ **Dois mapas separados, saindo da mesma consulta** — e a diferença
+importa: `carregamentoAbertoPorPedido` (só `carregando`) decide em qual
+caminhão a baixa é carimbada; `pedidoChamadoParaDoca` (encostado **ou**
+carregando) é só o aviso visual. Juntar os dois faria a barra de progresso
+de um caminhão que nem começou a carregar andar sozinha.
+
+A consulta virou **três queries pequenas** em vez de um embed aninhado
+(`doca_carregamento_pedidos -> doca_carregamentos -> docas`): o aninhado
+depende de o PostgREST resolver duas relações de uma vez e, quando falha,
+falha silencioso.
+
+Conferido no navegador: passo 1 sem campo de pedido; placa repetida puxa
+motorista/telefone/destino/tipo/frete e **preserva** o que já estava
+digitado; busca do passo 2 acha por placa parcial e por nome do motorista,
+e avisa quando a portaria ainda não registrou; as três validações
+(veículo, doca, pedidos) recusam com mensagem própria; encostar grava
+`doca_id` + `chamado_em` + `meta_itens` e faz upsert dos pedidos em
+maiúscula sem estourar em duplicata; select de doca só oferece doca livre;
+selo aparece nas duas telas do Controle EXP, com tooltip diferente para
+esperando e carregando, e não aparece em pedido sem caminhão. Zero erro de
+console.
+
+## CIF ou FOB no Painel de Docas (14/09/2026)
+
+O Robson, olhando o painel já em uso: *"coloque tambem cif ou fob"*.
+
+Coluna nova (`frete`, `sql/fase42-doca-frete-cif-fob.sql`), com `check`
+travando só `CIF`/`FOB`/nulo -- e não uma tabela de cadastro (como serão
+os motivos de atraso da fase 2): é sigla fixa de logística, não um
+vocabulário que a operação vá querer editar depois.
+
+Select na chegada com opção em branco **selecionada por padrão**, ao
+contrário de Tipo de Veículo (que já vem em "Carreta"): frete em branco
+significa "ninguém perguntou ainda", e chutar CIF por padrão arriscaria
+responsabilidade errada num carregamento que ninguém confirmou. Sem
+frete escolhido grava `null`, não string vazia -- outra query que
+comparasse `frete = ''` não bateria com o que ficou salvo.
+
+Selo colorido (`freteHtml()`) no cartão da doca, na fila do pátio e como
+coluna nova em "Carregados hoje". As cores são deliberadamente diferentes
+do padrão verde/vermelho do resto do painel -- CIF x FOB não é "bom x
+ruim", é só "de quem é o frete".
+
+Conferido no navegador: CIF e FOB renderizam com selo próprio nos três
+lugares; carregamento sem frete mostra "—" no histórico e nada no
+cartão/fila; gravar sem escolher vira `null`; campo limpa depois do
+registro. Zero erro de console.
+
+## Excluir carregamento no Painel de Docas (14/09/2026)
+
+O Robson, com um registro de teste travando a Doca 1 na tela dele:
+*"coloque um botao de excluir caso necessario"*.
+
+O buraco era real: um veículo que já estava **na doca** não tinha como
+sair da tela a não ser sendo FINALIZADO — e aí um registro de teste
+entraria pra sempre na conta de tempo médio de carregamento, estragando
+justamente o indicador que o módulo existe pra medir. Cancelar só
+existia na fila do pátio.
+
+**Excluir e Cancelar são coisas diferentes, e os dois ficam:**
+
+- **Cancelar** (🚫, na fila) — aconteceu de verdade: o veículo veio e foi
+  embora sem carregar. Vira status `cancelado`, fica no histórico, conta
+  como fato.
+- **Excluir** (🗑, agora nos quatro lugares: fila, doca encostada, doca
+  carregando e "Carregados hoje") — o registro **nunca deveria ter
+  existido**: teste, placa digitada errada, chegada em duplicidade.
+  Apaga de vez, justamente pra não virar indicador.
+
+O `confirm` explica essa diferença em vez de só perguntar "tem certeza?"
+— quem está com pressa no pátio não adivinha qual dos dois botões é o
+certo, e o estrago de escolher errado é silencioso (some do relatório, ou
+sujeita o relatório pra sempre).
+
+Detalhes de implementação que valem lembrar:
+
+- **Ordem: apaga primeiro, desvincula os itens depois.** Se desvinculasse
+  antes e o delete falhasse, o carregamento ficaria vivo e sem progresso
+  — pior que um vínculo órfão, que não quebra nada (a coluna
+  `doca_carregamento_id` não tem FK de propósito, ver fase39).
+- **Os itens não são apagados.** A baixa deles aconteceu de verdade
+  (saíram do endereço); só perdem o vínculo com aquele caminhão.
+- Pedidos e eventos do carregamento somem junto, por `on delete cascade`.
+- Nenhum SQL novo: a política `for all` da fase39 já cobre DELETE.
+
+**Colisão de classe corrigida no caminho:** o `<select>` de escolher a
+doca usava `.doca-destino`, mesmo nome que o texto do destino do embarque
+(📍 Joinville) passou a usar na fase40 — o select virou
+`.doca-select-destino`. Duas coisas diferentes com o mesmo nome pegariam
+o elemento errado no `querySelector` do "Chamar" e ainda herdariam o
+estilo errado.
+
+Conferido no navegador: 🗑 aparece nos quatro lugares; excluir manda
+`delete` no carregamento e depois limpa `doca_carregamento_id` dos itens;
+cancelar continua sendo `update status='cancelado'`, não delete; recusar
+o aviso não grava nada; o "Chamar" continua lendo a doca certa do select
+depois da renomeação. Zero erro de console.
+
 ## Destino e telefone do motorista no Painel de Docas (14/09/2026)
 
 Com o painel já rodando em produção, o Robson: *"preciso que coloque
@@ -4533,6 +5140,229 @@ etiqueta da Trading recebe o QR mantendo endereço em 40mm e item em 32mm; a
 ficha do EXP recebe um por ficha **sem tocar na linha medida do topo**; as três
 folhas saem **iguais** sem QR; e a aba abre antes de gerar (`abriu → gerou →
 escreveu`). **18 de 18 checagens.**
+
+## Fim do Endereçamento na Programação de Separação (15/09/2026)
+
+O Robson, vendo a tela em produção: *"remova o endereçamento, aqui vou deixar
+mais simples só a aba de horarios de veiculos e a aba de separação"*. A
+Programação de Separação (seção 13) tinha três sub-abas — Separação,
+Endereçamento, Carregamento — e passou a ter só as duas primeiras.
+
+**Antes de apagar, o obstáculo real:** a sub-aba Carregamento tinha o botão
+"Registrar saída" travado por `p.status_geral === 'pronto'`, e **o único
+código que gravava esse valor era o formulário de Endereçamento** (a pessoa
+digitava o endereço, clicava "Confirmar", e aí sim `pedidos.status_geral`
+virava `'pronto'`). Apagar a aba sem mexer no gate deixaria o botão travado
+**para sempre**, em todo pedido, sem ninguém perceber até o caminhão não sair.
+Perguntei como o botão deveria liberar sem o endereço — resposta: *"Libera
+direto quando a separação terminar"*.
+
+- **`p.status_geral === 'pronto'` virou `st.chave === 'total' || st.chave ===
+  'sem'`** em `cardPedidoCarregamento()` (`js/programacao.js`), reusando
+  `statusConsolidado(p)` que a própria função já calculava. `st.chave ===
+  'sem'` entrou por um caso que passaria despercebido testando só o caminho
+  feliz: pedido **sem nenhum item de acessório na Planilha A** nunca chega a
+  `'total'` (não há o que separar), e sem essa segunda condição ficaria
+  travado igual ao bug que a mudança deveria corrigir.
+- `renderExp()` inteira saiu de `js/programacao.js` — a linha do formulário
+  (`<input class="prog-endereco">` / `<button class="prog-enderecar">`), o
+  cálculo de `podeEnderecar` e o handler de clique que gravava em
+  `exp_acessorios`, atualizava `pedidos.status_geral = 'pronto'` e registrava
+  `endereco_definido` no log. `renderExp();` saiu da cadeia de render de
+  `carregarProgramacao()`, e o botão/`<div id="progExp">` saíram do
+  `index.html`.
+- **A tabela `exp_acessorios` não foi apagada** — só ficou sem quem escreva
+  nela daqui para frente. Não há ganho em derrubar uma tabela com histórico
+  para economizar uma migração que este código não precisava.
+- Testado localmente (servidor estático em `Portal-de-Consultas`, com
+  `progPedidos`/`progItens` preenchidos à mão pelo console, sem depender de
+  login): pedido sem acessório libera o botão, pedido com item pendente fica
+  desabilitado com o texto "Ainda faltam itens sendo separados", pedido
+  totalmente separado libera — e a barra de abas passou a mostrar só
+  Carregamento e Separação, sem erro no console.
+
+### Planilha de Carregamento com só 4 colunas (15/09/2026)
+
+Junto da mudança acima, o Robson: *"na aba de carregamento só vou colocar
+esses dados"*, com um print de planilha com só **Veículo, Horário, Pedidos,
+Cliente** — bem menos que as 13 colunas que o layout documentado em
+`js/programacao.js` (`COL_B`, conferido com a planilha de 08/09) previa
+(Cidade, UF, Modalidade, Descrição, Quantidade, Valor, Sim/Não, Observação,
+Vendedor).
+
+**Não precisou de nenhuma mudança de lógica.** `importarPlanilhaB()` já lê
+cada coluna por índice com `col[indice] || null`: numa linha colada com só 4
+células, `col[4]` em diante vem `undefined`, e o `|| null` absorve isso sem
+erro — testado colando linhas de 4 colunas (inclusive o forward-fill de
+bloco/horário) e conferindo que o upsert em `pedidos` sai com `cidade`, `uf`,
+`modalidade_frete` e `observacao_carregamento` como `null`, sem exceção. Só o
+**texto de ajuda do modal de importação** (`trocarAbaImport()`) e o
+comentário acima de `COL_B` foram atualizados, para não continuar orientando
+"cole exatamente como está, sem tirar colunas" quando agora só as 4 primeiras
+são obrigatórias.
+
+## Botão manual de "falta reporte" na Separação (15/09/2026)
+
+O Robson: *"essa tela so vou usar pra separaçao de material no almoxarifado,
+entao só quero botao que eu coloque separado/reportado, ou separado, falata
+reporte e vice versa"*. Até aqui o botão da aba Separação só alternava entre
+dois estados (Pendente / Separado); `falta_reporte` existia no banco
+(`sql/programacao-01`) mas só chegava pela planilha importada, nunca por ação
+manual na tela.
+
+**Formato escolhido, entre três opções perguntadas:** um botão só, que roda
+os três estados sempre na mesma ordem — Pendente → Separado/Reportado →
+Falta reporte → Pendente de novo (`proximoStatusSeparacao()`,
+`js/programacao.js`). O rótulo do botão muda conforme o estado atual
+(`ROTULO_BOTAO_SEPARACAO`): "Marcar separado/reportado" → "Marcar falta
+reporte" → "Reabrir (pendente)".
+
+**"Falta reporte" conta como concluído** — pergunta feita antes de mexer,
+porque o botão de liberar o caminhão (`statusConsolidado`/`itemConcluido`)
+já decide sozinho se o pedido pode sair. Perguntado se "separado, falta
+reporte" significa material já separado fisicamente (só falta o papel no
+sistema) ou ainda não pronto pra sair: **já está pronto** — só falta o
+registro. Por isso:
+
+- `itemConcluido(item)` passou a contar três status como concluído
+  (`separado`, `reportado`, `falta_reporte`), não mais dois.
+- `sql/fase49-falta-reporte-conta-concluido.sql` alinha o banco com a mesma
+  regra: o gatilho `recalcular_status_pedido()` e a view
+  `vw_pedidos_prioridade` (ambos de `sql/programacao-02`) contavam só
+  `separado`/`reportado` como concluído — sem essa fase, um pedido todo em
+  `falta_reporte` ficaria com `status_geral` travado em `em_separacao` e
+  continuaria aparecendo como urgente/atrasado no painel de prioridade,
+  mesmo já podendo embarcar de verdade. A fase também faz um backfill de
+  `status_geral` pros pedidos que já estavam nessa situação antes de rodar.
+- ⚠️ **O botão "Registrar saída" (Carregamento) não lê `status_geral`** —
+  calcula direto de `pedido_itens` a cada render, então já funcionava certo
+  mesmo antes do SQL rodar. A fase 49 corrige o que o *banco* acha que é
+  verdade (status_geral, painel de prioridade), não o gate em si.
+
+Testado localmente (mesmo servidor estático, sem depender de login): o ciclo
+`aguardando → separado → falta_reporte → aguardando` se repete
+corretamente clicando quatro vezes seguidas, o rótulo do botão muda a cada
+clique, e `reportado` (vindo de planilha) avança pra `falta_reporte` igual a
+`separado` — sem passar por um quarto estado só pra ele. Sem erro no
+console.
+
+## Popup de "pedido avisado pra preparar", em tempo real (15/09/2026)
+
+O Robson: *"Crie um sistema de notificação em tempo real para 'Pedidos
+preparados para separar' no mesmo sistema de Pop up de novos cadastros de
+usuários"*. Perguntado o gatilho exato, mandou o print do card do Painel do
+Dia (seção 25) e disse *"dessa aba que o encarregado da expediçao
+alimenta"*: é a aba Preparar (aviso de preparo, 14/09/2026), tabela
+`exp_pedido_aviso_preparo`. Até aqui esse aviso só existia como card
+pull-based no Painel do Dia — quem não estivesse com aquela tela aberta não
+via nada até abrir o portal e reparar.
+
+**Reaproveitado ponta a ponta o desenho de `iniciarAvisoCadastro()`**
+(seção 21), sem inventar um segundo jeito de fazer a mesma coisa:
+
+- `dispararAlertaPreparo({ pedidos, avisadoPor, urgente })`
+  (`js/programacao.js`, ao lado do upsert em `exp_pedido_aviso_preparo`) —
+  broadcast, não bloqueia o aviso se falhar, mesmo desenho de
+  `dispararAlertaCadastro()` (`js/auth.js`).
+- `iniciarAvisoPreparo()` (`js/notificacoes.js`) faz as mesmas duas coisas:
+  conta quem já está esperando (mesma consulta do card do painel, pra
+  alcançar quem entrou no portal depois do aviso) e assina o broadcast pro
+  que vier daqui pra frente.
+- `notificarPedidoPreparo()` empilha no mesmo `mostrarNotificacao()`
+  genérico — não é um segundo canto, é o mesmo card de sempre com outro
+  ícone e texto.
+- Gate por perfil: `estoque_alm` e `admin` (mesmo recorte do card no
+  painel; quem cadastra usa `perfilAtual === 'admin'`, aqui é outro
+  público — quem separa material, não quem aprova gente).
+
+### ⚠️ Diferença do cadastro: canal É por unidade
+
+O aviso de cadastro usa um canal global (`alertas-cadastro`) porque quem
+aprova (admin) pode cuidar de qualquer unidade. Este aviso é sobre um
+pedido de uma fábrica específica — igual a toda tabela deste projeto, RLS
+inclusive (`minha_unidade()`). Canal `alertas-preparo-<unidade>`, não
+`alertas-preparo` sozinho: sem o recorte, quem está na unidade 105
+receberia popup de um pedido da 106.
+
+Consequência prática: o canal precisa ser reassinado toda vez que a
+unidade ativa muda, ou a pessoa continuaria ouvindo (ou deixaria de ouvir)
+a unidade errada. `trocarUnidade()` (`js/estoque.js`) ganhou uma chamada a
+`iniciarAvisoPreparo()` no fim — a própria função já cuida de fechar o
+canal anterior (`sb.removeChannel`) antes de abrir o novo, então religar
+de novo é seguro mesmo chamando várias vezes.
+
+### ⚠️ Armadilha de teste, registrada pra não repetir
+
+Testando local (dois `python -m http.server`, uma aba mandando e outra
+recebendo): a primeira tentativa, mandando e recebendo na MESMA aba, não
+entregou nada — parecia bug. Não era: o cliente do Supabase não entrega de
+volta pro mesmo socket que mandou. É o comportamento real de produção
+também (quem avisa não precisa ver o próprio aviso), só que numa aba só
+isso mascara qualquer teste. Testado de novo com duas abas (dois clientes
+de verdade, como duas pessoas em dois computadores) — aí sim o card
+chegou, com pedidos, texto e o nome de quem avisou certos, o clique em
+"Abrir Preparar" foi para `expacessorios` → aba `avisoprep`, e o resumo de
+pendentes apareceu certo pra quem "chega depois". Perfil sem permissão
+(`consultor`) não assina o canal. Sem erro no console nas duas sessões.
+
+## Som + notificação do sistema em toda notificação (15/09/2026)
+
+O Robson: *"Consegue fazer com que o app envie aviso sonoro e notificação do
+chrome tanto no pc quanto no android"*. Perguntado antes de mexer, porque
+tinha um limite técnico real: **funciona com o portal aberto numa aba**
+(minimizada, ou noutra aba, PC ou Android) — sem servidor novo, é só Web
+Notifications API + um bipe por Web Audio, os dois nativos do navegador.
+**Não alcança navegador fechado nem celular bloqueado sem o Chrome aberto**
+— isso é push de verdade (service worker + servidor de push), obra bem
+maior, fora do desenho deste projeto (sem backend, só Supabase+Vercel).
+Confirmada a versão possível hoje.
+
+Entrou dentro do **empilhador genérico** (`mostrarNotificacao()`,
+`js/notificacoes.js`), não em cada aviso: toda notificação que já existe
+(cadastro pendente, seção 21) e a que acabou de entrar (pedido pra preparar,
+acima) ganham som e notificação do sistema de graça, sem tocar nos dois
+call sites.
+
+- **`tocarSomAviso()`**: bipe de 880Hz por ~0,35s via `AudioContext` — sem
+  arquivo de áudio pra hospedar. Sobe e desce o volume em rampa (não liga/
+  desliga seco) pra não estalar, e fecha o contexto sozinho no `onended`
+  (`AudioContext` não reaproveita depois de um `stop()`, por isso é um
+  contexto novo a cada bipe, não um só reusado).
+- **`notificarSistema()`**: `new Notification(...)`, ícone `logo.png`. **Só
+  dispara quando a aba NÃO está em primeiro plano**
+  (`document.visibilityState`/`hasFocus()`) — quem já está olhando o popup
+  no canto não precisa de um segundo aviso do sistema em cima, mesmo padrão
+  do Slack e de todo app de chat.
+- **`garantirPermissaoNotificacao()`** é chamada cedo, dentro de
+  `iniciarAvisoCadastro()` e `iniciarAvisoPreparo()` (logo depois do
+  login/troca de unidade), não só na hora do primeiro aviso de verdade —
+  pedir permissão é assíncrono, e perguntar só na hora H deixaria aquele
+  primeiro aviso sem som mesmo que a pessoa aceite na hora. Só pergunta uma
+  vez (`permissaoNotifPedida`), e nunca insiste se a pessoa negou.
+- **Duplicata (`chave` já existente) não toca som nem reabre notificação do
+  sistema** — o `return` antecipado do dedupe em `mostrarNotificacao()`
+  acontece antes do aviso sonoro, então reabrir a mesma aba, ou o mesmo
+  evento chegando duas vezes, fica silencioso.
+
+Testado localmente: `Notification.permission` no ambiente de teste vem
+`'denied'` por padrão (sandbox de automação) — conferido que
+`garantirPermissaoNotificacao()` devolve `false` sem perguntar de novo e
+`notificarSistema()` não faz nada nesse caso, sem lançar erro; o bipe toca
+sem exceção; e o dedupe por `chave` não dispara som/notificação na segunda
+chamada. Não deu pra testar o caminho "permissão concedida" dentro do
+sandbox — é o comportamento padrão e bem estabelecido da Notification API,
+mas vale conferir uma vez em produção (PC e Android) depois do deploy.
+
+### Som trocado por um jingle de 3 notas (15/09/2026)
+
+O Robson: *"COLOQUE UM SOM CHAMATIVO TIPO DO IPHONE"* — o bipe único (880Hz,
+~0,35s) passava despercebido no barulho do galpão. `tocarSomAviso()` agora
+toca um arpejo curto de 3 notas em sequência com leve sobreposição (Lá5,
+Ré6, Sol6 — sobem, não caem, pra soar "alerta" e não "erro"), lembrando o
+"ding-ding-ding" de notificação de celular em vez de um bipe de forno
+micro-ondas. Continua sem arquivo de áudio (só osciladores do Web Audio,
+um `AudioContext` por chamada, fechado sozinho depois da última nota) —
+mesma limitação de antes: som só sai com o portal aberto numa aba.
 
 ## 29. Análise MFG — consumo teórico x reportado, por OP (15/09/2026)
 
