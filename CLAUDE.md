@@ -6342,3 +6342,32 @@ novo.
 
 Testado localmente: dois pedidos diferentes, cada um com sua data de
 emissão, aparecem certos na coluna nova. Sem erro no console.
+
+## 37. Excluir pedido cancelado + observação na aba Parados (16/09/2026)
+
+O Robson, olhando a aba "⏰ Parados": *"QUERO UM BOTAO DE LIXEIRA DAQUI,
+ALGUNS PEDISOS SAO CANCELADOS E EU VOLTO PARA O ALMOXARIFADO, DAI PODE
+COLOAR UM CAMPO PARA EU COLOCAR OBSERVAÇÃO TAMBÉM"*.
+
+- **🗑 por PEDIDO** (não por item — o cartão inteiro é um pedido parado):
+  exclui de `exp_controle_itens` todos os itens daquele pedido de uma vez.
+  Confirmação antes ("Não tem como desfazer"), mesmo padrão do 🗑 dos Itens
+  Débito Direto. Uso esperado: pedido cancelado, material físico já voltou
+  pro endereço geral do almoxarifado — não faz mais sentido continuar
+  contando como "parado na expedição".
+- **Observação por pedido** (`exp_pedido_parado_obs`, `sql/fase56-parados-
+  excluir-observacao.sql`): tabela própria, não uma coluna em
+  `exp_controle_itens` — o cartão agrupa VÁRIOS itens do mesmo pedido, e a
+  nota é sobre o PEDIDO ("aguardando confirmação do PCP"), não sobre um
+  item isolado. Gravar em cada item duplicaria o texto e desincronizaria
+  se um item fosse editado e os outros esquecidos — mesmo motivo de
+  `exp_pedido_status` (fase17) e `analise_item_notas` (fase20): nota por
+  chave, tabela própria, upsert. Salva ao sair do campo.
+- **Excluir o pedido também apaga a observação dele** — não sobra
+  referência solta a um pedido que a pessoa acabou de dizer que não existe
+  mais nesta lista.
+
+Testado localmente (mocks de `sb.from`, sem depender de login): observação
+salva e aparece no mapa em memória; excluir o pedido remove os itens da
+tela (volta a "nada parado"), zera a lista em memória e chama o delete da
+observação correspondente. Sem erro no console.

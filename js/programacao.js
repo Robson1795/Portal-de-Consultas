@@ -78,6 +78,7 @@ let expImprimirConfirmar = false;
 let expCtrlDescMap = new Map(); // codigo_item -> {descricao, um}, resolvido em cascata pra exibir a lista
 let catalogoExpItens = []; // catalogo_exp_itens -- planilha do sistema, carregada só ao entrar na página
 let expPedidoProntoMap = new Map(); // numero_pedido -> {pronto_em, pronto_por} -- ver marcarPedidoAnteriorComoPronto()
+let paradosObsMap = new Map(); // numero_pedido -> {observacao, atualizado_por, atualizado_em} -- aba Parados
 let ultimoPedidoRegistrado = null; // último Nº Pedido gravado nesta sessão, pra detectar troca (ver gravarMovimentacaoManual)
 
 // ---- Carga da tela ---------------------------------------------------------
@@ -101,14 +102,15 @@ async function carregarProgramacao() {
   // que o Robson viu: item da unidade 106 aparecendo com a 105 selecionada.
   // pedido_itens não tem coluna unidade própria (só via pedidos.unidade),
   // então filtra pelos IDs dos pedidos já filtrados.
-  const [pedidos, expCtrl, pedidoStatus] = await Promise.all([
+  const [pedidos, expCtrl, pedidoStatus, paradosObs] = await Promise.all([
     sb.from('vw_pedidos_prioridade').select('*').eq('unidade', unidadeAtual),
     // Paginado: a movimentação da expedição é append-only de propósito (nunca
     // apaga, vira histórico), então esta é a tabela que passa de 1.000 linhas
     // primeiro -- e é um dos dois lados da aba Conferir.
     buscarTudoPaginado((de, ate) => sb.from('exp_controle_itens').select('*')
       .eq('unidade', unidadeAtual).order('id', { ascending: true }).range(de, ate)),
-    sb.from('exp_pedido_status').select('*').eq('unidade', unidadeAtual)
+    sb.from('exp_pedido_status').select('*').eq('unidade', unidadeAtual),
+    sb.from('exp_pedido_parado_obs').select('*').eq('unidade', unidadeAtual)
   ]);
 
   let itens = { data: [], error: null };
@@ -141,6 +143,14 @@ async function carregarProgramacao() {
   // script nao rodou, o mapa fica vazio, sem travar a pagina.
   expPedidoProntoMap = new Map(
     (pedidoStatus.error ? [] : (pedidoStatus.data || []))
+      .map(l => [l.numero_pedido, l])
+  );
+
+  // exp_pedido_parado_obs e mais novo ainda (fase56) -- mesmo tratamento:
+  // se o script nao rodou, o mapa fica vazio e a aba Parados continua
+  // funcionando, só sem observação nenhuma.
+  paradosObsMap = new Map(
+    (paradosObs.error ? [] : (paradosObs.data || []))
       .map(l => [l.numero_pedido, l])
   );
 
@@ -4225,12 +4235,16 @@ function renderParadosExp() {
     .map(([chave, itens]) => [chave, itens, Math.max(...itens.map(l => diasParadoExp(l.criado_em)))])
     .sort((a, b) => b[2] - a[2]);
 
-  corpo.innerHTML = gruposOrdenados.map(([chave, itens, diasMax]) => `
+  corpo.innerHTML = gruposOrdenados.map(([chave, itens, diasMax]) => {
+    const obs = paradosObsMap.get(chave) || { observacao: '' };
+    return `
     <div style="border:1px solid var(--erro-borda); border-radius:10px; margin-top:12px; overflow:hidden;">
       <div class="cfg-barra" style="background:var(--erro-fundo);">
         <span class="loc-chip">${chave === '(sem pedido)' ? 'Sem nº de pedido' : 'Pedido ' + escapeHtml(chave)}</span>
         <span style="font-weight:700; color:var(--erro-texto);">⏰ ${diasMax} dia(s) parado</span>
         <span style="font-size:12px; color:var(--muted); margin-left:auto;">${itens.length} item(ns)</span>
+        <button class="acao-btn parado-excluir" data-pedido="${escapeHtml(chave)}" data-ids="${escapeHtml(itens.map(l => l.id).join(','))}"
+                title="Pedido cancelado, material voltou pro almoxarifado -- exclui daqui">🗑</button>
       </div>
       <div class="scroll-area">
         <table>
@@ -4253,8 +4267,64 @@ function renderParadosExp() {
           </tbody>
         </table>
       </div>
-    </div>`).join('');
+      <div style="padding:8px 16px; border-top:1px solid var(--border);">
+        <input type="text" class="parado-obs-input" data-pedido="${escapeHtml(chave)}"
+               value="${escapeHtml(obs.observacao || '')}" placeholder="Observação deste pedido (ex.: aguardando confirmação do PCP)..."
+               style="width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:6px; font-size:12.5px;">
+      </div>
+    </div>`;
+  }).join('');
 }
+
+// 🗑 -- "alguns pedisos sao cancelados e eu volto para o almoxarifado":
+// exclui de vez os itens deste pedido em exp_controle_itens (o material já
+// não está mais na expedição de verdade) e a observação que tinha sido
+// anotada pra ele -- não sobra referência solta a um pedido que a pessoa
+// disse que não existe mais nesta lista.
+document.getElementById('paradosBody').addEventListener('click', async (e) => {
+  const btn = e.target.closest('.parado-excluir');
+  if (!btn) return;
+  const pedido = btn.dataset.pedido;
+  const ids = btn.dataset.ids.split(',').filter(Boolean);
+  const rotuloPedido = pedido === '(sem pedido)' ? 'sem nº de pedido' : 'pedido ' + pedido;
+  if (!confirm(`Excluir os ${ids.length} item(ns) do ${rotuloPedido} do Controle EXP? Use quando o pedido foi cancelado e o material voltou pro almoxarifado. Não tem como desfazer.`)) return;
+
+  btn.disabled = true;
+  const { error } = await sb.from('exp_controle_itens').delete().in('id', ids);
+  if (error) { alert('Não foi possível excluir: ' + error.message); btn.disabled = false; return; }
+
+  if (pedido !== '(sem pedido)') {
+    await sb.from('exp_pedido_parado_obs').delete().eq('unidade', unidadeAtual).eq('numero_pedido', pedido);
+    paradosObsMap.delete(pedido);
+  }
+  await carregarProgramacao();
+});
+
+// Observação por pedido -- salva ao sair do campo, mesmo padrão da
+// Localização do Controle EXP e da Observação da Análise de Compras.
+document.getElementById('paradosBody').addEventListener('focusout', async (e) => {
+  const input = e.target.closest('.parado-obs-input');
+  if (!input) return;
+  const pedido = input.dataset.pedido;
+  const novo = input.value.trim();
+  const atual = (paradosObsMap.get(pedido) || {}).observacao || '';
+  if (novo === atual) return; // nada mudou
+
+  input.disabled = true;
+  const { error } = await sb.from('exp_pedido_parado_obs').upsert({
+    unidade: unidadeAtual, numero_pedido: pedido, observacao: novo || null,
+    atualizado_por: nomeUsuarioAtual, atualizado_em: new Date().toISOString()
+  }, { onConflict: 'unidade,numero_pedido' });
+  input.disabled = false;
+
+  if (error) {
+    alert('NÃO SALVOU a observação: ' + error.message
+      + (/does not exist|relation/i.test(error.message) ? ' — rode sql/fase56-parados-excluir-observacao.sql no Supabase.' : ''));
+    input.value = atual;
+    return;
+  }
+  paradosObsMap.set(pedido, { observacao: novo, atualizado_por: nomeUsuarioAtual, atualizado_em: new Date().toISOString() });
+});
 
 // Mesmo padrão de mailto do Relatório pro PCP (não manda e-mail sozinho, só
 // abre pronto no Outlook) -- mas em tom formal de aviso, não de relatório
