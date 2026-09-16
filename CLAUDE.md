@@ -6297,3 +6297,32 @@ uma linha gravada — a mensagem de sucesso avisa quando houve colapso
 vez de esconder isso da pessoa. O aviso de erro por função ausente também
 passou a mencionar o fase55, pro mesmo sintoma ("second time") apontar
 direto pro SQL que falta rodar.
+
+## 35. Observação da Análise de Compras fica verde sozinha (16/09/2026)
+
+O Robson: *"na aba de observação quero um esquema que quando eu colocar
+alguma observação escrita quer dizer que resolvi ai muda de cor
+automaticamente só o retangulo aonde tem a observação, coloca cor
+verde"*. Depois: *"e data e horario que digitei"*.
+
+- **A caixa (não a linha inteira) fica verde** quando tem texto —
+  `analise-obs-preenchida` (`styles.css`, reusa `--ok-fundo`/`--ok-borda`/
+  `--ok-texto`, os mesmos tokens de "OK" no resto do portal). "Resolvido" é
+  o próprio Robson decidindo ao escrever alguma coisa — o portal não tenta
+  adivinhar por palavra-chave.
+- **Muda em tempo real, digitando** — não espera sair do campo: o
+  listener de `input` que já existia (pra crescer a largura do campo)
+  ganhou um `classList.toggle('analise-obs-preenchida', ...)` junto.
+  Apagar o texto tira o verde na hora, antes mesmo de salvar.
+- **Data e horário**: `atualizado_em`/`atualizado_por` já existiam na
+  tabela `analise_item_notas` (fase20) e `gravarNotaItem()` já os
+  gravava a cada salvamento — só não eram **lidos de volta** nem
+  **mostrados** em lugar nenhum. Agora entram no `select()` de
+  carregamento, no mapa em memória (`analiseNotas`) e viram o `title`
+  (tooltip ao passar o mouse) da caixa: "Fulano — 16/09/2026, 14:32". Sem
+  SQL novo — as colunas já existiam, só a leitura e a exibição faltavam.
+
+Testado localmente: digitar já fica verde antes de sair do campo; salvar
+mantém verde e preenche o tooltip com quem/quando; apagar o texto volta ao
+normal (na hora, e depois de salvar); recarregar a lista (`renderAnalise()`
+do zero) mantém o estado certo por item. Sem erro no console.

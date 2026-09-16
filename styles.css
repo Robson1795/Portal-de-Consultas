@@ -1528,4 +1528,13 @@ td.col-acoes { white-space: nowrap; text-align: center; }
 .avisoprep-urgencia-imediata { background: var(--erro-borda); color: #fff; }
 .avisoprep-urgencia-prazo { background: var(--azul-fundo); color: var(--blue-texto); }
 
-/* ===================== ANALISE MFG (15/09/2026) ==============
+/* Observação da Análise de Compras: escrever alguma coisa é o próprio
+   Robson dizendo "resolvi isso" -- "quando eu colocar alguma observação
+   escrita quer dizer que resolvi ai muda de cor automaticamente" (16/09/
+   2026). Só a CAIXA que tem texto fica verde -- as vazias continuam com a
+   borda padrão, sem sugerir nada. */
+.analise-obs-preenchida {
+  background: var(--ok-fundo) !important;
+  border-color: var(--ok-borda) !important;
+  color: var(--ok-texto);
+}

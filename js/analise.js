@@ -59,7 +59,7 @@ async function atualizarPermissaoAnalise() {
 
 function analiseNotaDoItem(codigoItem) {
   return analiseNotas.get(normalizaCodigoItem(codigoItem))
-      || { ignorado: false, observacao: '', solicitado_em: null, solicitado_por: '' };
+      || { ignorado: false, observacao: '', solicitado_em: null, solicitado_por: '', atualizado_em: null, atualizado_por: '' };
 }
 
 function analiseItemIgnorado(codigoItem) {
@@ -122,7 +122,7 @@ async function carregarAnalise() {
     // exista nos dois depósitos inflaria o saldo e esconderia uma falta.
     sb.from('estoque').select('item, descricao, quantidade').eq('unidade', unidadeAtual).eq('deposito', 'alm'),
     sb.from('analise_item_notas')
-      .select('codigo_item, ignorado, observacao, solicitado_em, solicitado_por')
+      .select('codigo_item, ignorado, observacao, solicitado_em, solicitado_por, atualizado_em, atualizado_por')
       .eq('unidade', unidadeAtual),
     sb.rpc('email_compras_da_unidade', { uni: unidadeAtual })
   ]);
@@ -166,7 +166,9 @@ async function carregarAnalise() {
       ignorado: r.ignorado === true,
       observacao: r.observacao || '',
       solicitado_em: r.solicitado_em || null,
-      solicitado_por: r.solicitado_por || ''
+      solicitado_por: r.solicitado_por || '',
+      atualizado_em: r.atualizado_em || null,
+      atualizado_por: r.atualizado_por || ''
     }]));
 
   // Falha aqui NAO e silenciosa: sem o e-mail, o botao de solicitacao fica
@@ -863,10 +865,21 @@ function renderAnalise() {
       <td class="loc">${substitutoHtml(l)}</td>
       <td class="loc" title="${escapeHtml([...l.pedidos].join(', '))}">${numeroBR(l.qtdPedidos)}</td>
       <td class="loc">${escapeHtml(l.primeiroEmbarqueTexto || '—')}</td>
-      <td><input type="text" class="analise-obs-input" data-item="${escapeHtml(l.codigo_item)}"
-             value="${escapeHtml(analiseNotaDoItem(l.codigo_item).observacao)}"
-             placeholder="ex.: já solicitei compra"
-             style="width:${escapeHtml(String(larguraObservacao(analiseNotaDoItem(l.codigo_item).observacao)))}px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px;"></td>
+      <td>${(() => {
+        const nota = analiseNotaDoItem(l.codigo_item);
+        const preenchida = !!nota.observacao;
+        // Verde só na CAIXA que tem observação -- o Robson: "quando eu
+        // colocar alguma observação escrita quer dizer que resolvi ai
+        // muda de cor automaticamente". "Resolvido" aqui é dele mesmo
+        // decidir escrevendo algo, não uma regra do portal adivinhando.
+        const titulo = preenchida && nota.atualizado_em
+          ? `${nota.atualizado_por ? nota.atualizado_por + ' — ' : ''}${formatarDataHoraBR(nota.atualizado_em)}`
+          : '';
+        return `<input type="text" class="analise-obs-input${preenchida ? ' analise-obs-preenchida' : ''}"
+             data-item="${escapeHtml(l.codigo_item)}" value="${escapeHtml(nota.observacao)}"
+             placeholder="ex.: já solicitei compra" title="${escapeHtml(titulo)}"
+             style="width:${escapeHtml(String(larguraObservacao(nota.observacao)))}px; padding:4px 6px; border:1px solid var(--border); border-radius:6px; font-size:12px;">`;
+      })()}</td>
       <td class="col-acoes">
         ${analiseVerIgnorados
           ? `<button class="acao-btn analise-restaurar" data-item="${escapeHtml(l.codigo_item)}" title="Voltar este item pra análise">↺</button>`
@@ -983,6 +996,10 @@ document.getElementById('analiseBody').addEventListener('focusout', async (e) =>
 
   input.style.borderColor = 'var(--blue)';
   setTimeout(() => { input.style.borderColor = ''; }, 1200);
+  const nota = analiseNotaDoItem(codigoItem);
+  input.title = nota.observacao && nota.atualizado_em
+    ? `${nota.atualizado_por ? nota.atualizado_por + ' — ' : ''}${formatarDataHoraBR(nota.atualizado_em)}`
+    : '';
   msg.textContent = `Observação do item ${codigoItem} salva.`;
   msg.className = 'status-msg status-ok';
 });
@@ -993,9 +1010,13 @@ document.getElementById('analiseBody').addEventListener('keydown', (e) => {
 
 // Cresce o campo em tempo real -- o Robson: "dependendo do tamanho do
 // texto aumenta o tamanho dessa coluna, tem itens que escrevo e não cabe
-// tudo".
+// tudo". A cor também muda em tempo real, digitando -- "quando eu colocar
+// alguma observação escrita quer dizer que resolvi ai muda de cor
+// automaticamente" -- não espera sair do campo pra ficar verde.
 document.getElementById('analiseBody').addEventListener('input', (e) => {
-  if (e.target.classList.contains('analise-obs-input')) ajustarLarguraObservacao(e.target);
+  if (!e.target.classList.contains('analise-obs-input')) return;
+  ajustarLarguraObservacao(e.target);
+  e.target.classList.toggle('analise-obs-preenchida', e.target.value.trim() !== '');
 });
 
 // Grava (ou atualiza) a anotação do item e só então mexe no mapa em memória.
@@ -1019,6 +1040,8 @@ async function gravarNotaItem(codigoItem, mudanca, msgEl) {
     if (mudanca[c] !== undefined) campos[c] = mudanca[c];
   });
 
+  const agora = new Date().toISOString();
+
   // .select() de propósito: sem ele, um upsert barrado pelo RLS volta com
   // error null e nada gravado -- a tela diria "salvo" e o F5 desmentiria.
   const { data, error } = await sb.from('analise_item_notas')
@@ -1027,7 +1050,7 @@ async function gravarNotaItem(codigoItem, mudanca, msgEl) {
       codigo_item: codigoItem,
       ...campos,
       atualizado_por: nomeUsuarioAtual,
-      atualizado_em: new Date().toISOString()
+      atualizado_em: agora
     }, { onConflict: 'unidade,codigo_item' })
     .select('codigo_item');
 
@@ -1051,7 +1074,9 @@ async function gravarNotaItem(codigoItem, mudanca, msgEl) {
     ignorado: campos.ignorado !== undefined ? campos.ignorado === true : atual.ignorado,
     observacao: campos.observacao !== undefined ? (campos.observacao || '') : atual.observacao,
     solicitado_em: campos.solicitado_em !== undefined ? campos.solicitado_em : atual.solicitado_em,
-    solicitado_por: campos.solicitado_por !== undefined ? (campos.solicitado_por || '') : atual.solicitado_por
+    solicitado_por: campos.solicitado_por !== undefined ? (campos.solicitado_por || '') : atual.solicitado_por,
+    atualizado_em: agora,
+    atualizado_por: nomeUsuarioAtual || atual.atualizado_por
   });
   return true;
 }
