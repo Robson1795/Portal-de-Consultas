@@ -6104,3 +6104,49 @@ certo; mesclar grava e recarrega; os três status (OK/Falta/Sobra) saem
 certos a partir da Qtd Físico digitada; busca e filtro de status funcionam;
 reimportar a mesma devolução atualiza cliente/descrição sem apagar a
 conferência já feita. Sem erro no console.
+
+### Registrar manual + etiqueta (16/09/2026)
+
+O Robson, mostrando o formulário "Digite um item de cada vez" do Controle
+EXP Acessórios: *"Em devolução coloque outra aba, quero fazer igual ao do
+exp acessórios, quando chegar devolução eu alimento mesmo que nao tenha
+dado entrada no sistema, pode colocar botao de imprimir também"*.
+
+- **Sub-aba nova "Registrar manual"** (`trocarAbaDevolucao()`, mesmo padrão
+  de sub-abas do resto do portal): Nº Devolução, Produto, Descrição,
+  Quantidade, Localização, Cliente. Nº Devolução e Localização continuam
+  preenchidos pro próximo item — texto e comportamento **idênticos** ao
+  formulário do Controle EXP ("Nº do pedido e localização continuam
+  preenchidos pro próximo item").
+- ⚠️ **Grava `qtd_nf` E `qtd_fisico` com o mesmo número, já conferido na
+  hora** (`conferido_por`/`conferido_em` carimbados no próprio registro) —
+  decisão deliberada: é o próprio Robson, vendo o material físico, quem
+  está digitando; a linha nascer "Pendente" seria fingir que ninguém
+  conferiu algo que acabou de ser conferido. Se depois a NF de verdade for
+  importada com uma quantidade diferente pro mesmo (unidade, id_devolução,
+  produto), `mesclar_devolucao()` (fase52) atualiza só `qtd_nf` — a
+  divergência aparece sozinha, sem ninguém ter que lembrar de comparar.
+  Testado: registro manual (qtd 10) seguido de reimportação da "NF real"
+  (qtd 12) resultou em `qtd_fisico=10`, `qtd_nf=12`, divergência -2,
+  status "Falta no físico" — exatamente o cenário que a função existe pra
+  pegar.
+- `upsert` por `(unidade, id_devolucao, cod_produto)`, não `insert` — digitar
+  o mesmo produto de novo (engano, ou completar dados) atualiza a linha em
+  vez de duplicar.
+- **`localizacao`** entrou na tabela (`sql/fase53-devolucao-manual-
+  localizacao.sql`) — a devolução até aqui só tinha dados da NF, nada de
+  "onde guardei isso". Editável inline na Conferência também (mesmo padrão
+  maiúscula-ao-gravar do Controle EXP).
+- **Etiqueta**: checkbox por linha + "🖨️ Etiquetas (N)", mesmo desenho da
+  Trading/Itens Débito Direto — A4 paisagem, aba aberta antes do `await`,
+  confirmação acima de `LIMITE_FOLHAS_IMPRESSAO`. Marca "DEVOLUÇÃO" no
+  lugar de "TRADING", produto grande, Nº da devolução pequeno, localização
+  no rodapé grande (40mm, a maior, igual às outras duas etiquetas — é o
+  que se procura de longe na estante).
+
+Testado localmente: registrar item por item preserva Nº devolução e
+localização entre um e outro; reimportar a mesma devolução via planilha
+atualiza `qtd_nf` sem tocar em `qtd_fisico`/conferência já feita à mão,
+expondo a divergência corretamente; localização edita inline; seleção +
+impressão gera a etiqueta certa (marca, produto, Nº devolução,
+localização). Sem erro no console.

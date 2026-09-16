@@ -736,43 +736,79 @@
   <div id="devolucaoContent" style="display:none;">
     <div class="panel">
       <div class="cfg-barra">
-        <h2 style="margin:0; flex:1;">↩️ Devolução</h2>
-        <button class="btn" id="devolucaoImportarBtn">Importar planilha</button>
-      </div>
-
-      <div class="cfg-barra">
-        <input type="text" id="devolucaoBusca" placeholder="Buscar devolução, NF, cliente ou produto..." style="flex:1; min-width:200px;">
-        <select id="devolucaoFiltroStatus">
-          <option value="">Todos os status</option>
-          <option value="pendente">Pendente de conferência</option>
-          <option value="ok">OK</option>
-          <option value="falta">Falta no físico</option>
-          <option value="sobra">Sobra no físico</option>
-        </select>
+        <h2 style="margin:0;">↩️ Devolução</h2>
+        <div id="devolucaoAbas" style="display:flex; gap:8px;">
+          <button class="btn btn-primary" data-devolucao-aba="conferencia">Conferência</button>
+          <button class="btn" data-devolucao-aba="registrar">Registrar manual</button>
+        </div>
+        <button class="btn" id="devolucaoImportarBtn" style="margin-left:auto;">Importar planilha</button>
       </div>
       <div class="status-msg" id="devolucaoMsg" style="padding:0 16px;"></div>
 
-      <div class="scroll-area">
-        <table id="devolucaoTabela">
-          <thead>
-            <tr>
-              <th>ID Devolução</th>
-              <th>NF Devolução</th>
-              <th>Cliente</th>
-              <th>Produto</th>
-              <th>Qtd NF</th>
-              <th>Qtd Físico</th>
-              <th>Divergência</th>
-              <th>Status</th>
-              <th>Observações</th>
-              <th>Conferido</th>
-            </tr>
-          </thead>
-          <tbody id="devolucaoBody"></tbody>
-        </table>
+      <!-- ---- Aba 1: Conferência (o que já foi importado/registrado) ---- -->
+      <div id="devolucaoConferencia" class="devolucao-aba">
+        <div class="cfg-barra">
+          <input type="text" id="devolucaoBusca" placeholder="Buscar devolução, NF, cliente ou produto..." style="flex:1; min-width:200px;">
+          <select id="devolucaoFiltroStatus">
+            <option value="">Todos os status</option>
+            <option value="pendente">Pendente de conferência</option>
+            <option value="ok">OK</option>
+            <option value="falta">Falta no físico</option>
+            <option value="sobra">Sobra no físico</option>
+          </select>
+          <button class="btn" id="devolucaoEtiquetasBtn" disabled>🖨️ Etiquetas (0)</button>
+        </div>
+
+        <div class="scroll-area">
+          <table id="devolucaoTabela">
+            <thead>
+              <tr>
+                <th><input type="checkbox" id="devolucaoTodos"></th>
+                <th>ID Devolução</th>
+                <th>NF Devolução</th>
+                <th>Cliente</th>
+                <th>Produto</th>
+                <th>Localização</th>
+                <th>Qtd NF</th>
+                <th>Qtd Físico</th>
+                <th>Divergência</th>
+                <th>Status</th>
+                <th>Observações</th>
+                <th>Conferido</th>
+              </tr>
+            </thead>
+            <tbody id="devolucaoBody"></tbody>
+          </table>
+        </div>
+        <div class="empty-msg" id="devolucaoVazio" style="display:none;">
+          Nenhuma devolução importada ainda. Use "Importar planilha" ou "Registrar manual".
+        </div>
       </div>
-      <div class="empty-msg" id="devolucaoVazio" style="display:none;">
-        Nenhuma devolução importada ainda. Use "Importar planilha".
+
+      <!-- ---- Aba 2: Registrar manual (mesma ideia do Controle EXP) ---- -->
+      <div id="devolucaoRegistrar" class="devolucao-aba" style="display:none; padding:0 16px;">
+        <div class="modal-text" style="margin-bottom:10px;">
+          Digite um item de cada vez -- é a forma mais rápida quando a devolução chegou mas
+          ainda não deu entrada no sistema. Nº da devolução e localização continuam
+          preenchidos pro próximo item. Se depois a NF de verdade for importada com um número
+          diferente, a divergência aparece sozinha.
+        </div>
+        <div class="cfg-barra" style="flex-wrap:wrap;">
+          <input type="text" id="devolucaoManualId" placeholder="Nº Devolução *"
+                 style="width:130px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <input type="text" id="devolucaoManualProduto" placeholder="Produto *"
+                 style="width:120px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <input type="text" id="devolucaoManualDescricao" placeholder="Descrição"
+                 style="width:180px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <input type="text" id="devolucaoManualQtd" placeholder="Quantidade *"
+                 style="width:110px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <input type="text" id="devolucaoManualLocal" placeholder="Localização"
+                 style="width:130px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <input type="text" id="devolucaoManualCliente" placeholder="Cliente"
+                 style="width:150px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <button class="btn btn-primary" id="devolucaoManualRegistrarBtn">Registrar</button>
+        </div>
+        <div class="status-msg" id="devolucaoManualMsg" style="margin-top:6px;"></div>
       </div>
     </div>
   </div>

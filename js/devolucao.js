@@ -44,8 +44,28 @@ async function carregarDevolucao() {
   } else {
     devolucaoItens = data || [];
   }
+  // Troca de unidade/recarga zera a seleção -- imprimir com itens de outra
+  // unidade marcados por engano seria a folha errada saindo na impressora.
+  devolucaoSelecionados.clear();
   renderDevolucao();
 }
+
+// ---- Sub-abas: Conferência x Registrar manual ------------------------------
+let devolucaoAbaAtual = 'conferencia';
+
+function trocarAbaDevolucao(aba) {
+  devolucaoAbaAtual = aba;
+  document.querySelectorAll('#devolucaoAbas [data-devolucao-aba]').forEach(b => {
+    b.className = b.dataset.devolucaoAba === aba ? 'btn btn-primary' : 'btn';
+  });
+  document.getElementById('devolucaoConferencia').style.display = aba === 'conferencia' ? 'block' : 'none';
+  document.getElementById('devolucaoRegistrar').style.display = aba === 'registrar' ? 'block' : 'none';
+}
+
+document.getElementById('devolucaoAbas').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-devolucao-aba]');
+  if (b) trocarAbaDevolucao(b.dataset.devolucaoAba);
+});
 
 // ---- Divergência e status, calculados na hora (não gravados) --------------
 function statusDevolucao(item) {
@@ -80,17 +100,32 @@ function linhasFiltradasDevolucao() {
   return linhas;
 }
 
+let devolucaoSelecionados = new Set();
+
+// Mesmo padrão do botão de etiquetas da Trading/Itens Débito Direto: o
+// rótulo diz quantas folhas vão sair ANTES de sair, e qualquer mudança na
+// marcação cancela uma confirmação de "mais de 10 folhas" pendente.
+let devolucaoConfirmarImpressao = false;
+function atualizarBotaoEtiquetasDevolucao() {
+  const btn = document.getElementById('devolucaoEtiquetasBtn');
+  if (!btn) return;
+  devolucaoConfirmarImpressao = false;
+  btn.textContent = `🖨️ Etiquetas (${devolucaoSelecionados.size})`;
+  btn.disabled = devolucaoSelecionados.size === 0;
+}
+
 function renderDevolucao() {
   const linhas = linhasFiltradasDevolucao();
   const corpo = document.getElementById('devolucaoBody');
   const vazio = document.getElementById('devolucaoVazio');
   document.getElementById('devolucaoTabela').style.display = linhas.length ? 'table' : 'none';
   vazio.style.display = linhas.length ? 'none' : 'block';
+  atualizarBotaoEtiquetasDevolucao();
 
   if (!linhas.length) {
     vazio.textContent = devolucaoItens.length
       ? 'Nenhuma devolução bate com o filtro.'
-      : 'Nenhuma devolução importada ainda. Use "Importar planilha".';
+      : 'Nenhuma devolução importada ainda. Use "Importar planilha" ou "Registrar manual".';
     corpo.innerHTML = '';
     return;
   }
@@ -100,10 +135,15 @@ function renderDevolucao() {
     const div = divergenciaDevolucao(item);
     return `
     <tr>
+      <td><input type="checkbox" class="devolucao-check" data-id="${escapeHtml(item.id)}" ${devolucaoSelecionados.has(String(item.id)) ? 'checked' : ''}></td>
       <td class="item">${escapeHtml(item.id_devolucao)}</td>
       <td class="loc">${escapeHtml(item.nf_devolucao || '—')}</td>
       <td>${escapeHtml(item.cliente || '—')}</td>
       <td class="item">${escapeHtml(item.cod_produto)}${item.descricao_produto ? `<div class="cad-desc">${escapeHtml(item.descricao_produto)}</div>` : ''}</td>
+      <td class="loc">
+        <input type="text" class="devolucao-local" data-id="${escapeHtml(item.id)}"
+               value="${escapeHtml(item.localizacao || '')}" placeholder="—" style="width:110px;">
+      </td>
       <td class="num">${escapeHtml(item.qtd_nf != null ? item.qtd_nf : '—')}</td>
       <td class="num">
         <input type="text" inputmode="decimal" class="devolucao-fisico" data-id="${escapeHtml(item.id)}"
@@ -123,6 +163,25 @@ function renderDevolucao() {
 
 document.getElementById('devolucaoBusca').addEventListener('input', renderDevolucao);
 document.getElementById('devolucaoFiltroStatus').addEventListener('change', renderDevolucao);
+
+document.getElementById('devolucaoBody').addEventListener('change', (e) => {
+  const check = e.target.closest('.devolucao-check');
+  if (!check) return;
+  if (check.checked) devolucaoSelecionados.add(check.dataset.id);
+  else devolucaoSelecionados.delete(check.dataset.id);
+  atualizarBotaoEtiquetasDevolucao();
+  const todos = document.getElementById('devolucaoTodos');
+  const filtradas = linhasFiltradasDevolucao();
+  todos.checked = filtradas.length > 0 && filtradas.every(i => devolucaoSelecionados.has(String(i.id)));
+});
+
+document.querySelector('#devolucaoTabela thead').addEventListener('change', (e) => {
+  if (e.target.id !== 'devolucaoTodos') return;
+  const filtradas = linhasFiltradasDevolucao();
+  if (e.target.checked) filtradas.forEach(i => devolucaoSelecionados.add(String(i.id)));
+  else filtradas.forEach(i => devolucaoSelecionados.delete(String(i.id)));
+  renderDevolucao();
+});
 
 // ---- Conferência física: gravação por célula, ao sair do campo ------------
 //
@@ -146,9 +205,10 @@ async function gravarConferenciaDevolucao(id, campos) {
 document.getElementById('devolucaoBody').addEventListener('change', async (e) => {
   const campoFisico = e.target.closest('.devolucao-fisico');
   const campoObs = e.target.closest('.devolucao-obs');
-  if (!campoFisico && !campoObs) return;
+  const campoLocal = e.target.closest('.devolucao-local');
+  if (!campoFisico && !campoObs && !campoLocal) return;
 
-  const id = (campoFisico || campoObs).dataset.id;
+  const id = (campoFisico || campoObs || campoLocal).dataset.id;
   const item = devolucaoItens.find(i => String(i.id) === String(id));
   if (!item) return;
 
@@ -161,8 +221,13 @@ document.getElementById('devolucaoBody').addEventListener('change', async (e) =>
       conferido_em: qtd_fisico === null ? null : new Date().toISOString()
     });
     if (ok) renderDevolucao();
-  } else {
+  } else if (campoObs) {
     await gravarConferenciaDevolucao(id, { observacoes: campoObs.value.trim() || null });
+  } else {
+    // Localização em maiúscula -- mesmo padrão do Controle EXP (12/09/2026):
+    // endereço digitado de jeito diferente por pessoas diferentes vira duas
+    // "localizações" na busca/agrupamento.
+    await gravarConferenciaDevolucao(id, { localizacao: campoLocal.value.trim().toUpperCase() || null });
   }
 });
 
@@ -390,4 +455,167 @@ document.getElementById('devolucaoImportPrevia').addEventListener('click', async
   document.getElementById('devolucaoImportPrevia').innerHTML = '';
   document.getElementById('devolucaoImportTexto').value = '';
   await carregarDevolucao();
+});
+
+// ===========================================================================
+// Registrar manual -- "quero fazer igual ao do exp acessórios, quando chegar
+// devolução eu alimento mesmo que nao tenha dado entrada no sistema" (mesmo
+// texto/comportamento do formulário "Digite um item de cada vez" do Controle
+// EXP: Nº e localização continuam preenchidos pro próximo item, só o
+// produto/quantidade/descrição limpam).
+//
+// ⚠️ Grava `qtd_nf` E `qtd_fisico` com o MESMO número digitado, já CONFERIDO
+// na hora -- é o próprio Robson, vendo o material físico, quem está
+// registrando; não faz sentido a linha nascer "pendente de conferência" de
+// algo que ele acabou de conferir com os próprios olhos. Se depois a NF de
+// verdade for importada com um número diferente pro mesmo (unidade,
+// id_devolucao, cod_produto), mesclar_devolucao() (fase52) atualiza só
+// qtd_nf -- a divergência aparece sozinha.
+document.getElementById('devolucaoManualRegistrarBtn').addEventListener('click', async () => {
+  const msg = document.getElementById('devolucaoManualMsg');
+  const campoId = document.getElementById('devolucaoManualId');
+  const campoProduto = document.getElementById('devolucaoManualProduto');
+  const campoDescricao = document.getElementById('devolucaoManualDescricao');
+  const campoQtd = document.getElementById('devolucaoManualQtd');
+  const campoLocal = document.getElementById('devolucaoManualLocal');
+  const campoCliente = document.getElementById('devolucaoManualCliente');
+  const btn = document.getElementById('devolucaoManualRegistrarBtn');
+
+  const idDevolucao = campoId.value.trim();
+  const produto = campoProduto.value.trim();
+  const qtdTexto = campoQtd.value.trim();
+
+  if (!idDevolucao || !produto || !qtdTexto) {
+    msg.textContent = 'Preencha Nº Devolução, Produto e Quantidade.';
+    msg.className = 'status-msg status-err';
+    return;
+  }
+  if (!unidadeAtual) {
+    msg.textContent = 'Selecione uma unidade antes de registrar.';
+    msg.className = 'status-msg status-err';
+    return;
+  }
+
+  const qtd = parseQtd(qtdTexto);
+  const local = campoLocal.value.trim().toUpperCase() || null;
+  const agora = new Date().toISOString();
+
+  btn.disabled = true;
+  const { error } = await sb.from('devolucao_itens').upsert({
+    unidade: unidadeAtual, id_devolucao: idDevolucao, cod_produto: produto,
+    descricao_produto: campoDescricao.value.trim() || null,
+    cliente: campoCliente.value.trim() || null,
+    qtd_nf: qtd, qtd_fisico: qtd,
+    localizacao: local,
+    conferido_por: nomeUsuarioAtual, conferido_em: agora,
+    importado_por: nomeUsuarioAtual, importado_em: agora
+  }, { onConflict: 'unidade,id_devolucao,cod_produto' });
+  btn.disabled = false;
+
+  if (error) {
+    msg.textContent = 'NÃO SALVOU: ' + error.message;
+    msg.className = 'status-msg status-err';
+    return;
+  }
+
+  // Nº devolução e localização continuam preenchidos pro próximo item --
+  // mesmo comportamento do Controle EXP: quem confere uma devolução inteira
+  // digita vários produtos seguidos, um por um, sem redigitar o que se repete.
+  campoProduto.value = '';
+  campoDescricao.value = '';
+  campoQtd.value = '';
+  campoCliente.value = '';
+  campoProduto.focus();
+  msg.textContent = 'Item registrado e já conferido.';
+  msg.className = 'status-msg status-ok';
+  await carregarDevolucao();
+});
+
+document.getElementById('devolucaoManualId').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('devolucaoManualProduto').focus();
+});
+['devolucaoManualProduto', 'devolucaoManualDescricao', 'devolucaoManualQtd', 'devolucaoManualLocal', 'devolucaoManualCliente'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('devolucaoManualRegistrarBtn').click();
+  });
+});
+
+// ===========================================================================
+// Impressão -- "pode colocar botao de imprimir também", mesmo desenho da
+// etiqueta da Trading/Itens Débito Direto: uma etiqueta por folha, A4
+// paisagem, texto grande, sem depender de rede. Marca "DEVOLUÇÃO" no lugar
+// de "TRADING"/"ITEM DÉBITO DIRETO", e leva o Nº da devolução (pequeno) além
+// do produto e da localização.
+// ===========================================================================
+
+function montarHtmlEtiquetasDevolucao(linhas) {
+  const impressoEm = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+  const quem = nomeUsuarioAtual || emailUsuarioAtual || '—';
+  const etiquetas = linhas.map(item => `
+    <section class="etiqueta">
+      <div class="etq-topo">
+        <span class="etq-marca">DEVOLUÇÃO</span>
+        <span class="etq-unidade">${escapeHtml(rotuloUnidade(unidadeAtual))}</span>
+      </div>
+      <div class="etq-item">${escapeHtml(item.cod_produto)}</div>
+      <div class="etq-desc">${escapeHtml(item.descricao_produto || '')}${item.cliente ? ' · ' + escapeHtml(item.cliente) : ''}</div>
+      <div class="etq-qtd">Devolução nº ${escapeHtml(item.id_devolucao)}</div>
+      <div class="etq-local">${escapeHtml(item.localizacao || '—')}</div>
+      <div class="etq-rodape">Impresso por ${escapeHtml(quem)} — ${escapeHtml(impressoEm)}</div>
+    </section>`).join('');
+
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+<title>Devolução — ${new Date().toLocaleDateString('pt-BR')}</title>
+<style>
+  @page { size: A4 landscape; margin: 10mm; }
+  :root { color-scheme: light; }
+  body { font-family: Arial, sans-serif; margin: 0; background: #fff; color: #000; }
+  .etiqueta {
+    box-sizing: border-box; padding: 5mm 6mm; text-align: center;
+    page-break-after: always; break-after: page;
+  }
+  .etiqueta:last-child { page-break-after: auto; break-after: auto; }
+  .etq-topo {
+    display: flex; justify-content: space-between; align-items: baseline;
+    border-bottom: 0.8mm solid #000; padding-bottom: 2mm; margin-bottom: 4mm;
+  }
+  .etq-marca { font-size: 12mm; font-weight: 900; letter-spacing: 0.08em; }
+  .etq-unidade { font-size: 4mm; color: #333; }
+  .etq-item { font-size: 22mm; font-weight: 900; line-height: 1.1; overflow-wrap: anywhere; }
+  .etq-desc { font-size: 9mm; font-weight: 700; line-height: 1.15; margin-top: 3mm; }
+  .etq-qtd { font-size: 8mm; font-weight: 700; margin-top: 3mm; color: #333; }
+  .etq-local {
+    font-size: 40mm; font-weight: 900; line-height: 1.05; letter-spacing: 0.02em;
+    margin-top: 4mm; padding: 3mm 0; border-top: 0.8mm solid #000;
+    border-bottom: 0.8mm solid #000; overflow-wrap: anywhere;
+  }
+  .etq-rodape { font-size: 3.5mm; color: #333; margin-top: 3mm; }
+</style></head><body>
+${etiquetas}
+${'<script>window.onload = () => window.print();<' + '/script>'}
+</body></html>`;
+}
+
+async function imprimirEtiquetasDevolucao(linhas) {
+  if (!linhas.length) return;
+  // Aba aberta ANTES do `await` -- ativação transitória do clique (mesma
+  // regra da Trading/Itens Débito Direto/reserva de aço).
+  const aba = window.open('', '_blank');
+  if (!aba) { alert('O navegador bloqueou a nova aba. Libere pop-ups pra este site e tente de novo.'); return; }
+  aba.document.write(montarHtmlEtiquetasDevolucao(linhas));
+  aba.document.close();
+}
+
+document.getElementById('devolucaoEtiquetasBtn').addEventListener('click', () => {
+  const linhas = devolucaoItens.filter(i => devolucaoSelecionados.has(String(i.id)));
+  if (!linhas.length) return;
+
+  if (linhas.length > LIMITE_FOLHAS_IMPRESSAO && !devolucaoConfirmarImpressao) {
+    devolucaoConfirmarImpressao = true;
+    const botao = document.getElementById('devolucaoEtiquetasBtn');
+    botao.textContent = `Imprimir ${linhas.length} folhas mesmo assim?`;
+    return;
+  }
+  devolucaoConfirmarImpressao = false;
+  imprimirEtiquetasDevolucao(linhas);
 });
