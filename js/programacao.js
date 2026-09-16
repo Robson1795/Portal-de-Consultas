@@ -759,16 +759,6 @@ function ehLinhaCabecalhoA(primeiraColuna) {
       || /^(n?[ºo°]?\s*pedido|pedido)/i.test(t);
 }
 
-// "embarque 04/09" na observação -> a data daquele pedido, no lugar da data
-// informada no formulário (é mais específica).
-function dataDoEmbarque(observacao, dataRef) {
-  const m = String(observacao || '').match(/(\d{1,2})\s*\/\s*(\d{1,2})/);
-  if (!m) return dataRef;
-  const dia = m[1].padStart(2, '0');
-  const mes = m[2].padStart(2, '0');
-  return `${String(dataRef).slice(0, 4)}-${mes}-${dia}`;
-}
-
 function lerColadoProg(texto) {
   return texto.split(/\r?\n/).filter(l => l.trim()).map(l => l.split('\t').map(c => c.trim()));
 }
@@ -842,15 +832,20 @@ async function importarPlanilhaA(linhas, dataRef) {
   }
 
   // 1) Cabeçalho dos pedidos (um por número), sem sobrescrever o que a
-  //    Planilha B já preencheu (cidade, veículo, horário).
+  //    Planilha B já preencheu (cidade, veículo, horário, data/hora de
+  //    carregamento). Robson, 16/09/2026, vendo a coluna Embarque da
+  //    Separação com "16/09" em quase todo pedido: "essa data só quero se
+  //    estiver na aba de carregamento" -- o campo `data_carregamento` NÃO
+  //    entra aqui de jeito nenhum (nem estimado pela data digitada nesta
+  //    planilha), só a Grade de carregamento (Planilha B/importarPlanilhaB)
+  //    grava esse campo.
   const porPedido = new Map();
   itens.forEach(i => {
     if (!porPedido.has(i.numero_pedido)) {
       porPedido.set(i.numero_pedido, {
         unidade: unidadeAtual,
         numero_pedido: i.numero_pedido,
-        cliente: i.cliente,
-        data_carregamento: dataDoEmbarque(i.observacao, dataRef)
+        cliente: i.cliente
       });
     }
   });

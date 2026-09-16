@@ -6543,3 +6543,33 @@ C), mesmo dia, sem bloco/horário antes de nenhum — `importarPlanilhaB()`
 gravou `ordem_carregamento` 1/2/3 na ordem exata da colagem, e
 `compararPorUrgencia()` ordenou a lista de volta pra B, A, C. Sem erro no
 console.
+
+## 42. Embarque na Separação só vale se veio da Grade de carregamento (16/09/2026)
+
+Print da coluna Embarque (seção 39) mostrando "16/09 —" em quase todo
+pedido da lista. O Robson: *"essa data so quero se estiver na aba de
+carregamento, desconsidere da aba de analises de compra"*.
+
+Causa: `importarPlanilhaA()` — a importação de **"Itens para separar"**
+(modal "Importar planilhas da programação", aba A) — também gravava
+`pedidos.data_carregamento`, via `dataDoEmbarque()`, com fallback pra data
+digitada no campo "Data de carregamento desta planilha" do próprio modal
+quando a observação do item não trazia uma data explícita. Como quase
+nenhuma observação vem com "embarque DD/MM" escrito, praticamente todo
+pedido saía com `data_carregamento` = a data genérica digitada naquele
+import — nada a ver com estar de fato agendado na Grade de carregamento
+(planilha B, a real). Pior: como o `upsert` não é parcial por linha
+alterada e sim pelo payload inteiro, reimportar "Itens para separar"
+depois da Grade de carregamento **sobrescrevia** a data/hora real que já
+estava certa.
+
+Removido: `importarPlanilhaA()` não manda mais `data_carregamento` nenhum
+no upsert de `pedidos` (só `unidade`/`numero_pedido`/`cliente`) — o campo
+fica em paz com o que a Grade de carregamento (`importarPlanilhaB()`,
+único lugar que ainda grava esse campo) já tiver gravado, ou vazio se o
+pedido nunca apareceu lá. Função `dataDoEmbarque()`, que só existia pra
+isso, removida junto.
+
+Testado localmente: importar "Itens para separar" com um pedido novo — o
+upsert de `pedidos` sai só com `unidade`/`numero_pedido`/`cliente`, sem
+`data_carregamento`. Sem erro no console.
