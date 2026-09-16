@@ -544,16 +544,57 @@ function renderSeparacao() {
       </td>
     </tr>`;
 
+  // Dentro do dia, cada PEDIDO ganha sua propria faixa. Robson, 16/09/2026:
+  // "pode deixar cada pedido separado com um espaço" e "pode colocar tambem
+  // alguma coisa como selecionar todos os itens de cada pedido" -- a faixa
+  // resolve os dois: separa visualmente e e onde mora o botao de marcar o
+  // pedido inteiro. Os itens ja vem juntos (a ordenacao e por pedido), entao
+  // basta abrir faixa nova quando o pedido muda.
+  const porPedido = (linhasDoGrupo) => {
+    const blocos = [];
+    linhasDoGrupo.forEach(linha => {
+      const id = linha.pedido ? linha.pedido.id : null;
+      const atual = blocos[blocos.length - 1];
+      if (atual && atual.id === id) atual.linhas.push(linha);
+      else blocos.push({ id, pedido: linha.pedido, linhas: [linha] });
+    });
+    return blocos;
+  };
+
   corpo.innerHTML = grupos.map(grupo => {
     const pedidos = new Set(grupo.linhas.map(l => l.pedido && l.pedido.id));
     const titulo = grupo.data
       ? `Carregamento ${dataLonga(grupo.data)}`
       : 'Sem data de embarque';
     const contagem = `${pedidos.size} pedido(s) · ${grupo.linhas.length} item(ns)`;
+    const blocosHtml = porPedido(grupo.linhas).map(bloco => {
+      const pedido = bloco.pedido;
+      const pendentes = bloco.linhas.filter(l => !itemConcluido(l.item)).length;
+      const cabecalho = [
+        pedido ? pedido.numero_pedido : 'Sem pedido',
+        pedido && pedido.cliente ? pedido.cliente : null,
+        pedido && pedido.data_carregamento
+          ? dataCurta(pedido.data_carregamento) + ' ' + horaCurta(pedido.horario_carregamento)
+          : null
+      ].filter(Boolean).join(' · ');
+      const botao = (pedido && pendentes)
+        ? `<button class="btn prog-marcar-pedido" data-pedido-id="${escapeHtml(pedido.id)}">
+             Marcar os ${pendentes} pendente(s)
+           </button>`
+        : '';
+      return `
+    <tr class="prog-pedido">
+      <td colspan="13">
+        <span class="prog-pedido-nome">${escapeHtml(cabecalho)}</span>
+        <span class="prog-grupo-contagem">${escapeHtml(`${bloco.linhas.length} item(ns)`)}</span>
+        ${botao}
+      </td>
+    </tr>` + bloco.linhas.map(linhaHtml).join('');
+    }).join('');
     return `
     <tr class="prog-grupo">
       <td colspan="13">${escapeHtml(titulo)} <span class="prog-grupo-contagem">${escapeHtml(contagem)}</span></td>
-    </tr>` + grupo.linhas.map(linhaHtml).join('');
+    </tr>` + blocosHtml;
   }).join('');
 
   ajustarTodasAlturasObs();
@@ -585,6 +626,8 @@ document.getElementById('progFiltroStatus').addEventListener('change', renderSep
 document.getElementById('progFiltroEmbarque').addEventListener('change', renderSeparacao);
 
 document.getElementById('progItensBody').addEventListener('click', async (e) => {
+  const pedidoTodo = e.target.closest('.prog-marcar-pedido');
+  if (pedidoTodo) { await marcarPedidoInteiro(pedidoTodo.dataset.pedidoId, pedidoTodo); return; }
   const reabrir = e.target.closest('.prog-reabrir');
   if (reabrir) { await reabrirItemSeparacao(reabrir.dataset.id, reabrir); return; }
   const btn = e.target.closest('.prog-alternar');
@@ -641,14 +684,55 @@ async function alternarItemSeparado(itemId, botao) {
   item.status_separacao = novo;
   const pedido = progPedidos.find(p => p.id === item.pedido_id);
   empilharDesfazer({
-    itemId: item.id,
     pedidoId: item.pedido_id,
-    statusAnterior: anterior,
+    itens: [{ id: item.id, statusAnterior: anterior }],
     descricao: `${pedido ? pedido.numero_pedido : 'pedido'} · item ${item.codigo_item || '—'} volta para "${ROTULO_STATUS_ITEM[anterior] || 'Pendente'}"`
   });
   await registrarLogProgramacao(item.pedido_id, 'item_separado', { item_id: item.id, status: novo });
   // O gatilho no banco recalcula pedidos.status_geral -- recarrega para a aba
   // EXP refletir o status consolidado novo.
+  await carregarProgramacao();
+}
+
+// Marca de uma vez todos os itens ainda pendentes de um pedido. Robson,
+// 16/09/2026: "pode colocar tambem alguma coisa como selecionar todos os itens
+// de cada pedido" -- pedido com 15 acessorios eram 15 cliques, e cada clique
+// some com a linha (filtro "Só pendentes"), entao ele perdia o lugar na lista.
+//
+// So mexe em quem esta PENDENTE: item ja marcado nao volta atras nem avanca
+// pro ciclo seguinte, senao "marcar o pedido" viraria uma roleta do que ja
+// estava certo. Vai inteiro pra pilha de desfazer, como UMA acao.
+async function marcarPedidoInteiro(pedidoId, botao) {
+  const pendentes = progItens.filter(i => String(i.pedido_id) === String(pedidoId) && !itemConcluido(i));
+  if (!pendentes.length) return;
+  const msg = document.getElementById('progMsg');
+  const pedido = progPedidos.find(p => String(p.id) === String(pedidoId));
+
+  botao.disabled = true;
+  const { error } = await sb.from('pedido_itens').update({
+    status_separacao: 'separado',
+    separado_por: userIdAtual,
+    separado_em: new Date().toISOString()
+  }).in('id', pendentes.map(i => i.id));
+  botao.disabled = false;
+
+  if (error) {
+    msg.textContent = 'NÃO SALVOU: ' + error.message;
+    msg.className = 'status-msg status-err';
+    return;
+  }
+
+  const itensDesfazer = pendentes.map(i => ({ id: i.id, statusAnterior: i.status_separacao }));
+  pendentes.forEach(i => { i.status_separacao = 'separado'; });
+  empilharDesfazer({
+    pedidoId,
+    itens: itensDesfazer,
+    descricao: `${pedido ? pedido.numero_pedido : 'pedido'} · ${itensDesfazer.length} item(ns) voltam para "Pendente"`
+  });
+  await registrarLogProgramacao(pedidoId, 'item_separado',
+    { itens: itensDesfazer.map(i => i.id), status: 'separado', pedido_inteiro: true });
+  msg.textContent = `${itensDesfazer.length} item(ns) marcado(s) em ${pedido ? pedido.numero_pedido : 'pedido'}.`;
+  msg.className = 'status-msg status-ok';
   await carregarProgramacao();
 }
 
@@ -679,9 +763,8 @@ async function reabrirItemSeparacao(itemId, botao) {
   item.status_separacao = 'aguardando';
   const pedido = progPedidos.find(p => p.id === item.pedido_id);
   empilharDesfazer({
-    itemId: item.id,
     pedidoId: item.pedido_id,
-    statusAnterior: anterior,
+    itens: [{ id: item.id, statusAnterior: anterior }],
     descricao: `${pedido ? pedido.numero_pedido : 'pedido'} · item ${item.codigo_item || '—'} volta para "${ROTULO_STATUS_ITEM[anterior] || 'Pendente'}"`
   });
   await registrarLogProgramacao(item.pedido_id, 'item_separado',
@@ -720,29 +803,41 @@ async function desfazerUltimaSeparacao() {
   if (!ultimo) return;
   const msg = document.getElementById('progMsg');
   const btn = document.getElementById('progDesfazerBtn');
-  // Mesma regra do alternar: so quem termina em status concluido carrega
-  // assinatura. Voltar pra "aguardando" limpa quem separou e quando.
-  const concluindo = ultimo.statusAnterior !== 'aguardando';
-
   if (btn) btn.disabled = true;
-  const { error } = await sb.from('pedido_itens').update({
-    status_separacao: ultimo.statusAnterior,
-    separado_por: concluindo ? userIdAtual : null,
-    separado_em: concluindo ? new Date().toISOString() : null
-  }).eq('id', ultimo.itemId);
 
-  if (error) {
-    msg.textContent = 'NÃO SALVOU: ' + error.message;
-    msg.className = 'status-msg status-err';
-    atualizarBotaoDesfazer();
-    return;
+  // Um pedido inteiro pode ter sido marcado de uma vez, e cada item pode ter
+  // vindo de um status diferente -- agrupa por status pra gravar de uma vez
+  // cada grupo, em vez de um update por item.
+  const porStatus = new Map();
+  ultimo.itens.forEach(({ id, statusAnterior }) => {
+    if (!porStatus.has(statusAnterior)) porStatus.set(statusAnterior, []);
+    porStatus.get(statusAnterior).push(id);
+  });
+
+  for (const [status, ids] of porStatus) {
+    // Mesma regra do alternar: so quem termina em status concluido carrega
+    // assinatura. Voltar pra "aguardando" limpa quem separou e quando.
+    const concluindo = status !== 'aguardando';
+    const { error } = await sb.from('pedido_itens').update({
+      status_separacao: status,
+      separado_por: concluindo ? userIdAtual : null,
+      separado_em: concluindo ? new Date().toISOString() : null
+    }).in('id', ids);
+    if (error) {
+      msg.textContent = 'NÃO SALVOU: ' + error.message;
+      msg.className = 'status-msg status-err';
+      atualizarBotaoDesfazer();
+      return;
+    }
   }
 
   desfazerSeparacao.pop();
-  const item = progItens.find(i => String(i.id) === String(ultimo.itemId));
-  if (item) item.status_separacao = ultimo.statusAnterior;
+  ultimo.itens.forEach(({ id, statusAnterior }) => {
+    const item = progItens.find(i => String(i.id) === String(id));
+    if (item) item.status_separacao = statusAnterior;
+  });
   await registrarLogProgramacao(ultimo.pedidoId, 'item_separado',
-    { item_id: ultimo.itemId, status: ultimo.statusAnterior, desfeito: true });
+    { itens: ultimo.itens.map(i => i.id), desfeito: true });
   msg.textContent = 'Desfeito — ' + ultimo.descricao;
   msg.className = 'status-msg status-ok';
   await carregarProgramacao();

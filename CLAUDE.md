@@ -6762,3 +6762,34 @@ com os dois botões. Clicar `↶ Pendente` gravou
 `{status_separacao: 'aguardando', separado_por: null, separado_em: null}` e
 habilitou o Desfazer com a dica certa; o Desfazer devolveu o item para
 "separado" com assinatura nova e esvaziou a pilha. Sem erro no console.
+
+## 48. Cada pedido na sua faixa, e o pedido inteiro num clique (16/09/2026)
+
+*"pode colocar tambem alguma coisa como selecionar todos os itens de cada
+pedido"* e *"pode deixar cada pedido separado com um espaço"* — os dois se
+resolvem no mesmo lugar. Dentro da divisão do dia (seção 44), cada pedido
+ganhou sua **faixa**: número, cliente, embarque, quantidade de itens e o
+botão **"Marcar os N pendente(s)"**. A faixa dá o espaço entre um pedido e
+outro, e é onde o botão mora. Os itens do mesmo pedido já vinham juntos
+(a ordenação é por pedido), então basta abrir faixa nova quando o pedido
+muda.
+
+O botão só mexe em quem está **pendente** — item já marcado não volta atrás
+nem avança pro próximo status do ciclo, senão "marcar o pedido" viraria uma
+roleta em cima do que já estava certo. Por isso o rótulo conta os pendentes,
+não os itens: num pedido com 3 itens e 1 já separado, ele diz "Marcar os 2
+pendente(s)". Um `update ... in (ids)` só, não um por item.
+
+**A pilha de desfazer virou por lote.** Cada entrada agora carrega uma
+*lista* de itens com o status anterior de cada um, em vez de um item só, e
+marcar o pedido inteiro entra como **uma** ação — um Ctrl+Z devolve os 15
+itens de uma vez, que é o que faz o botão ser seguro de usar. Na volta, os
+itens são agrupados por status anterior, então cada grupo é um `update`
+só, e item que já estava separado antes continua separado.
+
+Testado localmente com dois pedidos (um com 3 itens, sendo 1 já separado):
+as faixas saíram com "KV812379 · JOANIM STO A · 17/09 11:00 · 3 item(ns) ·
+Marcar os 2 pendente(s)"; o clique gravou um `update` com
+`in: [91, 92]` deixando o 93 (já separado) e o 94 (outro pedido) intactos; e
+o Desfazer devolveu 91 e 92 para "aguardando" num `update` só, sem tocar no
+93. Sem erro no console.
