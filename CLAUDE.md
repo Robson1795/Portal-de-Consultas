@@ -6445,3 +6445,26 @@ colada (via `gravarAnalise() → carregarAnalise()`).
 Testado localmente: pedido com item 10/10 atendido muda pra "separado";
 pedido com item 5/10 (parcial) não é tocado; item diferente do mesmo
 pedido não é confundido com o item que foi atendido. Sem erro no console.
+
+## 39. Coluna Embarque na Separação, puxada da aba Carregamento (16/09/2026)
+
+O Robson, olhando a Observação da Separação cheia de texto digitado à mão
+("embarque dia 08/09", "embarque 08/09" — grafias diferentes pra dizer a
+mesma coisa): *"a data de embarque aqui, puxe na aba do carregamento"*.
+
+Nova coluna **Embarque** em "Itens para separar", entre Cliente e Seq —
+não precisa de consulta nova nenhuma: `pedido.data_carregamento`/
+`horario_carregamento` já vêm carregados em `progPedidos`
+(`vw_pedidos_prioridade`), e o `{ item, pedido }` de cada linha já é o
+mesmo usado pra Cliente logo do lado. Reaproveita `dataCurta()`/
+`horaCurta()`, as mesmas funções que a aba Carregamento já usa — o mesmo
+dado, mostrado no mesmo formato nos dois lugares, sem duas fontes de
+verdade pra data de embarque.
+
+A Observação continua existindo (editável, seção 38) — só deixa de ser o
+único lugar pra saber quando o caminhão sai, que era o que fazia as
+pessoas digitarem a mesma informação de jeitos diferentes.
+
+Testado localmente: pedido com carregamento marcado mostra "08/09 06:00";
+pedido sem data de carregamento (ainda não apareceu na Planilha B) mostra
+"—", sem quebrar. Sem erro no console.

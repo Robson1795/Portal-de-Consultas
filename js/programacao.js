@@ -401,6 +401,7 @@ function renderSeparacao() {
     <tr>
       <td class="item">${escapeHtml(pedido ? pedido.numero_pedido : '—')}</td>
       <td>${escapeHtml(pedido && pedido.cliente ? pedido.cliente : '—')}</td>
+      <td class="loc">${pedido && pedido.data_carregamento ? escapeHtml(dataCurta(pedido.data_carregamento) + ' ' + horaCurta(pedido.horario_carregamento)) : '—'}</td>
       <td class="loc">${escapeHtml(item.seq != null ? item.seq : '—')}</td>
       <td class="item">${escapeHtml(item.codigo_item || '—')}</td>
       <td>${escapeHtml(item.descricao || '—')}</td>
