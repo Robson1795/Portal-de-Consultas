@@ -6693,3 +6693,34 @@ da aba Carregamento ficando só hoje e amanhã; a Separação abriu com o
 seletor já em 17/09 e só aquele grupo na lista; e o campo de observação foi
 de 26px com "ok" para 90px com o texto longo, crescendo ao digitar. Sem
 erro no console.
+
+## 46. A grade vale por um dia só: colar aposenta a anterior (16/09/2026)
+
+Esconder o passado (seção 45) resolveu a vista, não o acúmulo: o banco
+seguia guardando grade de todo dia já colado. O Robson: *"vou alimentar a
+do carregamento só de um dia, não precisa ter varios dias ali como esta"*.
+
+Agora `importarPlanilhaB()`, depois de gravar a grade nova, limpa os campos
+de carregamento (`data_carregamento`, `horario_carregamento`,
+`tipo_veiculo`, `observacao_carregamento`, `flag_adicional`,
+`ordem_carregamento`) de todo pedido da unidade que **veio de grade e não
+está nesta**. Pega tanto os dias anteriores quanto o pedido que o PCP tirou
+da grade do mesmo dia numa versão nova da planilha.
+
+O filtro que segura tudo é `ordem_carregamento is not null` — é ele que
+separa "veio de grade" de "veio da observação da planilha de separação"
+(o `embarque 17/09` da seção 43). Sem ele, colar a grade apagaria a data do
+pedido que ainda **não** entrou em grade nenhuma, que é justamente o único
+embarque que aquele pedido tem.
+
+Limpa **campo de carregamento**, nunca o pedido: `pedidos` e `pedido_itens`
+ficam inteiros, com as marcações de quem separou. O pedido só sai da aba
+Carregamento — e volta assim que aparecer numa grade de novo. A mensagem de
+importação diz quantos saíram, senão o sumiço parece bug.
+
+Testado localmente com a grade de 17/09 (2 pedidos): o `update` saiu com os
+seis campos nulos e os filtros certos — `unidade=106`,
+`ordem_carregamento is not null`, `numero_pedido not in
+("KV812379","KV853352")` — e a mensagem reportou "4 pedido(s) da grade
+anterior saíram do Carregamento". A linha do título foi ignorada como linha
+sem pedido. Sem erro no console.

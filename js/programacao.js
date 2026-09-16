@@ -1247,8 +1247,33 @@ async function importarPlanilhaB(linhas, dataRef) {
   const { error } = await sb.from('pedidos').upsert(lista, { onConflict: 'unidade,numero_pedido' });
   if (error) { falhaImport(error.message); return null; }
 
+  // A grade vale por UM dia. Robson, 16/09/2026: "vou alimentar a do
+  // carregamento só de um dia, nao precisa ter varios dias ali como esta".
+  // Entao colar uma grade nova aposenta a anterior: quem tinha vindo de grade
+  // (`ordem_carregamento` preenchido) e nao esta nesta perde os campos de
+  // carregamento -- some da aba, mas o PEDIDO e os itens dele ficam inteiros.
+  //
+  // `ordem_carregamento is not null` e o que separa "veio de grade" de "veio
+  // da observação da planilha de separação" (o 'embarque 17/09' da secao 43),
+  // que nao pode ser apagado aqui -- nao e grade, e o unico embarque que
+  // aquele pedido tem.
+  const numerosDaGrade = lista
+    .map(p => String(p.numero_pedido).replace(/["(),]/g, ''))
+    .map(n => `"${n}"`)
+    .join(',');
+  const { error: erroLimpeza, count: aposentados } = await sb.from('pedidos')
+    .update({
+      data_carregamento: null, horario_carregamento: null, tipo_veiculo: null,
+      observacao_carregamento: null, flag_adicional: null, ordem_carregamento: null
+    }, { count: 'exact' })
+    .eq('unidade', unidadeAtual)
+    .not('ordem_carregamento', 'is', null)
+    .not('numero_pedido', 'in', `(${numerosDaGrade})`);
+  if (erroLimpeza) console.error('Falha ao aposentar a grade anterior:', erroLimpeza.message);
+
   const semHorario = lista.filter(p => !p.horario_carregamento).length;
   const avisos = [];
+  if (aposentados) avisos.push(`${aposentados} pedido(s) da grade anterior saíram do Carregamento`);
   if (ignoradas) avisos.push(`${ignoradas} linha(s) sem pedido ignorada(s)`);
   if (semHorario) avisos.push(`${semHorario} sem horário (não veio linha de bloco antes)`);
   if (comVariasCargas.length) {
