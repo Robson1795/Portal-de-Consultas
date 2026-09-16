@@ -792,6 +792,19 @@ document.getElementById('progImportConfirmBtn').addEventListener('click', async 
   await carregarProgramacao();
 });
 
+// "embarque 17/09" escrito na observação -> a data de embarque daquele pedido.
+// Só vale a data ESCRITA: sem "dd/mm" na observação, devolve null e o pedido
+// fica sem data. (Até 16/09/2026 caía na data digitada no modal de importação,
+// o que carimbava a mesma data em TODO pedido -- ver seção 42 do CLAUDE.md.)
+// O ano sai da data do formulário, que a planilha não traz.
+function dataDoEmbarque(observacao, dataRef) {
+  const m = String(observacao || '').match(/(\d{1,2})\s*\/\s*(\d{1,2})/);
+  if (!m) return null;
+  const dia = m[1].padStart(2, '0');
+  const mes = m[2].padStart(2, '0');
+  return `${String(dataRef).slice(0, 4)}-${mes}-${dia}`;
+}
+
 // Assinatura da linha, pra reencontrar o mesmo item numa reimportacao.
 // A planilha NAO tem chave: o mesmo pedido repete o mesmo `seq` em todas as
 // linhas (KV874472 tem 7 itens, todos seq=10) e ate o mesmo item com a
@@ -833,12 +846,8 @@ async function importarPlanilhaA(linhas, dataRef) {
 
   // 1) Cabeçalho dos pedidos (um por número), sem sobrescrever o que a
   //    Planilha B já preencheu (cidade, veículo, horário, data/hora de
-  //    carregamento). Robson, 16/09/2026, vendo a coluna Embarque da
-  //    Separação com "16/09" em quase todo pedido: "essa data só quero se
-  //    estiver na aba de carregamento" -- o campo `data_carregamento` NÃO
-  //    entra aqui de jeito nenhum (nem estimado pela data digitada nesta
-  //    planilha), só a Grade de carregamento (Planilha B/importarPlanilhaB)
-  //    grava esse campo.
+  //    carregamento). `data_carregamento` NÃO entra neste upsert -- a data
+  //    anotada na observação é aplicada depois, em (1b), só onde pode.
   const porPedido = new Map();
   itens.forEach(i => {
     if (!porPedido.has(i.numero_pedido)) {
@@ -857,6 +866,40 @@ async function importarPlanilhaA(linhas, dataRef) {
 
   const idPorNumero = new Map((gravados || []).map(p => [p.numero_pedido, p.id]));
   const idsAfetados = [...idPorNumero.values()];
+
+  // 1b) Data de embarque anotada na observação da própria planilha ("embarque
+  //     17/09"). Robson, 16/09/2026, sobre o KV812379 aparecendo sem data
+  //     nenhuma na Separação: "esse pedido colocaram com data para amanhã, por
+  //     que nao apareceu pra eu separar por primeiro?" -- o PCP anota o
+  //     embarque aqui enquanto o pedido ainda não entrou na Grade de
+  //     carregamento, e é a única data que existe pra ele nesse meio-tempo.
+  //
+  //     Não encosta em quem já veio da Grade (`ordem_carregamento` preenchido):
+  //     lá a informação é mais precisa (tem hora e veículo), e foi justamente
+  //     esse upsert por cima que apagava a data certa antes.
+  const numerosPorData = new Map();
+  itens.forEach(i => {
+    const data = dataDoEmbarque(i.observacao, dataRef);
+    if (!data) return;
+    if (!numerosPorData.has(data)) numerosPorData.set(data, new Set());
+    numerosPorData.get(data).add(i.numero_pedido);
+  });
+
+  const comEmbarqueAnotado = new Set();
+  let falhouEmbarque = false;
+  for (const [data, numeros] of numerosPorData) {
+    const { error } = await sb.from('pedidos')
+      .update({ data_carregamento: data })
+      .eq('unidade', unidadeAtual)
+      .in('numero_pedido', [...numeros])
+      .is('ordem_carregamento', null);
+    if (error) {
+      falhouEmbarque = true;
+      console.error('Falha ao gravar embarque anotado na observação:', error.message);
+    } else {
+      numeros.forEach(n => comEmbarqueAnotado.add(n));
+    }
+  }
 
   // 2) Antes de substituir, guarda o que o OPERADOR marcou no app. A planilha
   //    vem do Excel e nao sabe do que foi marcado aqui; sem isso, reimportar
@@ -913,6 +956,8 @@ async function importarPlanilhaA(linhas, dataRef) {
   const avisos = [];
   if (ignoradas) avisos.push(`${ignoradas} linha(s) em branco ou de cabeçalho ignorada(s)`);
   if (preservados) avisos.push(`${preservados} marcação(ões) feita(s) no app preservada(s)`);
+  if (comEmbarqueAnotado.size) avisos.push(`${comEmbarqueAnotado.size} pedido(s) com embarque anotado na observação`);
+  if (falhouEmbarque) avisos.push('não deu pra gravar o embarque anotado de alguns pedidos (ver console)');
   return `${paraGravar.length} item(ns) em ${porPedido.size} pedido(s) importado(s).`
     + (avisos.length ? ' ' + avisos.join('; ') + '.' : '');
 }

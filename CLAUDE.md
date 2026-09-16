@@ -6573,3 +6573,35 @@ isso, removida junto.
 Testado localmente: importar "Itens para separar" com um pedido novo — o
 upsert de `pedidos` sai só com `unidade`/`numero_pedido`/`cliente`, sem
 `data_carregamento`. Sem erro no console.
+
+## 43. "embarque 17/09" na observação volta a valer (16/09/2026)
+
+A seção 42 jogou fora demais. O Robson, com o print da planilha ao lado do
+app: *"KV812379 esse pedido colocaram com data para amanhã, por que nao
+apareceu pra eu separar por primeiro?"* — e na planilha PCP-FOR-001 a
+observação daquele pedido diz **"embarque 17/09"**.
+
+Era isso que `dataDoEmbarque()` lia. O erro da seção 42 foi tratar a função
+inteira como culpada quando o problema era só o **fallback**: sem "dd/mm"
+escrito, ela devolvia a data digitada no modal de importação, carimbando a
+mesma data em todo pedido da planilha. A data escrita à mão sempre foi
+legítima — é a única que existe enquanto o pedido não entra na Grade de
+carregamento, que é o caso da maioria dos pedidos em separação.
+
+`dataDoEmbarque()` de volta, agora devolvendo `null` quando não acha data
+escrita. E ela não entra mais no upsert do cabeçalho: vira um `update`
+separado (passo 1b de `importarPlanilhaA()`), agrupado por data e filtrado
+por `.is('ordem_carregamento', null)` — ou seja, **só encosta em pedido que
+não veio da Grade de carregamento**. A Grade continua sendo a fonte mais
+forte (tem hora e veículo); a observação só preenche quem ainda não está
+lá. Era o upsert por cima, sem esse filtro, que apagava a data certa.
+
+Precedência final da coluna Embarque: **Grade de carregamento** > **"embarque
+dd/mm" na observação** > vazio.
+
+Testado localmente com as linhas reais do print: de 4 pedidos, os 3 com
+"embarque 17/09" na observação entraram num único `update` para 2026-09-17,
+com o filtro `ordem_carregamento is null`; o que não tinha data anotada não
+foi tocado, e "SEM SALDO" / "aguardando definição de aço" não viraram data.
+Na ordenação, o pedido de 17/09 ficou atrás de quem tem 16/09 com hora e à
+frente de todos os sem data. Sem erro no console.
