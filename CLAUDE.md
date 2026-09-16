@@ -6263,3 +6263,37 @@ quantidade e localização diferentes **atualiza a linha existente** (total
 de linhas não muda) em vez de duplicar; registro manual só com
 protocolo+pedido+cliente (sem item nem quantidade) salva como "Pendente";
 tudo vazio recusa com "Preencha ao menos um campo". Sem erro no console.
+
+## 34. Análise de Compras: "ON CONFLICT DO UPDATE... second time" (16/09/2026)
+
+O Robson colou uma planilha de pedidos de verdade e levou: *"NÃO GRAVOU: ON
+CONFLICT DO UPDATE command cannot affect row a second time -- nada foi
+alterado, a análise anterior continua no lugar."*
+
+**Causa**: `mesclar_analise_demanda()` (fase47) faz `INSERT ... ON CONFLICT
+(unidade, numero_pedido, codigo_item, seq_etapa) DO UPDATE` numa instrução
+só. O Postgres recusa a instrução INTEIRA se ela tentar aplicar o `DO
+UPDATE` duas vezes na MESMA linha de destino dentro do mesmo INSERT — e é
+exatamente isso que acontece quando a planilha colada traz duas linhas com
+a mesma chave (mesmo pedido + item + etapa). O comentário do fase47 já
+previa "o mesmo pedido+item em mais de uma etapa" como raro mas possível;
+não previa a mesma chave duas vezes na mesma colagem.
+
+**Correção** (`sql/fase55-analise-demanda-dedup.sql`): dedupe ANTES do
+insert, mantendo a **última ocorrência** de cada chave, na ordem em que
+apareceu na planilha (`jsonb_array_elements(...) with ordinality`, depois
+`distinct on` pela mesma chave do índice, ordenado por posição
+decrescente). Não soma as duplicatas — não dá pra saber se são o mesmo
+lançamento repetido por engano ou dois lançamentos genuínos, e somar
+errado seria pior que ficar com o último. `get diagnostics ... row_count`
+logo após o INSERT dá o total final sem precisar de uma segunda consulta,
+e a diferença entre o total bruto da planilha e esse total vira
+`duplicadas` na resposta.
+
+`js/analise.js` (`gravarAnalise()`) agora lê `data.linhas`/
+`data.duplicadas` da resposta em vez de assumir que toda linha colada virou
+uma linha gravada — a mensagem de sucesso avisa quando houve colapso
+("N linha(s) duplicada(s) na mesma colagem, mantida a última de cada"), em
+vez de esconder isso da pessoa. O aviso de erro por função ausente também
+passou a mencionar o fase55, pro mesmo sintoma ("second time") apontar
+direto pro SQL que falta rodar.

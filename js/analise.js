@@ -1132,7 +1132,7 @@ async function gravarAnalise() {
   // novo, sem apagar nada que não veio nesta colagem. Se falhar no meio, o
   // Postgres desfaz e a análise de antes continua no lugar (mesmo motivo
   // de substituir_estoque, AUDITORIA.md A2).
-  const { error } = await sb.rpc('mesclar_analise_demanda', {
+  const { data, error } = await sb.rpc('mesclar_analise_demanda', {
     payload: { unidade: unidadeAtual, importado_por: nomeUsuarioAtual, linhas: analisePendentes }
   });
   if (btn) btn.disabled = false;
@@ -1141,14 +1141,21 @@ async function gravarAnalise() {
     msg.textContent = 'NÃO GRAVOU: ' + error.message
       + ' — nada foi alterado, a análise anterior continua no lugar.'
       + ' Se a mensagem falar em função inexistente, sql/fase47-analise-demanda-mesclar.sql'
-      + ' ainda não foi rodado no Supabase.';
+      + ' ainda não foi rodado no Supabase. Se falar em "affect row a second time",'
+      + ' rode sql/fase55-analise-demanda-dedup.sql (planilha com pedido+item+etapa repetido).';
     msg.className = 'status-msg status-err';
     console.error('Falha ao gravar análise de compras:', error.message);
     return;
   }
 
-  msg.textContent = `Análise atualizada -- ${analisePendentes.length} linha(s) desta planilha entraram/atualizaram. `
-    + 'Nada foi removido automaticamente.';
+  // `data.linhas` é depois do dedupe (fase55) -- pode ser menor que
+  // analisePendentes.length se a planilha colada trouxe a mesma chave
+  // (pedido+item+etapa) duas vezes; nesse caso `data.duplicadas` conta
+  // quantas foram colapsadas, mantida a última de cada.
+  const duplicadas = (data && data.duplicadas) || 0;
+  msg.textContent = `Análise atualizada -- ${(data && data.linhas) || analisePendentes.length} linha(s) desta planilha entraram/atualizaram`
+    + (duplicadas ? ` (${duplicadas} linha(s) duplicada(s) na mesma colagem, mantida a última de cada)` : '')
+    + '. Nada foi removido automaticamente.';
   msg.className = 'status-msg status-ok';
   document.getElementById('analiseTexto').value = '';
   document.getElementById('analisePrevia').innerHTML = '';
