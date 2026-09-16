@@ -164,6 +164,7 @@ async function carregarProgramacao() {
   }
 
   renderSeparacao();
+  renderPendencias();
   renderCarregamento();
   renderExpControle(expCtrl.error ? expCtrl.error.message : null);
   if (!expCtrl.error) {
@@ -207,6 +208,10 @@ function trocarAbaProgramacao(aba) {
   });
   document.getElementById('progSeparacao').style.display = aba === 'separacao' ? 'block' : 'none';
   document.getElementById('progCarregamento').style.display = aba === 'carregamento' ? 'block' : 'none';
+  document.getElementById('progPendencias').style.display = aba === 'pendencias' ? 'block' : 'none';
+  // Campo de observacao so consegue se medir com a aba aberta (ver
+  // ajustarAlturaObs): ao voltar pra Separacao, remede o que ficou de fora.
+  if (aba === 'separacao') ajustarTodasAlturasObs();
 }
 
 document.getElementById('progAtualizarBtn').addEventListener('click', carregarProgramacao);
@@ -455,8 +460,11 @@ function preencherFiltroEmbarque(linhas) {
 }
 
 function renderSeparacao() {
-  const total = progItens.length;
-  const concluidos = progItens.filter(itemConcluido).length;
+  // Item em pendencia sai de cena: nao da pra separar o que nao tem em
+  // estoque, e ele so atrapalharia a contagem de quem esta separando.
+  const doDia = progItens.filter(i => !i.em_pendencia);
+  const total = doDia.length;
+  const concluidos = doDia.filter(itemConcluido).length;
   document.getElementById('progTotalItens').textContent = total.toLocaleString('pt-BR');
   document.getElementById('progPendentes').textContent = (total - concluidos).toLocaleString('pt-BR');
   document.getElementById('progSeparados').textContent = concluidos.toLocaleString('pt-BR');
@@ -464,7 +472,7 @@ function renderSeparacao() {
   const busca = document.getElementById('progBusca').value.trim().toLowerCase();
   const filtro = document.getElementById('progFiltroStatus').value;
 
-  let linhas = progItens.map(i => {
+  let linhas = doDia.map(i => {
     const pedido = progPedidos.find(p => p.id === i.pedido_id);
     return { item: i, pedido };
   });
@@ -540,7 +548,8 @@ function renderSeparacao() {
         ${item.status_separacao && item.status_separacao !== 'aguardando'
           ? `<button class="btn prog-reabrir" data-id="${escapeHtml(item.id)}"
                      title="Voltar este item para Pendente">↶ Pendente</button>`
-          : ''}
+          : `<button class="btn prog-pendencia" data-id="${escapeHtml(item.id)}"
+                     title="Não tem em estoque: manda para a aba Pendências">Sem estoque</button>`}
       </td>
     </tr>`;
 
@@ -628,6 +637,8 @@ document.getElementById('progFiltroEmbarque').addEventListener('change', renderS
 document.getElementById('progItensBody').addEventListener('click', async (e) => {
   const pedidoTodo = e.target.closest('.prog-marcar-pedido');
   if (pedidoTodo) { await marcarPedidoInteiro(pedidoTodo.dataset.pedidoId, pedidoTodo); return; }
+  const pendencia = e.target.closest('.prog-pendencia');
+  if (pendencia) { await mandarParaPendencia(pendencia.dataset.id, pendencia); return; }
   const reabrir = e.target.closest('.prog-reabrir');
   if (reabrir) { await reabrirItemSeparacao(reabrir.dataset.id, reabrir); return; }
   const btn = e.target.closest('.prog-alternar');
@@ -694,6 +705,122 @@ async function alternarItemSeparado(itemId, botao) {
   await carregarProgramacao();
 }
 
+// ---- Pendências: item que não tem em estoque --------------------------------
+// Robson, 16/09/2026, mostrando itens com "SEM SALDO PEDIDO 313.412" escrito
+// na observação: "esses itens nao tenho em estoque dai quero que crie uma nova
+// aba de pendencias e jogue esses itens la, dai pode limpar ele da aba
+// separação". Eles entulhavam a lista de quem separa sem ter o que separar.
+//
+// O motivo ja costuma estar escrito na observacao do item -- aproveita, em vez
+// de pedir pra digitar de novo o que ele acabou de escrever.
+async function mandarParaPendencia(itemId, botao) {
+  const item = progItens.find(i => String(i.id) === String(itemId));
+  if (!item || item.em_pendencia) return;
+  const msg = document.getElementById('progMsg');
+  const pedido = progPedidos.find(p => p.id === item.pedido_id);
+
+  botao.disabled = true;
+  const { error } = await sb.from('pedido_itens').update({
+    em_pendencia: true,
+    pendencia_motivo: item.observacao || null,
+    pendencia_em: new Date().toISOString(),
+    pendencia_por: userIdAtual
+  }).eq('id', item.id);
+  botao.disabled = false;
+
+  if (error) {
+    msg.textContent = 'NÃO SALVOU: ' + error.message;
+    msg.className = 'status-msg status-err';
+    return;
+  }
+
+  await registrarLogProgramacao(item.pedido_id, 'item_pendencia',
+    { item_id: item.id, motivo: item.observacao || null });
+  msg.textContent = `Item ${item.codigo_item || ''} de ${pedido ? pedido.numero_pedido : 'pedido'} foi para Pendências.`;
+  msg.className = 'status-msg status-ok';
+  await carregarProgramacao();
+}
+
+// Chegou o material: volta pra fila de separação exatamente como estava.
+async function voltarDePendencia(itemId, botao) {
+  const item = progItens.find(i => String(i.id) === String(itemId));
+  if (!item) return;
+  const msg = document.getElementById('progMsg');
+
+  botao.disabled = true;
+  const { error } = await sb.from('pedido_itens').update({
+    em_pendencia: false, pendencia_motivo: null, pendencia_em: null, pendencia_por: null
+  }).eq('id', item.id);
+  botao.disabled = false;
+
+  if (error) {
+    msg.textContent = 'NÃO SALVOU: ' + error.message;
+    msg.className = 'status-msg status-err';
+    return;
+  }
+
+  await registrarLogProgramacao(item.pedido_id, 'item_pendencia',
+    { item_id: item.id, resolvido: true });
+  msg.textContent = 'Item voltou para a Separação.';
+  msg.className = 'status-msg status-ok';
+  await carregarProgramacao();
+}
+
+function renderPendencias() {
+  const emPendencia = progItens.filter(i => i.em_pendencia);
+  const contador = document.getElementById('progPendenciasContador');
+  contador.textContent = emPendencia.length ? ` (${emPendencia.length})` : '';
+
+  const busca = document.getElementById('progPendBusca').value.trim().toLowerCase();
+  let linhas = emPendencia.map(i => ({ item: i, pedido: progPedidos.find(p => p.id === i.pedido_id) }));
+  if (busca) {
+    linhas = linhas.filter(({ item, pedido }) =>
+      String(pedido && pedido.numero_pedido).toLowerCase().includes(busca) ||
+      String(item.codigo_item).toLowerCase().includes(busca) ||
+      String(item.descricao).toLowerCase().includes(busca) ||
+      String(item.pendencia_motivo).toLowerCase().includes(busca));
+  }
+  linhas.sort((a, b) => compararPorUrgencia(a.pedido, b.pedido));
+
+  const corpo = document.getElementById('progPendenciasBody');
+  const vazio = document.getElementById('progPendenciasVazio');
+  document.getElementById('progTabelaPendencias').style.display = linhas.length ? 'table' : 'none';
+  vazio.style.display = linhas.length ? 'none' : 'block';
+  if (!linhas.length) {
+    vazio.textContent = emPendencia.length
+      ? 'Nenhuma pendência bate com a busca.'
+      : 'Nenhum item em pendência. Use "Sem estoque" na aba Separação para mandar um item pra cá.';
+    corpo.innerHTML = '';
+    return;
+  }
+
+  corpo.innerHTML = linhas.map(({ item, pedido }) => `
+    <tr>
+      <td class="item">${escapeHtml(pedido ? pedido.numero_pedido : '—')}</td>
+      <td>${escapeHtml(pedido && pedido.cliente ? pedido.cliente : '—')}</td>
+      <td class="loc">${pedido && pedido.data_carregamento ? escapeHtml(dataCurta(pedido.data_carregamento) + ' ' + horaCurta(pedido.horario_carregamento)) : '—'}</td>
+      <td class="item">${escapeHtml(item.codigo_item || '—')}</td>
+      <td>${escapeHtml(item.descricao || '—')}</td>
+      <td class="loc">${escapeHtml(item.unidade_medida || '—')}</td>
+      <td class="num">${escapeHtml(item.quantidade != null ? item.quantidade : '—')}</td>
+      <td class="loc">${escapeHtml(item.numero_os_op || '—')}</td>
+      <td>${escapeHtml(item.pendencia_motivo || '—')}</td>
+      <td class="loc">${escapeHtml(momentoSeparacao(item.pendencia_em))}</td>
+      <td class="col-acoes">
+        <button class="btn prog-voltar-pendencia" data-id="${escapeHtml(item.id)}"
+                title="Chegou o material: devolve para a lista de separação">↶ Voltar para Separação</button>
+      </td>
+    </tr>`).join('');
+}
+
+document.getElementById('progPendBusca').addEventListener('input', renderPendencias);
+
+document.getElementById('progPendenciasBody').addEventListener('click', async (e) => {
+  const btn = e.target.closest('.prog-voltar-pendencia');
+  if (!btn) return;
+  await voltarDePendencia(btn.dataset.id, btn);
+});
+
 // Marca de uma vez todos os itens ainda pendentes de um pedido. Robson,
 // 16/09/2026: "pode colocar tambem alguma coisa como selecionar todos os itens
 // de cada pedido" -- pedido com 15 acessorios eram 15 cliques, e cada clique
@@ -703,7 +830,8 @@ async function alternarItemSeparado(itemId, botao) {
 // pro ciclo seguinte, senao "marcar o pedido" viraria uma roleta do que ja
 // estava certo. Vai inteiro pra pilha de desfazer, como UMA acao.
 async function marcarPedidoInteiro(pedidoId, botao) {
-  const pendentes = progItens.filter(i => String(i.pedido_id) === String(pedidoId) && !itemConcluido(i));
+  const pendentes = progItens.filter(i =>
+    String(i.pedido_id) === String(pedidoId) && !itemConcluido(i) && !i.em_pendencia);
   if (!pendentes.length) return;
   const msg = document.getElementById('progMsg');
   const pedido = progPedidos.find(p => String(p.id) === String(pedidoId));

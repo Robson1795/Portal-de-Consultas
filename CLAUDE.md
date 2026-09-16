@@ -6793,3 +6793,42 @@ Marcar os 2 pendente(s)"; o clique gravou um `update` com
 `in: [91, 92]` deixando o 93 (já separado) e o 94 (outro pedido) intactos; e
 o Desfazer devolveu 91 e 92 para "aguardando" num `update` só, sem tocar no
 93. Sem erro no console.
+
+## 49. Aba Pendências: o que não tem em estoque sai da lista (16/09/2026)
+
+O Robson, apontando itens cuja observação já dizia "SEM SALDO PEDIDO
+313.412": *"esses itens nao tenho em estoque dai quero que crie uma nova aba
+de pendencias e jogue esses itens la, dai pode limpar ele da aba
+separação"*. Eles entulhavam a lista de quem separa sem ter o que separar —
+e ainda contavam como pendentes no cabeçalho, inflando um número que
+ninguém podia baixar.
+
+Terceira sub-aba na Programação, ao lado de Carregamento e Separação, com
+contador no próprio botão (`Pendências (3)`) pra não precisar entrar pra
+saber se tem algo lá.
+
+**Coluna nova, não status novo** (`sql/fase58-pedido-itens-pendencia.sql`:
+`em_pendencia`, `pendencia_motivo`, `pendencia_em`, `pendencia_por`).
+Pendência não é etapa da separação, é o motivo de ela não poder acontecer.
+O item continua `aguardando` — porque continua devendo — e
+`recalcular_status_pedido()` segue contando ele como pendente, que é a
+verdade: o pedido não está completo. Um valor novo em `status_separacao`
+mudaria o sentido de tudo que já lê essa coluna (aba EXP, painel de docas,
+status consolidado do pedido).
+
+O botão **"Sem estoque"** aparece na Ação de item ainda pendente e leva
+junto a observação como motivo — o recado já está escrito ali, não faz
+sentido pedir pra digitar de novo. Na volta ("↶ Voltar para Separação",
+quando o material chega) o item reaparece na fila exatamente como estava,
+já que o status nunca foi mexido.
+
+A Separação passa a montar sobre `progItens` **sem** os itens em pendência,
+inclusive nos três cartões do topo e no "Marcar os N pendente(s)" da faixa
+do pedido.
+
+Testado localmente: com 2 itens, mandar o "SEM SALDO PEDIDO 313.842" pra
+pendência gravou os quatro campos com o motivo copiado da observação, o
+total do cabeçalho caiu de 2 para 1, a linha sumiu da Separação, o botão da
+aba virou "Pendências (1)" e a linha apareceu lá com motivo e "16/09, 17:30".
+"Voltar para Separação" limpou os quatro campos e devolveu o item à lista.
+Sem erro no console.

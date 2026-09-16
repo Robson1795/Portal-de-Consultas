@@ -618,6 +618,7 @@
         <div id="progAbas" style="display:flex; gap:8px; flex-wrap:wrap;">
           <button class="btn" data-prog-aba="carregamento">Carregamento</button>
           <button class="btn btn-primary" data-prog-aba="separacao">Separação</button>
+          <button class="btn" data-prog-aba="pendencias">Pendências<span id="progPendenciasContador"></span></button>
         </div>
         <button class="btn" id="progImportarBtn" style="margin-left:auto;">Importar planilhas</button>
         <button class="btn" id="progAtualizarBtn">Atualizar</button>
@@ -685,6 +686,28 @@
         <div id="progGrade" style="padding:14px 16px;"></div>
         <div class="empty-msg" id="progGradeVazio" style="display:none;">
           Nenhum pedido programado. Importe a planilha de carregamento.
+        </div>
+      </div>
+
+      <!-- ---- Aba 3: Pendências (item sem estoque, fora da lista de separar) ---- -->
+      <div id="progPendencias" class="prog-aba" style="display:none;">
+        <div class="cfg-barra">
+          <input type="text" id="progPendBusca" placeholder="Buscar pedido, item ou motivo..." style="flex:1; min-width:200px;">
+        </div>
+        <div class="scroll-area">
+          <table id="progTabelaPendencias">
+            <thead>
+              <tr>
+                <th>Pedido</th><th>Cliente</th><th>Embarque</th><th>Item</th>
+                <th>Descrição</th><th>UM</th><th>Qtd</th><th>OS/OP</th>
+                <th>Motivo</th><th>Em pendência desde</th><th>Ação</th>
+              </tr>
+            </thead>
+            <tbody id="progPendenciasBody"></tbody>
+          </table>
+        </div>
+        <div class="empty-msg" id="progPendenciasVazio" style="display:none;">
+          Nenhum item em pendência. Use "Sem estoque" na aba Separação para mandar um item pra cá.
         </div>
       </div>
     </div>
