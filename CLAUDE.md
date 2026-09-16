@@ -6150,3 +6150,59 @@ atualiza `qtd_nf` sem tocar em `qtd_fisico`/conferência já feita à mão,
 expondo a divergência corretamente; localização edita inline; seleção +
 impressão gera a etiqueta certa (marca, produto, Nº devolução,
 localização). Sem erro no console.
+
+## 32. Contagem por Metragem (16/09/2026)
+
+O Robson: *"quero uma aba que faça contagem PAINEL FRIGO QTD DE PÇS VEZES A
+METRAGEM VEZES 1,13 / EVO/FACHADA QTD DE PÇS VEZES METRAGEM VEZES 1,04 /
+TELHA QUANTIDADE DE PÇS VEZES A METRAGEM, faça avaliando a descrição do
+item"*. Perguntado se calcula em cima de item já cadastrado ou é
+calculadora avulsa: **calculadora avulsa**.
+
+### Não é cadastro, é conta de cabeça
+
+`js/metragem.js` não lê nem grava em tabela nenhuma — cada linha vive só na
+memória da aba aberta, de propósito: é ferramenta de apoio pra uma
+contagem física pontual, não um registro que precise sobreviver a um F5.
+Fechou a aba, começa do zero na próxima vez.
+
+### A categoria sai da descrição, não de um select
+
+"Faça avaliando a descrição do item": a pessoa digita a descrição como ela
+sai da planilha/etiqueta (ex.: "PAINEL FRIGORÍFICO 50MM ISOWALL"), e o
+portal decide sozinho qual fator aplicar procurando palavras-chave dentro
+do texto — sem acento, sem diferenciar maiúscula/minúscula
+(`normalizaTextoMetragem`), porque a planilha real não é consistente
+nisso:
+
+| Palavra-chave no texto | Categoria | Fator |
+|---|---|---|
+| FRIGO | Painel Frigorífico | 1,13 |
+| EVO ou FACHADA | EVO/Fachada | 1,04 |
+| TELHA | Telha | 1 (sem fator — só pçs × metragem, como o Robson descreveu) |
+
+⚠️ **Item que não bate com nenhuma palavra-chave fica "Não reconhecida" e
+sai FORA do total** — calcular um m² com fator chutado seria pior do que
+avisar que aquela linha precisa de atenção manual. O aviso ("N linha(s) sem
+categoria reconhecida, fora do total") aparece junto dos totais, não escondido.
+
+### Detalhe de implementação: só as células calculadas são reescritas
+
+Cada linha tem 3 campos digitáveis (descrição, qtd, metragem) e 3
+calculados (categoria, fator, m²). A cada tecla, só os três calculados são
+atualizados via `atualizarCelulasCalculadasMetragem()` — os `<input>` NUNCA
+são recriados enquanto a pessoa digita, senão o cursor pularia pro fim do
+campo (ou some) a cada letra. A tabela inteira só é reconstruída
+(`renderLinhasMetragem()`) quando uma linha é adicionada ou removida.
+
+### Imprimir reaproveita a função genérica de tabela
+
+`montarHtmlTabelaGenerica()` (js/programacao.js, a mesma que exporta
+Entrada/Auditoria em HTML) — sem folha gigante nem etiqueta, é uma lista de
+conferência simples, cabe numa tabela só com o total no rodapé.
+
+Testado localmente: Painel Frigorífico (10 pçs × 6m × 1,13 = 67,80m²),
+EVO/Fachada (5×3×1,04 = 15,60m²) e Telha (20×4×1 = 80,00m²) calcularam
+certo; item sem palavra-chave reconhecida ficou fora do total com aviso;
+remover linha atualiza os totais; imprimir gera a tabela com o total
+correto (163,40m²). Sem erro no console.

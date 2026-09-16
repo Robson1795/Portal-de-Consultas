@@ -20,9 +20,9 @@
 // da Requisicao (que e so pedir). Quem faz esse fluxo e o ALM da unidade.
 const PERFIS = {
   consultor:   { rotulo: 'Consultor',   paginas: ['painel', 'estoque'] },
-  estoque_alm: { rotulo: 'Estoque ALM', paginas: ['painel', 'estoque', 'sesmt', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'debitodireto', 'devolucao', 'analise', 'mfg'] },
+  estoque_alm: { rotulo: 'Estoque ALM', paginas: ['painel', 'estoque', 'sesmt', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'debitodireto', 'devolucao', 'metragem', 'analise', 'mfg'] },
   estoque_aco: { rotulo: 'Estoque Aço', paginas: ['painel', 'bobinas', 'requisicao'] },
-  admin:       { rotulo: 'Admin',       paginas: ['painel', 'estoque', 'sesmt', 'bobinas', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'debitodireto', 'devolucao', 'analise', 'mfg', 'config'] }
+  admin:       { rotulo: 'Admin',       paginas: ['painel', 'estoque', 'sesmt', 'bobinas', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'debitodireto', 'devolucao', 'metragem', 'analise', 'mfg', 'config'] }
 };
 
 const PAGINAS = {
@@ -74,6 +74,13 @@ const PAGINAS = {
   // todas as unidade, conforme faço do exp e do alm"). Tabela própria
   // (sql/fase52), merge por upsert -- nunca substitui (ver js/devolucao.js).
   devolucao: { rotulo: 'Devolução', icone: '↩️', elemento: 'devolucaoContent' },
+  // Calculadora de m² por peça x metragem, com o multiplicador certo
+  // escolhido sozinho a partir da DESCRIÇÃO do item (Robson, 16/09/2026:
+  // "PAINEL FRIGO QTD DE PÇS VEZES A METRAGEM VEZES 1,13 / EVO/FACHADA...
+  // VEZES 1,04 / TELHA... faça avaliando a descrição do item"). Calculadora
+  // avulsa -- não lê nem grava em tabela nenhuma, é conta de cabeça feita
+  // pelo portal em vez de na mão (ver js/metragem.js).
+  metragem: { rotulo: 'Contagem por Metragem', icone: '📏', elemento: 'metragemContent' },
   // Demanda dos pedidos x saldo do almoxarifado: o que falta comprar.
   // Só lê o estoque -- não mexe em saldo nenhum (ver js/analise.js).
   analise: { rotulo: 'Análise de Compras', icone: '📊', elemento: 'analiseComprasContent' },

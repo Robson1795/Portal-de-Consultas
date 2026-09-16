@@ -814,6 +814,45 @@
   </div>
   <!-- ================= FIM DEVOLUÇÃO ================= -->
 
+  <!-- ================= CONTAGEM POR METRAGEM ================= -->
+  <!-- Calculadora avulsa: pçs x metragem x fator, com o fator escolhido
+       sozinho a partir da descrição do item (ver js/metragem.js). Não lê
+       nem grava em tabela nenhuma. -->
+  <div id="metragemContent" style="display:none;">
+    <div class="panel">
+      <h2 style="margin:0 0 4px;">📏 Contagem por Metragem</h2>
+      <div class="modal-text" style="margin-bottom:12px;">
+        Digite a descrição do item, a quantidade de peças e a metragem — o m² sai sozinho,
+        com o fator certo pra cada tipo de painel. <b>Painel Frigorífico</b> usa 1,13,
+        <b>EVO/Fachada</b> usa 1,04, <b>Telha</b> não tem fator (só pçs × metragem).
+      </div>
+
+      <div class="scroll-area">
+        <table id="metragemTabela">
+          <thead>
+            <tr>
+              <th>Descrição do item</th>
+              <th>Categoria</th>
+              <th>Qtd Peças</th>
+              <th>Metragem (m)</th>
+              <th>Fator</th>
+              <th>m²</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="metragemBody"></tbody>
+        </table>
+      </div>
+      <button class="btn" id="metragemAdicionarLinhaBtn" style="margin-top:8px;">+ Adicionar linha</button>
+
+      <div class="cfg-barra" style="margin-top:14px;">
+        <div id="metragemTotais" style="flex:1; font-size:13px; color:var(--muted);"></div>
+        <button class="btn" id="metragemImprimirBtn">🖨️ Imprimir</button>
+      </div>
+    </div>
+  </div>
+  <!-- ================= FIM CONTAGEM POR METRAGEM ================= -->
+
   <!-- ================= ANÁLISE DE COMPRAS ================= -->
   <!-- Cola a planilha dos pedidos que estão entrando pra separação e compara
        o total pedido de cada item com o saldo do almoxarifado da unidade:
@@ -2478,6 +2517,7 @@
 <script src="js/analise.js"></script>
 <script src="js/debitodireto.js"></script>
 <script src="js/devolucao.js"></script>
+<script src="js/metragem.js"></script>
 <script src="js/mfg.js"></script>
 <script src="js/tour.js"></script>
 <!-- Depois dos outros: usa escapeHtml, rotuloUnidade e os globais de sessão. -->
