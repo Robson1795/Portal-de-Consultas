@@ -6491,3 +6491,21 @@ Testado localmente com 5 cenários (sem data nenhuma; dia seguinte sem
 hora; mesmo dia com hora 08h/06h; mesmo dia sem hora): saiu na ordem
 06h → 08h → mesmo dia sem hora → dia seguinte → sem data nenhuma — exatamente
 a sequência esperada. Sem erro no console.
+
+## 40. Filtro "Só pendentes" vira o padrão da Separação (16/09/2026)
+
+O Robson: *"quando eu marcar separado e reportado o item sai
+automático"*. O filtro de status já sabia esconder item concluído (`Só
+pendentes`), mas o `<select>` abria sem nenhuma opção marcada `selected` —
+o navegador cai na primeira da lista, que era "Todos os status". Marcar um
+item não fazia ele desaparecer porque a tela não estava filtrando pra
+começo de conversa.
+
+Trocado: "Só pendentes" agora é a opção padrão (e a primeira da lista).
+Como `itemConcluido()` já conta separado/reportado/falta_reporte como
+concluído (seção 32), qualquer uma das três marcações some da lista
+sozinha, sem precisar escolher o filtro toda vez que abre a tela.
+
+Testado localmente: com o filtro no padrão, marcar um dos dois itens
+visíveis faz a lista cair de 2 para 1 linha na hora, sem precisar de F5 nem
+trocar o filtro. Sem erro no console.
