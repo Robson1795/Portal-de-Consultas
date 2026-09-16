@@ -6832,3 +6832,35 @@ total do cabeçalho caiu de 2 para 1, a linha sumiu da Separação, o botão da
 aba virou "Pendências (1)" e a linha apareceu lá com motivo e "16/09, 17:30".
 "Voltar para Separação" limpou os quatro campos e devolveu o item à lista.
 Sem erro no console.
+
+## 50. O saldo do almoxarifado na própria lista de separação (16/09/2026)
+
+Dois problemas que apareceram juntos, logo depois da aba Pendências.
+
+**O rótulo do botão mentia.** Ele se chamava "Sem estoque" e ficava em toda
+linha pendente. O Robson leu como *aviso*, não como *ação*: *"OS ITENS ALI
+TA MARCADO SEM ESTOQUE, MAS TENHO"* — com setas apontando pro botão em item
+que ele tinha. Virou **"Marcar sem estoque"**, na mesma forma do vizinho
+("Marcar separado/reportado"), que é claramente uma ordem e não um estado.
+
+**E faltava o dado pra decidir.** *"PUXA O ESTOQUE NA ABA DO ALMOXARIFADO E
+COLOCA ALI"*. Nova coluna **Estoque**, da mesma fonte da Consulta de Itens:
+tabela `estoque`, `deposito = 'alm'`, unidade aberta. A cor responde a
+pergunta que importa — verde quando o saldo cobre a quantidade do pedido,
+amarelo quando tem mas não o bastante (vai sair parcial), vermelho quando
+está zerado. Item sem cadastro no estoque fica "—", que é diferente de zero.
+
+O mesmo item pode ter várias linhas em `estoque` (localizações diferentes);
+quem separa quer o total, então o mapa soma. A busca vai em pedaços de 150
+códigos — a separação passa de 300 itens e tudo num `in(...)` viraria URL
+grande demais. E se a consulta falhar, a coluna fica "—" e a separação
+segue: saldo é apoio, travar a aba por causa dele seria pior.
+
+**De quebra**, o erro de quem ainda não rodou a fase 58 virou recado útil:
+em vez de "NÃO SALVOU: could not find the 'em_pendencia' column", agora diz
+qual arquivo falta rodar no Supabase — mesmo padrão da mensagem da fase 47.
+
+Testado localmente: a consulta saiu com `unidade=106` e `deposito='alm'`; a
+coluna mostrou 2.000 em verde (cobre 1112), 15 em amarelo (duas linhas de
+estoque, 10+5, contra 30 pedidos), 0 em vermelho e "—" pro item sem
+cadastro; cabeçalho e linha com 14 colunas cada. Sem erro no console.

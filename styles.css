@@ -1569,6 +1569,12 @@ td.col-acoes { white-space: nowrap; text-align: center; }
   padding: 2px 10px;
 }
 
+/* Saldo do almoxarifado na Separacao: cor diz se da pra separar (16/09/2026) */
+.prog-estoque { font-weight: 700; }
+.prog-estoque-ok      { color: var(--ok-texto); }
+.prog-estoque-parcial { color: var(--aviso-texto); }
+.prog-estoque-zero    { color: var(--erro-texto); }
+
 /* Observacao da Separacao cresce junto com o texto (16/09/2026) */
 .prog-item-obs {
   width: 100%;

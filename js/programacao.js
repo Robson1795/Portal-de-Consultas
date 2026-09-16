@@ -154,6 +154,8 @@ async function carregarProgramacao() {
       .map(l => [l.numero_pedido, l])
   );
 
+  progEstoqueMap = await buscarSaldoAlmoxarifado(progItens.map(i => i.codigo_item));
+
   // Retoma de onde a digitação parou: o último pedido gravado (por
   // criado_em) volta a ser "o pedido atual" pra detecção de troca continuar
   // funcionando depois de um recarregamento de página no meio do trabalho.
@@ -423,6 +425,57 @@ function compararPorUrgencia(pedidoA, pedidoB) {
   return ordemA - ordemB;
 }
 
+// ---- Saldo do Almoxarifado na lista de separação ----------------------------
+// Robson, 16/09/2026, vendo o botao "sem estoque" em item que ele TEM:
+// "puxa o estoque na aba do almoxarifado e coloca ali". Sem o saldo do lado,
+// decidir se o item vira pendencia era memoria ou ir conferir em outra tela.
+//
+// Mesma fonte da Consulta de Itens: tabela `estoque`, depósito 'alm' e a
+// unidade aberta -- saldo de outra unidade nao ajuda quem esta separando aqui.
+let progEstoqueMap = new Map();
+
+// Verde quando o saldo cobre o que o pedido precisa, vermelho quando nao tem
+// nada, amarelo quando tem mas nao o suficiente -- e o que decide se o item
+// pode ser separado agora, vira pendencia ou sai parcial.
+function celulaEstoqueHtml(item) {
+  const saldo = progEstoqueMap.get(String(item.codigo_item));
+  if (saldo == null) return '<td class="num prog-estoque">—</td>';
+  const precisa = parseQtd(item.quantidade);
+  const classe = saldo <= 0 ? 'prog-estoque-zero'
+    : (precisa > 0 && saldo < precisa) ? 'prog-estoque-parcial'
+    : 'prog-estoque-ok';
+  return `<td class="num prog-estoque ${classe}">${escapeHtml(saldo.toLocaleString('pt-BR'))}</td>`;
+}
+
+async function buscarSaldoAlmoxarifado(codigos) {
+  const unicos = [...new Set((codigos || []).filter(Boolean).map(String))];
+  if (!unicos.length) return new Map();
+
+  const mapa = new Map();
+  // Em pedaços: a lista de itens da separacao passa de 300 codigos, e tudo
+  // isso num `in(...)` viraria uma URL grande demais pro PostgREST.
+  for (let i = 0; i < unicos.length; i += 150) {
+    const pedaco = unicos.slice(i, i + 150);
+    const { data, error } = await sb.from('estoque')
+      .select('item, quantidade')
+      .in('item', pedaco)
+      .eq('unidade', unidadeAtual)
+      .eq('deposito', 'alm');
+    if (error) {
+      // Saldo e informacao de apoio: sem ele a coluna fica "—" e a separacao
+      // continua funcionando. Travar a aba inteira por isso seria pior.
+      console.warn('Não foi possível puxar o saldo do almoxarifado:', error.message);
+      return mapa;
+    }
+    // O mesmo item pode ter mais de uma linha (localizacoes diferentes) --
+    // o que interessa pra quem separa e o total.
+    (data || []).forEach(r => {
+      mapa.set(String(r.item), (mapa.get(String(r.item)) || 0) + parseQtd(r.quantidade));
+    });
+  }
+  return mapa;
+}
+
 // ---- Aba 1: Separação -------------------------------------------------------
 // Robson, 16/09/2026: "na aba separação pode colocar meio que uma divisao só
 // dos pedidos que carregam amanhã, ou pode colocar outra aba de separaçaõ com
@@ -534,6 +587,7 @@ function renderSeparacao() {
       <td>${escapeHtml(item.descricao || '—')}</td>
       <td class="loc">${escapeHtml(item.unidade_medida || '—')}</td>
       <td class="num">${escapeHtml(item.quantidade != null ? item.quantidade : '—')}</td>
+      ${celulaEstoqueHtml(item)}
       <td class="loc">${escapeHtml(item.numero_os_op || '—')}</td>
       <td>
         <textarea class="prog-item-obs" data-id="${escapeHtml(item.id)}" rows="1"
@@ -549,7 +603,7 @@ function renderSeparacao() {
           ? `<button class="btn prog-reabrir" data-id="${escapeHtml(item.id)}"
                      title="Voltar este item para Pendente">↶ Pendente</button>`
           : `<button class="btn prog-pendencia" data-id="${escapeHtml(item.id)}"
-                     title="Não tem em estoque: manda para a aba Pendências">Sem estoque</button>`}
+                     title="Não tem em estoque: manda este item para a aba Pendências">Marcar sem estoque</button>`}
       </td>
     </tr>`;
 
@@ -593,7 +647,7 @@ function renderSeparacao() {
         : '';
       return `
     <tr class="prog-pedido">
-      <td colspan="13">
+      <td colspan="14">
         <span class="prog-pedido-nome">${escapeHtml(cabecalho)}</span>
         <span class="prog-grupo-contagem">${escapeHtml(`${bloco.linhas.length} item(ns)`)}</span>
         ${botao}
@@ -602,7 +656,7 @@ function renderSeparacao() {
     }).join('');
     return `
     <tr class="prog-grupo">
-      <td colspan="13">${escapeHtml(titulo)} <span class="prog-grupo-contagem">${escapeHtml(contagem)}</span></td>
+      <td colspan="14">${escapeHtml(titulo)} <span class="prog-grupo-contagem">${escapeHtml(contagem)}</span></td>
     </tr>` + blocosHtml;
   }).join('');
 
@@ -729,7 +783,11 @@ async function mandarParaPendencia(itemId, botao) {
   botao.disabled = false;
 
   if (error) {
-    msg.textContent = 'NÃO SALVOU: ' + error.message;
+    // Erro tipico de quem ainda nao rodou a fase 58: a coluna nao existe.
+    // Dizer "NÃO SALVOU: could not find the column" nao ajuda ninguem.
+    msg.textContent = /em_pendencia|pendencia_/.test(error.message)
+      ? 'NÃO SALVOU: falta rodar sql/fase58-pedido-itens-pendencia.sql no Supabase — a aba Pendências depende das colunas que ele cria.'
+      : 'NÃO SALVOU: ' + error.message;
     msg.className = 'status-msg status-err';
     return;
   }
