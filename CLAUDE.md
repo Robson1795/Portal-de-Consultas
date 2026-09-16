@@ -6724,3 +6724,41 @@ seis campos nulos e os filtros certos — `unidade=106`,
 ("KV812379","KV853352")` — e a mensagem reportou "4 pedido(s) da grade
 anterior saíram do Carregamento". A linha do título foi ignorada como linha
 sem pedido. Sem erro no console.
+
+## 47. Desfazer, voltar pra pendente, e quando o item foi separado (16/09/2026)
+
+Três pedidos do Robson sobre errar e poder corrigir:
+
+**"quero um botao de voltar tipo Ctrl Z as vezes acabo marcando um item sem
+querer dai nao consigo voltar".** O status já ciclava (aguardando →
+separado → falta reporte → aguardando), mas com "Só pendentes" como filtro
+padrão (seção 40) o item **some da lista no primeiro clique** — não dá nem
+pra clicar de novo pra dar a volta. Agora existe uma pilha de desfazer em
+memória (20 ações), um botão `↶ Desfazer (Ctrl+Z)` na barra de filtros que
+mostra no title o que vai desfazer, e o atalho Ctrl+Z. O atalho não é
+capturado dentro de `input`/`textarea` — lá Ctrl+Z é o desfazer do próprio
+campo, e roubar isso atrapalharia justamente quem está escrevendo
+observação. Pilha só da sessão: é pra corrigir o clique errado de agora, não
+pra virar histórico — esse já existe em `log_movimentacao`, e o desfazer
+grava lá também, com `desfeito: true`.
+
+**"esse item que marquei como separado mas ele nao tenho em estoque dai
+quero voltar".** Caso diferente: ele descobriu depois, e pelo ciclo do botão
+teria que passar por "falta reporte" — que afirma o contrário do que
+aconteceu, porque falta reporte quer dizer que a peça FOI separada e só o
+relatório não saiu (seção 32). Item que não tem em estoque volta direto pra
+Pendente: botão `↶ Pendente` na coluna Ação, que só aparece em item já
+marcado. Limpa `separado_por`/`separado_em` junto — quem não separou não
+assina — e também entra na pilha de desfazer.
+
+**"coloca data e horario da separação tambem".** Nova coluna **Separado em**,
+lendo `separado_em`, que já vinha no `select('*')` e só não era mostrado.
+Timestamp UTC do banco convertido pra hora local de quem olha, que é a que o
+pessoal do almoxarifado usa.
+
+Testado localmente: a linha saiu com 13 células, "Separado em" mostrando
+"16/09, 16:30" a partir de `2026-09-16T19:30:00Z` (UTC-3), e a coluna Ação
+com os dois botões. Clicar `↶ Pendente` gravou
+`{status_separacao: 'aguardando', separado_por: null, separado_em: null}` e
+habilitou o Desfazer com a dica certa; o Desfazer devolveu o item para
+"separado" com assinatura nova e esvaziou a pilha. Sem erro no console.

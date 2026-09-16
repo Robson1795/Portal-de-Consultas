@@ -301,6 +301,9 @@ const ROTULO_BOTAO_SEPARACAO = {
   falta_reporte: 'Reabrir (pendente)'
 };
 
+const ROTULO_STATUS_ITEM = { aguardando: 'Pendente', separado: 'Separado', reportado: 'Separado', falta_reporte: 'Falta reporte' };
+const CLASSE_STATUS_ITEM = { aguardando: 'st-pendente', separado: 'st-ativo', reportado: 'st-ativo', falta_reporte: 'st-atencao' };
+
 function pedidoDoNumero(numero) {
   return progPedidos.find(p => p.numero_pedido === numero);
 }
@@ -326,6 +329,16 @@ function dataCurta(data) {
 function hojeIso() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Quando o item foi marcado como separado. Robson, 16/09/2026: "coloca data e
+// horario da separação tambem". `separado_em` e timestamp UTC do banco; aqui
+// vira hora local de quem olha, que e a que o pessoal do almoxarifado usa.
+function momentoSeparacao(quando) {
+  if (!quando) return '—';
+  const d = new Date(quando);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
 // Com ano: o titulo da divisao de carregamento diz o dia inteiro, pra nao
@@ -493,9 +506,6 @@ function renderSeparacao() {
     return;
   }
 
-  const ROTULO_STATUS_ITEM = { aguardando: 'Pendente', separado: 'Separado', reportado: 'Separado', falta_reporte: 'Falta reporte' };
-  const CLASSE_STATUS_ITEM = { aguardando: 'st-pendente', separado: 'st-ativo', reportado: 'st-ativo', falta_reporte: 'st-atencao' };
-
   // A lista ja vem ordenada por dia de carregamento, entao cada dia e um bloco
   // continuo: basta abrir uma divisao toda vez que a data muda.
   const grupos = [];
@@ -522,10 +532,15 @@ function renderSeparacao() {
                   placeholder="—">${escapeHtml(item.observacao || '')}</textarea>
       </td>
       <td><span class="cfg-status ${CLASSE_STATUS_ITEM[item.status_separacao] || 'st-pendente'}">${escapeHtml(ROTULO_STATUS_ITEM[item.status_separacao] || 'Pendente')}</span></td>
+      <td class="loc">${escapeHtml(momentoSeparacao(item.separado_em))}</td>
       <td class="col-acoes">
         <button class="btn prog-alternar" data-id="${escapeHtml(item.id)}">
           ${escapeHtml(ROTULO_BOTAO_SEPARACAO[item.status_separacao] || ROTULO_BOTAO_SEPARACAO.aguardando)}
         </button>
+        ${item.status_separacao && item.status_separacao !== 'aguardando'
+          ? `<button class="btn prog-reabrir" data-id="${escapeHtml(item.id)}"
+                     title="Voltar este item para Pendente">↶ Pendente</button>`
+          : ''}
       </td>
     </tr>`;
 
@@ -537,11 +552,12 @@ function renderSeparacao() {
     const contagem = `${pedidos.size} pedido(s) · ${grupo.linhas.length} item(ns)`;
     return `
     <tr class="prog-grupo">
-      <td colspan="12">${escapeHtml(titulo)} <span class="prog-grupo-contagem">${escapeHtml(contagem)}</span></td>
+      <td colspan="13">${escapeHtml(titulo)} <span class="prog-grupo-contagem">${escapeHtml(contagem)}</span></td>
     </tr>` + grupo.linhas.map(linhaHtml).join('');
   }).join('');
 
   ajustarTodasAlturasObs();
+  atualizarBotaoDesfazer();
 }
 
 // Robson, 16/09/2026, com "SEM SALDO PEDID..." cortado no campo: "deixe
@@ -569,6 +585,8 @@ document.getElementById('progFiltroStatus').addEventListener('change', renderSep
 document.getElementById('progFiltroEmbarque').addEventListener('change', renderSeparacao);
 
 document.getElementById('progItensBody').addEventListener('click', async (e) => {
+  const reabrir = e.target.closest('.prog-reabrir');
+  if (reabrir) { await reabrirItemSeparacao(reabrir.dataset.id, reabrir); return; }
   const btn = e.target.closest('.prog-alternar');
   if (!btn) return;
   await alternarItemSeparado(btn.dataset.id, btn);
@@ -600,6 +618,7 @@ async function alternarItemSeparado(itemId, botao) {
   const item = progItens.find(i => String(i.id) === String(itemId));
   if (!item) return;
   const msg = document.getElementById('progMsg');
+  const anterior = item.status_separacao;
   const novo = proximoStatusSeparacao(item.status_separacao);
   const concluindo = novo !== 'aguardando';
 
@@ -620,11 +639,128 @@ async function alternarItemSeparado(itemId, botao) {
   }
 
   item.status_separacao = novo;
+  const pedido = progPedidos.find(p => p.id === item.pedido_id);
+  empilharDesfazer({
+    itemId: item.id,
+    pedidoId: item.pedido_id,
+    statusAnterior: anterior,
+    descricao: `${pedido ? pedido.numero_pedido : 'pedido'} · item ${item.codigo_item || '—'} volta para "${ROTULO_STATUS_ITEM[anterior] || 'Pendente'}"`
+  });
   await registrarLogProgramacao(item.pedido_id, 'item_separado', { item_id: item.id, status: novo });
   // O gatilho no banco recalcula pedidos.status_geral -- recarrega para a aba
   // EXP refletir o status consolidado novo.
   await carregarProgramacao();
 }
+
+// Volta o item direto pra "Pendente", sem passar pelo ciclo do botao.
+// Robson, 16/09/2026: "esse item que marquei como separado mas ele nao tenho em
+// estoque dai quero voltar" -- pelo ciclo (separado -> falta reporte ->
+// aguardando) ele teria que passar por "falta reporte", que afirma o contrario
+// do que aconteceu: falta reporte quer dizer que a peca FOI separada e so o
+// relatorio nao saiu. Item que nao tem em estoque volta pra pendente e pronto.
+async function reabrirItemSeparacao(itemId, botao) {
+  const item = progItens.find(i => String(i.id) === String(itemId));
+  if (!item || item.status_separacao === 'aguardando') return;
+  const msg = document.getElementById('progMsg');
+  const anterior = item.status_separacao;
+
+  botao.disabled = true;
+  const { error } = await sb.from('pedido_itens').update({
+    status_separacao: 'aguardando', separado_por: null, separado_em: null
+  }).eq('id', item.id);
+  botao.disabled = false;
+
+  if (error) {
+    msg.textContent = 'NÃO SALVOU: ' + error.message;
+    msg.className = 'status-msg status-err';
+    return;
+  }
+
+  item.status_separacao = 'aguardando';
+  const pedido = progPedidos.find(p => p.id === item.pedido_id);
+  empilharDesfazer({
+    itemId: item.id,
+    pedidoId: item.pedido_id,
+    statusAnterior: anterior,
+    descricao: `${pedido ? pedido.numero_pedido : 'pedido'} · item ${item.codigo_item || '—'} volta para "${ROTULO_STATUS_ITEM[anterior] || 'Pendente'}"`
+  });
+  await registrarLogProgramacao(item.pedido_id, 'item_separado',
+    { item_id: item.id, status: 'aguardando', reaberto: true });
+  await carregarProgramacao();
+}
+
+// ---- Desfazer da Separação --------------------------------------------------
+// Robson, 16/09/2026: "quero um botao de voltar tipo Ctrl Z as vezes acabo
+// marcando um item sem querer dai nao consigo voltar". O status ate cicla
+// (aguardando -> separado -> falta reporte -> aguardando), mas com o filtro
+// "Só pendentes" -- que e o padrao desde a secao 40 -- o item SOME da lista no
+// primeiro clique, entao nao da nem pra clicar de novo pra dar a volta.
+//
+// Pilha em memoria, so desta sessao: e pra corrigir o clique errado de agora,
+// nao pra virar histórico (esse ja existe em log_movimentacao).
+const desfazerSeparacao = [];
+const LIMITE_DESFAZER = 20;
+
+function empilharDesfazer(entrada) {
+  desfazerSeparacao.push(entrada);
+  if (desfazerSeparacao.length > LIMITE_DESFAZER) desfazerSeparacao.shift();
+  atualizarBotaoDesfazer();
+}
+
+function atualizarBotaoDesfazer() {
+  const btn = document.getElementById('progDesfazerBtn');
+  if (!btn) return;
+  const ultimo = desfazerSeparacao[desfazerSeparacao.length - 1];
+  btn.disabled = !ultimo;
+  btn.title = ultimo ? 'Desfazer: ' + ultimo.descricao : 'Nada para desfazer';
+}
+
+async function desfazerUltimaSeparacao() {
+  const ultimo = desfazerSeparacao[desfazerSeparacao.length - 1];
+  if (!ultimo) return;
+  const msg = document.getElementById('progMsg');
+  const btn = document.getElementById('progDesfazerBtn');
+  // Mesma regra do alternar: so quem termina em status concluido carrega
+  // assinatura. Voltar pra "aguardando" limpa quem separou e quando.
+  const concluindo = ultimo.statusAnterior !== 'aguardando';
+
+  if (btn) btn.disabled = true;
+  const { error } = await sb.from('pedido_itens').update({
+    status_separacao: ultimo.statusAnterior,
+    separado_por: concluindo ? userIdAtual : null,
+    separado_em: concluindo ? new Date().toISOString() : null
+  }).eq('id', ultimo.itemId);
+
+  if (error) {
+    msg.textContent = 'NÃO SALVOU: ' + error.message;
+    msg.className = 'status-msg status-err';
+    atualizarBotaoDesfazer();
+    return;
+  }
+
+  desfazerSeparacao.pop();
+  const item = progItens.find(i => String(i.id) === String(ultimo.itemId));
+  if (item) item.status_separacao = ultimo.statusAnterior;
+  await registrarLogProgramacao(ultimo.pedidoId, 'item_separado',
+    { item_id: ultimo.itemId, status: ultimo.statusAnterior, desfeito: true });
+  msg.textContent = 'Desfeito — ' + ultimo.descricao;
+  msg.className = 'status-msg status-ok';
+  await carregarProgramacao();
+}
+
+document.getElementById('progDesfazerBtn').addEventListener('click', desfazerUltimaSeparacao);
+
+document.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey) || String(e.key).toLowerCase() !== 'z') return;
+  // Ctrl+Z dentro de campo de texto e o desfazer do proprio campo -- nao roubar.
+  const alvo = e.target;
+  if (alvo && (alvo.tagName === 'INPUT' || alvo.tagName === 'TEXTAREA' || alvo.isContentEditable)) return;
+  const pagina = document.getElementById('programacaoContent');
+  if (!pagina || getComputedStyle(pagina).display === 'none') return;
+  if (!desfazerSeparacao.length) return;
+  e.preventDefault();
+  desfazerUltimaSeparacao();
+});
 
 async function registrarLogProgramacao(pedidoId, evento, detalhe) {
   const { error } = await sb.from('log_movimentacao').insert({
