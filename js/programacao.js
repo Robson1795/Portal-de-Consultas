@@ -340,15 +340,35 @@ function tagPrioridade(pedido) {
   return `<span class="cfg-status ${classe}">${escapeHtml(rotulo)}</span>`;
 }
 
-// Pedido sem horario (`momento_carregamento` null) vai pro fim -- nao da
-// pra dizer que e urgente, mas tambem nao pode sumir da lista.
+// Pedido sem DATA nenhuma de carregamento vai pro fim -- nao da pra dizer
+// que e urgente, mas tambem nao pode sumir da lista.
+//
+// Robson, 16/09/2026, olhando a Separação com quase todo pedido mostrando
+// "16/09 —" (data sim, horário não): "faça a sequencia de pedido conforme
+// horario de agendamento dos caminhões". Comparar só por
+// `momento_carregamento` (data+hora, de vw_pedidos_prioridade) tratava
+// pedido com DATA mas sem HORA como se não tivesse agendamento nenhum --
+// null + qualquer coisa vira null em SQL, então a maioria dos pedidos reais
+// (que só tem a data, ainda sem hora exata na planilha B) caía toda no
+// mesmo "fim da fila" indistinto, em vez de ordenados pelo dia que saem.
+// Agora compara por DATA primeiro (a maior parte do trabalho de
+// sequenciar), e só usa a HORA como desempate de quem tem data igual --
+// pedido com hora definida vem antes do que só tem a data (é a informação
+// mais precisa que se tem), e entre dois com hora, o mais cedo primeiro.
 function compararPorUrgencia(pedidoA, pedidoB) {
-  const ta = pedidoA ? pedidoA.momento_carregamento : null;
-  const tb = pedidoB ? pedidoB.momento_carregamento : null;
-  if (!ta && !tb) return 0;
-  if (!ta) return 1;
-  if (!tb) return -1;
-  return new Date(ta) - new Date(tb);
+  const dataA = pedidoA ? pedidoA.data_carregamento : null;
+  const dataB = pedidoB ? pedidoB.data_carregamento : null;
+  if (!dataA && !dataB) return 0;
+  if (!dataA) return 1;
+  if (!dataB) return -1;
+  if (dataA !== dataB) return dataA < dataB ? -1 : 1; // "YYYY-MM-DD" compara certo como string
+
+  const horaA = pedidoA.horario_carregamento;
+  const horaB = pedidoB.horario_carregamento;
+  if (!horaA && !horaB) return 0;
+  if (!horaA) return 1;
+  if (!horaB) return -1;
+  return horaA < horaB ? -1 : (horaA > horaB ? 1 : 0);
 }
 
 // ---- Aba 1: Separação -------------------------------------------------------

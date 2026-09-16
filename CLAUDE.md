@@ -6468,3 +6468,26 @@ pessoas digitarem a mesma informação de jeitos diferentes.
 Testado localmente: pedido com carregamento marcado mostra "08/09 06:00";
 pedido sem data de carregamento (ainda não apareceu na Planilha B) mostra
 "—", sem quebrar. Sem erro no console.
+
+### Corrige a sequência: quase todo pedido só tem DATA, não HORA (16/09/2026)
+
+Vendo a coluna Embarque nova, o Robson: *"faça a sequencia de pedido
+conforme horario de agendamento dos caminhões"*. A Separação já tentava
+ordenar assim — `compararPorUrgencia()` existia desde a criação da aba —
+mas comparava por `momento_carregamento` (`vw_pedidos_prioridade`, data +
+hora somadas em SQL). **Data + hora nula = NULL inteiro**: um pedido com
+data mas SEM hora (a maioria da planilha B real, que vinha só com "16/09"
+e nenhum horário) contava como "sem agendamento nenhum" e caía todo no
+mesmo fim de fila indistinto — exatamente o que a tela deveria evitar.
+
+Corrigido pra comparar por **data primeiro** (a maior parte do trabalho de
+ordenar), usando a hora só como **desempate** de datas iguais — pedido com
+hora definida vem antes do que só tem a data (é o dado mais preciso que
+existe), e entre dois com hora, o mais cedo primeiro. Único ponto de uso
+de `compararPorUrgencia()` no código (`renderSeparacao()`) — não afeta a
+aba Carregamento, que já agrupa por veículo/hora do próprio jeito dela.
+
+Testado localmente com 5 cenários (sem data nenhuma; dia seguinte sem
+hora; mesmo dia com hora 08h/06h; mesmo dia sem hora): saiu na ordem
+06h → 08h → mesmo dia sem hora → dia seguinte → sem data nenhuma — exatamente
+a sequência esperada. Sem erro no console.
