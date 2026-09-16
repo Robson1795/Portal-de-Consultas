@@ -6206,3 +6206,60 @@ EVO/Fachada (5×3×1,04 = 15,60m²) e Telha (20×4×1 = 80,00m²) calcularam
 certo; item sem palavra-chave reconhecida ficou fora do total com aviso;
 remover linha atualiza os totais; imprimir gera a tabela com o total
 correto (163,40m²). Sem erro no console.
+
+## 33. Devolução: campos do Catálogo EXP + chave de mesclagem corrigida (16/09/2026)
+
+O Robson, olhando o formulário "Registrar manual" recém-criado: *"agora da
+devolução, nessa aba quero NUMERO DO PROTOCOLO + N° Pedido, NOME DO
+CLIENTE, Item, Descricao, UM, Deposito, Referencia, Lote, Quantidade todas
+pode ser opcional para preenchumento"*. Mesmo conjunto de colunas do
+Catálogo EXP que ele já tinha mostrado como referência.
+
+- **Campos novos**: `numero_pedido`, `um`, `deposito`, `referencia`, `lote`
+  entraram na tabela e em todo o fluxo (importação, tela, registro manual).
+  "Nº Protocolo" é só o RÓTULO novo do `id_devolucao` que já existia
+  (fase52) — não virou coluna nova.
+- **Tudo opcional no registro manual**: sem "*" travando nada — só exige
+  que **pelo menos um campo** esteja preenchido (senão não há o que
+  salvar). Sem quantidade, o item registra mas fica "Pendente" — não dá
+  pra fingir uma conferência que não aconteceu.
+
+### ⚠️ A chave de mesclagem mudou de Protocolo pra Item+Referência+Lote
+
+Foi implementado primeiro achando que toda devolução chegaria com um
+Nº de Protocolo, e a mesclagem (fase52) usava `(unidade, id_devolucao,
+cod_produto)`. Então o Robson mostrou a planilha REAL que vai puxar do
+sistema: *"e a planilha que vou puxar do sistema assim"* — Estab, Item,
+Descrição, UM, Depósito, Referência, Lote, Quantidade. **Sem protocolo
+nenhum.** Perguntado o que identifica cada linha pra não duplicar numa
+recolagem: é uma **foto do que está parado no depósito DEV agora**, sem
+protocolo — cada ocorrência de item+referência+lote É uma devolução física
+distinta.
+
+Se a chave tivesse continuado exigindo `id_devolucao`, toda linha dessa
+planilha real (sempre com protocolo nulo) nunca bateria consigo mesma numa
+recolagem — cada vez que o Robson colasse a mesma planilha de novo,
+**duplicaria tudo**. Pego e corrigido antes de qualquer dado real entrar na
+tabela (`sql/fase54-devolucao-campos-opcionais.sql` já nasce com a chave
+certa: `unique (unidade, cod_produto, referencia, lote)`).
+
+- `id_devolucao`/`numero_pedido`/`nf_original`/`nf_devolucao`/`cliente`
+  viraram **campos de contexto**, não de chave — só preenchidos quando o
+  Robson souber (registro manual) ou quando um dia uma planilha trouxer
+  esse dado. No `DO UPDATE` da mesclagem, esses cinco usam
+  `coalesce(excluded.x, devolucao_itens.x)`: a planilha do sistema nunca
+  traz protocolo, então sem o `coalesce` cada reimportação apagaria um
+  protocolo que um registro manual anterior tivesse preenchido.
+- `localizacao` **entra** no `DO UPDATE` normal (não tem coalesce) — é dado
+  que também pode vir do sistema, e uma localização mais nova da planilha é
+  informação válida a atualizar. Diferente de `qtd_fisico`/`observacoes`/
+  `conferido_*`, que só a PESSOA pode dizer e continuam fora do update.
+- Import: `Nº do Protocolo` deixou de ser obrigatório no cabeçalho — só
+  `Unidade` e `Item` continuam exigidos.
+
+Testado localmente: colar a planilha real (sem protocolo) importa sem
+pedir protocolo nenhum; recolar o MESMO item+referência+lote com
+quantidade e localização diferentes **atualiza a linha existente** (total
+de linhas não muda) em vez de duplicar; registro manual só com
+protocolo+pedido+cliente (sem item nem quantidade) salva como "Pendente";
+tudo vazio recusa com "Preencha ao menos um campo". Sem erro no console.

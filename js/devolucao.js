@@ -91,6 +91,7 @@ function linhasFiltradasDevolucao() {
   if (busca) {
     linhas = linhas.filter(i =>
       String(i.id_devolucao || '').toLowerCase().includes(busca) ||
+      String(i.numero_pedido || '').toLowerCase().includes(busca) ||
       String(i.nf_devolucao || '').toLowerCase().includes(busca) ||
       String(i.cliente || '').toLowerCase().includes(busca) ||
       String(i.cod_produto || '').toLowerCase().includes(busca) ||
@@ -136,10 +137,15 @@ function renderDevolucao() {
     return `
     <tr>
       <td><input type="checkbox" class="devolucao-check" data-id="${escapeHtml(item.id)}" ${devolucaoSelecionados.has(String(item.id)) ? 'checked' : ''}></td>
-      <td class="item">${escapeHtml(item.id_devolucao)}</td>
+      <td class="item">${escapeHtml(item.id_devolucao || '—')}</td>
+      <td class="loc">${escapeHtml(item.numero_pedido || '—')}</td>
       <td class="loc">${escapeHtml(item.nf_devolucao || '—')}</td>
       <td>${escapeHtml(item.cliente || '—')}</td>
-      <td class="item">${escapeHtml(item.cod_produto)}${item.descricao_produto ? `<div class="cad-desc">${escapeHtml(item.descricao_produto)}</div>` : ''}</td>
+      <td class="item">${escapeHtml(item.cod_produto || '—')}${item.descricao_produto ? `<div class="cad-desc">${escapeHtml(item.descricao_produto)}</div>` : ''}</td>
+      <td class="loc">${escapeHtml(item.um || '—')}</td>
+      <td class="loc">${escapeHtml(item.deposito || '—')}</td>
+      <td class="loc">${escapeHtml(item.referencia || '—')}</td>
+      <td class="loc">${escapeHtml(item.lote || '—')}</td>
       <td class="loc">
         <input type="text" class="devolucao-local" data-id="${escapeHtml(item.id)}"
                value="${escapeHtml(item.localizacao || '')}" placeholder="—" style="width:110px;">
@@ -243,14 +249,25 @@ document.getElementById('devolucaoBody').addEventListener('change', async (e) =>
 
 const DEVOLUCAO_SINONIMOS = {
   unidade:           ['unidade', 'estab', 'estabelecimento', 'est', 'filial', 'cod estab', 'codigo estab'],
-  id_devolucao:      ['id devolucao', 'id_devolucao', 'id', 'codigo devolucao', 'cod devolucao', 'numero devolucao', 'n devolucao', 'nº devolucao'],
+  // "id_devolucao" continua o nome do campo por baixo -- só o RÓTULO na
+  // tela virou "Nº Protocolo" (Robson, 16/09/2026). Os sinônimos aceitam
+  // "protocolo" também, pra planilha que já usa esse nome bater direto.
+  id_devolucao:      ['id devolucao', 'id_devolucao', 'id', 'codigo devolucao', 'cod devolucao',
+                       'numero devolucao', 'n devolucao', 'nº devolucao', 'protocolo', 'numero protocolo',
+                       'nº protocolo', 'n protocolo'],
+  numero_pedido:     ['numero pedido', 'nº pedido', 'n pedido', 'no pedido', 'pedido', 'num pedido'],
   nf_original:       ['nf original', 'nota original', 'nf origem', 'nota fiscal original'],
   nf_devolucao:      ['nf devolucao', 'nf_devolucao', 'nota devolucao', 'nf dev', 'numero nf devolucao', 'nota fiscal devolucao'],
   data_emissao:      ['data emissao', 'data_emissao', 'emissao', 'data'],
-  cliente:           ['cliente', 'nome cliente', 'razao social'],
+  cliente:           ['cliente', 'nome cliente', 'nome do cliente', 'razao social'],
   cod_produto:       ['cod produto', 'codigo produto', 'item', 'codigo', 'cod item', 'codigo item', 'produto', 'sku'],
   descricao_produto: ['descricao produto', 'descricao', 'desc', 'descricao do produto', 'nome produto', 'nome do produto'],
-  qtd_nf:            ['qtd nf', 'quantidade nf', 'qtd_nf', 'qtd', 'qtde', 'quantidade']
+  um:                ['um', 'un', 'unid', 'u m', 'unidade de medida', 'unid medida'],
+  deposito:          ['deposito', 'dep', 'depósito', 'armazem', 'armazém', 'cod deposito'],
+  referencia:        ['referencia', 'ref', 'referência'],
+  lote:              ['lote', 'lote item', 'n lote', 'nº lote', 'numero lote', 'no lote'],
+  localizacao:       ['localizacao', 'local', 'endereco', 'end', 'localizacao item', 'posicao'],
+  qtd_nf:            ['qtd nf', 'quantidade nf', 'qtd_nf', 'qtd', 'qtde', 'quantidade', 'qt liquida', 'qtd liquida']
 };
 
 // Própria desta tela -- NÃO reusa pareceCabecalho() de js/configuracoes.js,
@@ -323,9 +340,11 @@ function prepararImportacaoDevolucao(texto) {
     return { erro: 'Não encontrei a coluna da unidade. Ela pode se chamar Unidade, Estab, '
                  + 'Estabelecimento, Est ou Filial. Cabeçalho lido: ' + cabecalho.join(' · ') };
   }
-  if (mapa.id_devolucao === undefined) {
-    return { erro: 'Não encontrei a coluna do ID da devolução. Cabeçalho lido: ' + cabecalho.join(' · ') };
-  }
+  // Nº do Protocolo NÃO é exigido aqui -- a planilha que vem do sistema
+  // (Estab, Item, Descrição, UM, Depósito, Referência, Lote, Quantidade)
+  // não tem protocolo nenhum, é uma foto do que está parado no depósito
+  // DEV agora. A chave de mesclagem é (unidade, item, referência, lote),
+  // ver sql/fase54.
 
   const conhecidas = new Set(Object.keys(UNIDADES));
   const porUnidade = new Map();
@@ -335,9 +354,8 @@ function prepararImportacaoDevolucao(texto) {
   linhas.slice(1).forEach(c => {
     const pega = (campo) => (mapa[campo] !== undefined ? (c[mapa[campo]] || '') : '');
     const uni = pega('unidade').trim();
-    const idDevolucao = pega('id_devolucao').trim();
     const produto = pega('cod_produto').trim();
-    if (!uni || !idDevolucao || !produto) { semChave++; return; }
+    if (!uni || !produto) { semChave++; return; }
     if (!conhecidas.has(uni)) {
       desconhecidas.set(uni, (desconhecidas.get(uni) || 0) + 1);
       return;
@@ -345,26 +363,32 @@ function prepararImportacaoDevolucao(texto) {
     if (!porUnidade.has(uni)) porUnidade.set(uni, []);
     const qtdTexto = pega('qtd_nf').trim();
     porUnidade.get(uni).push({
-      id_devolucao: idDevolucao,
+      id_devolucao: pega('id_devolucao').trim() || null,
+      numero_pedido: pega('numero_pedido').trim() || null,
       nf_original: pega('nf_original').trim() || null,
       nf_devolucao: pega('nf_devolucao').trim() || null,
       data_emissao: parseDataDevolucao(pega('data_emissao')),
       cliente: pega('cliente').trim() || null,
       cod_produto: produto,
       descricao_produto: pega('descricao_produto').trim() || null,
+      um: pega('um').trim() || null,
+      deposito: pega('deposito').trim() || null,
+      referencia: pega('referencia').trim() || null,
+      lote: pega('lote').trim() || null,
+      localizacao: pega('localizacao').trim().toUpperCase() || null,
       qtd_nf: qtdTexto ? parseQtd(qtdTexto) : null
     });
   });
 
   if (semChave) {
-    avisos.push(semChave + ' linha(s) ignorada(s) por faltar unidade, ID da devolução ou produto.');
+    avisos.push(semChave + ' linha(s) ignorada(s) por faltar unidade ou produto.');
   }
   for (const [uni, n] of desconhecidas) {
     avisos.push(n + ' linha(s) ignorada(s) da unidade "' + uni + '", que não existe no portal.');
   }
   if (!porUnidade.size) {
     return { erro: 'Nenhuma linha aproveitável: confira se a coluna da unidade tem os códigos '
-                 + '(101, 105, 106...) e se ID da devolução e produto estão preenchidos.' };
+                 + '(101, 105, 106...) e se o produto está preenchido.' };
   }
 
   const blocos = [...porUnidade.entries()]
@@ -396,7 +420,7 @@ function renderPreviaDevolucao(pronto) {
     + '</tbody></table>'
     + '<div style="font-size:13px; color:var(--muted); margin-bottom:10px;">'
     + pronto.blocos.length + ' unidade(s), ' + total.toLocaleString('pt-BR') + ' item(ns) no total. '
-    + 'Devolução já existente (mesmo ID + produto) é atualizada, não duplicada. '
+    + 'Devolução já existente (mesmo Item + Referência + Lote) é atualizada, não duplicada. '
     + 'Conferência física já feita <b>não é apagada</b> por uma reimportação.</div>';
 
   alvo.innerHTML = avisosHtml + mapaHtml + corpoHtml
@@ -461,32 +485,51 @@ document.getElementById('devolucaoImportPrevia').addEventListener('click', async
 // Registrar manual -- "quero fazer igual ao do exp acessórios, quando chegar
 // devolução eu alimento mesmo que nao tenha dado entrada no sistema" (mesmo
 // texto/comportamento do formulário "Digite um item de cada vez" do Controle
-// EXP: Nº e localização continuam preenchidos pro próximo item, só o
-// produto/quantidade/descrição limpam).
+// EXP). Depois, o Robson especificou os campos exatos: *"NUMERO DO
+// PROTOCOLO + N° Pedido, NOME DO CLIENTE, Item, Descricao, UM, Deposito,
+// Referencia, Lote, Quantidade todas pode ser opcional para
+// preenchumento"* -- mesmo conjunto de colunas do Catálogo EXP (Unidade,
+// Item, Descrição, UM, Depósito, Referência, Lote, Quantidade), e TUDO
+// opcional -- sem "*" travando o botão Registrar.
 //
-// ⚠️ Grava `qtd_nf` E `qtd_fisico` com o MESMO número digitado, já CONFERIDO
-// na hora -- é o próprio Robson, vendo o material físico, quem está
-// registrando; não faz sentido a linha nascer "pendente de conferência" de
-// algo que ele acabou de conferir com os próprios olhos. Se depois a NF de
-// verdade for importada com um número diferente pro mesmo (unidade,
-// id_devolucao, cod_produto), mesclar_devolucao() (fase52) atualiza só
-// qtd_nf -- a divergência aparece sozinha.
+// ⚠️ "Tudo opcional" tem um limite físico: a chave de mesclagem da tabela
+// é (unidade, cod_produto, referencia, lote) -- ver sql/fase54 (a
+// planilha que vem do sistema não tem protocolo nenhum, só esses quatro).
+// Sem referência e/ou lote preenchidos, o registro ainda salva (vira uma
+// linha solta), só que não mescla com nada no futuro (Postgres nunca
+// considera NULL = NULL pra unicidade) -- e não tem problema: é uma
+// devolução registrada com o que se sabia na hora, completável depois.
+//
+// ⚠️ Grava `qtd_nf` E `qtd_fisico` com o MESMO número digitado (quando
+// veio), já CONFERIDO na hora -- é o próprio Robson, vendo o material
+// físico, quem está registrando; não faz sentido a linha nascer "pendente
+// de conferência" de algo que ele acabou de conferir com os próprios
+// olhos. Sem quantidade nenhuma digitada, fica mesmo pendente -- não dá
+// pra confirmar contagem que não foi feita. Se depois a planilha do
+// sistema trouxer o mesmo (unidade, item, referência, lote) com uma
+// quantidade diferente, mesclar_devolucao() (fase52/54) atualiza só os
+// campos da NF/planilha -- a divergência aparece sozinha.
 document.getElementById('devolucaoManualRegistrarBtn').addEventListener('click', async () => {
   const msg = document.getElementById('devolucaoManualMsg');
   const campoId = document.getElementById('devolucaoManualId');
+  const campoPedido = document.getElementById('devolucaoManualPedido');
+  const campoCliente = document.getElementById('devolucaoManualCliente');
   const campoProduto = document.getElementById('devolucaoManualProduto');
   const campoDescricao = document.getElementById('devolucaoManualDescricao');
+  const campoUm = document.getElementById('devolucaoManualUm');
+  const campoDeposito = document.getElementById('devolucaoManualDeposito');
+  const campoReferencia = document.getElementById('devolucaoManualReferencia');
+  const campoLote = document.getElementById('devolucaoManualLote');
   const campoQtd = document.getElementById('devolucaoManualQtd');
-  const campoLocal = document.getElementById('devolucaoManualLocal');
-  const campoCliente = document.getElementById('devolucaoManualCliente');
   const btn = document.getElementById('devolucaoManualRegistrarBtn');
 
-  const idDevolucao = campoId.value.trim();
-  const produto = campoProduto.value.trim();
+  const idDevolucao = campoId.value.trim() || null;
+  const pedido = campoPedido.value.trim() || null;
+  const produto = campoProduto.value.trim() || null;
   const qtdTexto = campoQtd.value.trim();
 
-  if (!idDevolucao || !produto || !qtdTexto) {
-    msg.textContent = 'Preencha Nº Devolução, Produto e Quantidade.';
+  if (!idDevolucao && !pedido && !produto && !qtdTexto) {
+    msg.textContent = 'Preencha ao menos um campo.';
     msg.className = 'status-msg status-err';
     return;
   }
@@ -496,20 +539,24 @@ document.getElementById('devolucaoManualRegistrarBtn').addEventListener('click',
     return;
   }
 
-  const qtd = parseQtd(qtdTexto);
-  const local = campoLocal.value.trim().toUpperCase() || null;
+  const qtd = qtdTexto ? parseQtd(qtdTexto) : null;
   const agora = new Date().toISOString();
 
   btn.disabled = true;
   const { error } = await sb.from('devolucao_itens').upsert({
-    unidade: unidadeAtual, id_devolucao: idDevolucao, cod_produto: produto,
-    descricao_produto: campoDescricao.value.trim() || null,
+    unidade: unidadeAtual, id_devolucao: idDevolucao, numero_pedido: pedido,
     cliente: campoCliente.value.trim() || null,
+    cod_produto: produto,
+    descricao_produto: campoDescricao.value.trim() || null,
+    um: campoUm.value.trim() || null,
+    deposito: campoDeposito.value.trim() || null,
+    referencia: campoReferencia.value.trim() || null,
+    lote: campoLote.value.trim() || null,
     qtd_nf: qtd, qtd_fisico: qtd,
-    localizacao: local,
-    conferido_por: nomeUsuarioAtual, conferido_em: agora,
+    conferido_por: qtd === null ? null : nomeUsuarioAtual,
+    conferido_em: qtd === null ? null : agora,
     importado_por: nomeUsuarioAtual, importado_em: agora
-  }, { onConflict: 'unidade,id_devolucao,cod_produto' });
+  }, { onConflict: 'unidade,cod_produto,referencia,lote' });
   btn.disabled = false;
 
   if (error) {
@@ -518,23 +565,30 @@ document.getElementById('devolucaoManualRegistrarBtn').addEventListener('click',
     return;
   }
 
-  // Nº devolução e localização continuam preenchidos pro próximo item --
-  // mesmo comportamento do Controle EXP: quem confere uma devolução inteira
-  // digita vários produtos seguidos, um por um, sem redigitar o que se repete.
+  // Nº Protocolo, Nº Pedido e Cliente continuam preenchidos pro próximo
+  // item -- mesmo comportamento do Controle EXP: quem confere uma
+  // devolução inteira digita vários produtos seguidos, um por um, sem
+  // redigitar o que se repete entre eles.
   campoProduto.value = '';
   campoDescricao.value = '';
+  campoUm.value = '';
+  campoDeposito.value = '';
+  campoReferencia.value = '';
+  campoLote.value = '';
   campoQtd.value = '';
-  campoCliente.value = '';
   campoProduto.focus();
-  msg.textContent = 'Item registrado e já conferido.';
+  msg.textContent = qtd === null ? 'Item registrado (sem quantidade, fica pendente de conferência).' : 'Item registrado e já conferido.';
   msg.className = 'status-msg status-ok';
   await carregarDevolucao();
 });
 
 document.getElementById('devolucaoManualId').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') document.getElementById('devolucaoManualProduto').focus();
+  if (e.key === 'Enter') document.getElementById('devolucaoManualPedido').focus();
 });
-['devolucaoManualProduto', 'devolucaoManualDescricao', 'devolucaoManualQtd', 'devolucaoManualLocal', 'devolucaoManualCliente'].forEach(id => {
+[
+  'devolucaoManualPedido', 'devolucaoManualCliente', 'devolucaoManualProduto', 'devolucaoManualDescricao',
+  'devolucaoManualUm', 'devolucaoManualDeposito', 'devolucaoManualReferencia', 'devolucaoManualLote', 'devolucaoManualQtd'
+].forEach(id => {
   document.getElementById(id).addEventListener('keydown', (e) => {
     if (e.key === 'Enter') document.getElementById('devolucaoManualRegistrarBtn').click();
   });
@@ -557,9 +611,9 @@ function montarHtmlEtiquetasDevolucao(linhas) {
         <span class="etq-marca">DEVOLUÇÃO</span>
         <span class="etq-unidade">${escapeHtml(rotuloUnidade(unidadeAtual))}</span>
       </div>
-      <div class="etq-item">${escapeHtml(item.cod_produto)}</div>
+      <div class="etq-item">${escapeHtml(item.cod_produto || '—')}</div>
       <div class="etq-desc">${escapeHtml(item.descricao_produto || '')}${item.cliente ? ' · ' + escapeHtml(item.cliente) : ''}</div>
-      <div class="etq-qtd">Devolução nº ${escapeHtml(item.id_devolucao)}</div>
+      <div class="etq-qtd">${item.id_devolucao ? 'Protocolo ' + escapeHtml(item.id_devolucao) + ' · ' : ''}${item.numero_pedido ? 'Pedido ' + escapeHtml(item.numero_pedido) : ''}</div>
       <div class="etq-local">${escapeHtml(item.localizacao || '—')}</div>
       <div class="etq-rodape">Impresso por ${escapeHtml(quem)} — ${escapeHtml(impressoEm)}</div>
     </section>`).join('');

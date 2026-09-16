@@ -748,7 +748,7 @@
       <!-- ---- Aba 1: Conferência (o que já foi importado/registrado) ---- -->
       <div id="devolucaoConferencia" class="devolucao-aba">
         <div class="cfg-barra">
-          <input type="text" id="devolucaoBusca" placeholder="Buscar devolução, NF, cliente ou produto..." style="flex:1; min-width:200px;">
+          <input type="text" id="devolucaoBusca" placeholder="Buscar protocolo, pedido, NF, cliente ou produto..." style="flex:1; min-width:200px;">
           <select id="devolucaoFiltroStatus">
             <option value="">Todos os status</option>
             <option value="pendente">Pendente de conferência</option>
@@ -764,10 +764,15 @@
             <thead>
               <tr>
                 <th><input type="checkbox" id="devolucaoTodos"></th>
-                <th>ID Devolução</th>
+                <th>Nº Protocolo</th>
+                <th>Nº Pedido</th>
                 <th>NF Devolução</th>
                 <th>Cliente</th>
-                <th>Produto</th>
+                <th>Item</th>
+                <th>UM</th>
+                <th>Depósito</th>
+                <th>Referência</th>
+                <th>Lote</th>
                 <th>Localização</th>
                 <th>Qtd NF</th>
                 <th>Qtd Físico</th>
@@ -789,23 +794,31 @@
       <div id="devolucaoRegistrar" class="devolucao-aba" style="display:none; padding:0 16px;">
         <div class="modal-text" style="margin-bottom:10px;">
           Digite um item de cada vez -- é a forma mais rápida quando a devolução chegou mas
-          ainda não deu entrada no sistema. Nº da devolução e localização continuam
-          preenchidos pro próximo item. Se depois a NF de verdade for importada com um número
-          diferente, a divergência aparece sozinha.
+          ainda não deu entrada no sistema. Todos os campos são opcionais -- preencha só o que
+          você já sabe agora, o resto dá pra completar depois na Conferência. Nº do Protocolo,
+          Nº Pedido e Cliente continuam preenchidos pro próximo item.
         </div>
         <div class="cfg-barra" style="flex-wrap:wrap;">
-          <input type="text" id="devolucaoManualId" placeholder="Nº Devolução *"
-                 style="width:130px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
-          <input type="text" id="devolucaoManualProduto" placeholder="Produto *"
+          <input type="text" id="devolucaoManualId" placeholder="Nº Protocolo"
                  style="width:120px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
-          <input type="text" id="devolucaoManualDescricao" placeholder="Descrição"
-                 style="width:180px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
-          <input type="text" id="devolucaoManualQtd" placeholder="Quantidade *"
+          <input type="text" id="devolucaoManualPedido" placeholder="Nº Pedido"
                  style="width:110px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
-          <input type="text" id="devolucaoManualLocal" placeholder="Localização"
-                 style="width:130px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
-          <input type="text" id="devolucaoManualCliente" placeholder="Cliente"
+          <input type="text" id="devolucaoManualCliente" placeholder="Nome do Cliente"
                  style="width:150px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <input type="text" id="devolucaoManualProduto" placeholder="Item"
+                 style="width:100px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <input type="text" id="devolucaoManualDescricao" placeholder="Descrição"
+                 style="width:170px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <input type="text" id="devolucaoManualUm" placeholder="UM"
+                 style="width:60px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <input type="text" id="devolucaoManualDeposito" placeholder="Depósito"
+                 style="width:90px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <input type="text" id="devolucaoManualReferencia" placeholder="Referência"
+                 style="width:100px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <input type="text" id="devolucaoManualLote" placeholder="Lote"
+                 style="width:90px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <input type="text" id="devolucaoManualQtd" placeholder="Quantidade"
+                 style="width:100px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
           <button class="btn btn-primary" id="devolucaoManualRegistrarBtn">Registrar</button>
         </div>
         <div class="status-msg" id="devolucaoManualMsg" style="margin-top:6px;"></div>
@@ -2204,10 +2217,13 @@
 
       <div class="modal-text" style="margin-bottom:8px;">
         Precisa de cabeçalho, e uma das colunas tem de ser a unidade — igual ao Almoxarifado e
-        ao Catálogo EXP. Colunas lidas: <b>Unidade (ou Estab), ID Devolução, NF Original,
-        NF Devolução, Data Emissão, Cliente, Cod Produto (ou Item), Descrição Produto
-        (ou Descrição), Qtd NF (ou Quantidade)</b> — em qualquer ordem. Cole a planilha de
-        todas as unidades juntas: o portal separa sozinho pela coluna da unidade.
+        ao Catálogo EXP: <b>Unidade (ou Estab), Item, Descrição, UM, Depósito, Referência, Lote,
+        Localização, Quantidade</b>. Se a devolução já tiver protocolo, NF ou cliente, essas
+        colunas também são lidas (<b>Nº Protocolo, Nº Pedido, NF Original, NF Devolução, Data
+        Emissão, Cliente</b>), mas não são obrigatórias — só Unidade e Item precisam vir
+        preenchidos. Cole a planilha de todas as unidades juntas: o portal separa sozinho pela
+        coluna da unidade, e mesclar de novo a mesma devolução (mesmo Item + Referência + Lote)
+        atualiza em vez de duplicar.
       </div>
 
       <textarea id="devolucaoImportTexto" rows="9" placeholder="Cole aqui as células copiadas do Excel (Ctrl+C na planilha, Ctrl+V aqui)."
