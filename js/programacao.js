@@ -437,6 +437,12 @@ let progEstoqueMap = new Map();
 // Verde quando o saldo cobre o que o pedido precisa, vermelho quando nao tem
 // nada, amarelo quando tem mas nao o suficiente -- e o que decide se o item
 // pode ser separado agora, vira pendencia ou sai parcial.
+//
+// Fica no fim da linha, colado no botao que usa essa informacao, e NAO ao lado
+// de "Qtd". Robson, 16/09/2026: "estoque coloque em outra coluna para nao
+// confundir com a quantidade do pedido" -- duas colunas de numero vizinhas,
+// uma dizendo quanto o cliente pediu e outra quanto tem na prateleira, davam
+// leitura trocada. O cabecalho tambem diz de onde vem o numero: "Estoque ALM".
 function celulaEstoqueHtml(item) {
   const saldo = progEstoqueMap.get(String(item.codigo_item));
   if (saldo == null) return '<td class="num prog-estoque">—</td>';
@@ -587,7 +593,6 @@ function renderSeparacao() {
       <td>${escapeHtml(item.descricao || '—')}</td>
       <td class="loc">${escapeHtml(item.unidade_medida || '—')}</td>
       <td class="num">${escapeHtml(item.quantidade != null ? item.quantidade : '—')}</td>
-      ${celulaEstoqueHtml(item)}
       <td class="loc">${escapeHtml(item.numero_os_op || '—')}</td>
       <td>
         <textarea class="prog-item-obs" data-id="${escapeHtml(item.id)}" rows="1"
@@ -595,6 +600,7 @@ function renderSeparacao() {
       </td>
       <td><span class="cfg-status ${CLASSE_STATUS_ITEM[item.status_separacao] || 'st-pendente'}">${escapeHtml(ROTULO_STATUS_ITEM[item.status_separacao] || 'Pendente')}</span></td>
       <td class="loc">${escapeHtml(momentoSeparacao(item.separado_em))}</td>
+      ${celulaEstoqueHtml(item)}
       <td class="col-acoes">
         <button class="btn prog-alternar" data-id="${escapeHtml(item.id)}">
           ${escapeHtml(ROTULO_BOTAO_SEPARACAO[item.status_separacao] || ROTULO_BOTAO_SEPARACAO.aguardando)}

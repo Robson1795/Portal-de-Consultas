@@ -6864,3 +6864,11 @@ Testado localmente: a consulta saiu com `unidade=106` e `deposito='alm'`; a
 coluna mostrou 2.000 em verde (cobre 1112), 15 em amarelo (duas linhas de
 estoque, 10+5, contra 30 pedidos), 0 em vermelho e "—" pro item sem
 cadastro; cabeçalho e linha com 14 colunas cada. Sem erro no console.
+
+**Ajuste no mesmo dia:** a coluna nasceu logo depois de "Qtd", e duas colunas
+de número vizinhas — uma dizendo quanto o cliente pediu, outra quanto tem na
+prateleira — davam leitura trocada. Robson: *"estoque coloque em outra coluna
+para nao confundir com a quantidade do pedido"*. Foi pro fim da linha, colada
+no botão que usa a informação, e o cabeçalho passou a dizer de onde vem o
+número: **"Estoque ALM"**. Conferido: "Qtd" na 8ª coluna e "Estoque ALM" na
+13ª, sem vizinhança.
