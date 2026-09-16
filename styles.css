@@ -1551,3 +1551,13 @@ td.col-acoes { white-space: nowrap; text-align: center; }
   font-weight: 400;
   margin-left: 8px;
 }
+
+/* Observacao da Separacao cresce junto com o texto (16/09/2026) */
+.prog-item-obs {
+  width: 100%;
+  min-width: 150px;
+  font: inherit;
+  line-height: 1.35;
+  overflow: hidden;
+  resize: none;
+}

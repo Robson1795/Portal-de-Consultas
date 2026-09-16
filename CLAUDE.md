@@ -6649,3 +6649,47 @@ virou 08:00 e foi repassado pro pedido seguinte sem hora própria, "09H" e
 "11H" idem, nenhum veículo inventado. Na Separação, três divisões
 (16/09, 17/09, sem data) na ordem certa, e filtrar 17/09 deixou só os dois
 pedidos daquele dia, com a escolha preservada. Sem erro no console.
+
+## 45. A grade manda a data, e a tela abre no dia que se separa (16/09/2026)
+
+Continuação direta da 44, com o Robson enxugando o que ele quer ver:
+*"quero que pegue só o do dia posterior, tipo hoje pega de amanhã amanhã
+pega do dia 18, nao precisa deixar historico, aqui quero uma coisa mais
+leve, só um espelho, pra facilitar a minha separação"*. E, mostrando o
+topo da planilha: *"só puxe da data e pronto"*.
+
+**A data sai do título.** A grade já vem com "PEDIDOS PROGRAMADOS 17/09"
+escrito em cima. `dataDoTituloPlanilhaB()` lê dali, e quando acha, essa
+data **manda** — inclusive por cima da digitada no modal, que é justamente
+a que vem errada com mais frequência (colar a grade de amanhã com a data de
+hoje ainda no campo). O ano não está no título: sai da data do formulário
+quando ela existe, senão do relógio. O campo de data deixou de ser
+obrigatório quando o título traz o dia, e a mensagem de sucesso agora diz
+de que dia é a grade que entrou — sem isso, ninguém percebe que importou
+para o dia errado.
+
+**Sem histórico na tela.** A aba Carregamento escondia nada: um bloco
+"Carregamento 08/09/2026" ainda aparecia. Agora dia que já passou não é
+montado. Some da **vista**, não do banco.
+
+**A Separação abre no próximo dia de carregamento** (o primeiro dia depois
+de hoje que tem pedido na grade) em vez de "Todas as datas" — é o que ele
+vai separar hoje. Só na primeira montagem: depois disso a escolha é dele, e
+`renderSeparacao()` roda a cada tecla na busca, então repetir o padrão
+puxaria o filtro de volta no meio da digitação. Dia passado continua
+alcançável pelo seletor: item pendente de ontem é trabalho que não foi
+feito, esconder seria perder serviço.
+
+**Observação que cresce.** *"DEIXE MALEAVEL CONFORME A ESCRITA AUMENTA ESSE
+RETANGULO"*, com "SEM SALDO PEDID..." cortado no campo. Virou `textarea`
+de uma linha que cresce em altura conforme o texto — e o recado inteiro é
+justamente o que quem separa precisa ler. Aba fechada não tem layout e
+`scrollHeight` vem 0; sem guarda, o campo travaria em altura zero até o
+próximo render.
+
+Testado localmente: título "PEDIDOS PROGRAMADOS 17/09" virou 2026-09-17 e
+texto sem título devolveu null (cai na data digitada); bloco de 08/09 sumiu
+da aba Carregamento ficando só hoje e amanhã; a Separação abriu com o
+seletor já em 17/09 e só aquele grupo na lista; e o campo de observação foi
+de 26px com "ok" para 90px com o texto longo, crescendo ao digitar. Sem
+erro no console.

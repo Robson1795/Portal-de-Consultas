@@ -319,6 +319,15 @@ function dataCurta(data) {
   return (ano && mes && dia) ? `${dia}/${mes}` : String(data);
 }
 
+// Hoje no mesmo formato de `data_carregamento` ("YYYY-MM-DD"), pelo relogio
+// da maquina. Aqui e so pra ESCONDER dia que ja passou -- se o relogio de
+// alguem estiver um dia torto, o pior que acontece e ver um dia a mais ou a
+// menos na tela; nada e gravado a partir disto.
+function hojeIso() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 // Com ano: o titulo da divisao de carregamento diz o dia inteiro, pra nao
 // deixar duvida de qual 17/09 e quando a lista pega mais de um mes.
 function dataLonga(data) {
@@ -402,6 +411,8 @@ function compararPorUrgencia(pedidoA, pedidoB) {
 // o titulo carregamento do dia 17/09/2026". Em vez de uma aba nova por dia
 // (que teria de ser recriada a cada planilha colada), o seletor filtra por dia
 // e a lista sai dividida por dia -- mesmo efeito, sem aba que nasce e morre.
+let filtroEmbarquePadraoAplicado = false;
+
 function preencherFiltroEmbarque(linhas) {
   const sel = document.getElementById('progFiltroEmbarque');
   const datas = [...new Set(linhas
@@ -418,6 +429,16 @@ function preencherFiltroEmbarque(linhas) {
   const escolhido = sel.value;
   sel.innerHTML = html;
   sel.value = [...sel.options].some(o => o.value === escolhido) ? escolhido : '';
+
+  // Abre no proximo dia de carregamento. Robson, 16/09/2026: "quero que pegue
+  // só o do dia posterior, tipo hoje pega de amanhã amanhã pega do dia 18" --
+  // e o que ele vai separar HOJE. So na primeira montagem: depois disso a
+  // escolha e dele, e re-render (cada tecla na busca) nao pode puxar de volta.
+  if (!filtroEmbarquePadraoAplicado && datas.length) {
+    const proximo = datas.find(d => d > hojeIso());
+    if (proximo) sel.value = proximo;
+    filtroEmbarquePadraoAplicado = true;
+  }
 }
 
 function renderSeparacao() {
@@ -497,8 +518,8 @@ function renderSeparacao() {
       <td class="num">${escapeHtml(item.quantidade != null ? item.quantidade : '—')}</td>
       <td class="loc">${escapeHtml(item.numero_os_op || '—')}</td>
       <td>
-        <input type="text" class="prog-item-obs" data-id="${escapeHtml(item.id)}"
-               value="${escapeHtml(item.observacao || '')}" placeholder="—" style="width:130px;">
+        <textarea class="prog-item-obs" data-id="${escapeHtml(item.id)}" rows="1"
+                  placeholder="—">${escapeHtml(item.observacao || '')}</textarea>
       </td>
       <td><span class="cfg-status ${CLASSE_STATUS_ITEM[item.status_separacao] || 'st-pendente'}">${escapeHtml(ROTULO_STATUS_ITEM[item.status_separacao] || 'Pendente')}</span></td>
       <td class="col-acoes">
@@ -519,7 +540,29 @@ function renderSeparacao() {
       <td colspan="12">${escapeHtml(titulo)} <span class="prog-grupo-contagem">${escapeHtml(contagem)}</span></td>
     </tr>` + grupo.linhas.map(linhaHtml).join('');
   }).join('');
+
+  ajustarTodasAlturasObs();
 }
+
+// Robson, 16/09/2026, com "SEM SALDO PEDID..." cortado no campo: "deixe
+// maleavel conforme a escrita aumenta esse retangulo". Campo de uma linha so
+// escondia o resto do recado -- que e justamente o que quem separa precisa ler.
+function ajustarAlturaObs(campo) {
+  campo.style.height = 'auto';
+  // Aba fechada nao tem layout: scrollHeight vem 0 e travaria o campo em
+  // altura zero ate o proximo render. Sem medida, deixa o CSS mandar.
+  const altura = campo.scrollHeight;
+  if (altura > 0) campo.style.height = altura + 'px';
+  else campo.style.removeProperty('height');
+}
+
+function ajustarTodasAlturasObs() {
+  document.querySelectorAll('#progItensBody .prog-item-obs').forEach(ajustarAlturaObs);
+}
+
+document.getElementById('progItensBody').addEventListener('input', (e) => {
+  if (e.target.classList.contains('prog-item-obs')) ajustarAlturaObs(e.target);
+});
 
 document.getElementById('progBusca').addEventListener('input', renderSeparacao);
 document.getElementById('progFiltroStatus').addEventListener('change', renderSeparacao);
@@ -624,7 +667,13 @@ function observacaoCritica(texto) {
 }
 
 function renderCarregamento() {
-  const naGrade = progPedidos.filter(p => p.horario_carregamento || p.tipo_veiculo);
+  // Dia que ja passou sai da tela. Robson, 16/09/2026, com um bloco de
+  // "Carregamento 08/09/2026" ainda aparecendo: "nao precisa deixar historico,
+  // aqui quero uma coisa mais leve, só um espelho". Some da VISTA, nao do
+  // banco -- o pedido antigo continua lá, e volta se a data dele mudar.
+  const hoje = hojeIso();
+  const naGrade = progPedidos.filter(p => (p.horario_carregamento || p.tipo_veiculo)
+    && (!p.data_carregamento || p.data_carregamento >= hoje));
   const alvo = document.getElementById('progGrade');
   const vazio = document.getElementById('progGradeVazio');
   vazio.style.display = naGrade.length ? 'none' : 'block';
@@ -834,6 +883,20 @@ function lerColadoProg(texto) {
   return texto.split(/\r?\n/).filter(l => l.trim()).map(l => l.split('\t').map(c => c.trim()));
 }
 
+// A grade ja vem com o dia escrito no topo: "PEDIDOS PROGRAMADOS 17/09".
+// Robson, 16/09/2026: "só puxe da data e pronto" -- digitar a data de novo no
+// modal e uma chance a mais de colar a grade de amanha com a data de hoje.
+// O ano nao esta no titulo; sai da data do formulario quando ela existe, e do
+// relogio da maquina quando nao.
+function dataDoTituloPlanilhaB(texto, dataRef) {
+  const m = String(texto || '').match(/pedidos\s+programados\s+(\d{1,2})\s*\/\s*(\d{1,2})/i);
+  if (!m) return null;
+  const dia = m[1].padStart(2, '0');
+  const mes = m[2].padStart(2, '0');
+  const ano = dataRef ? String(dataRef).slice(0, 4) : hojeIso().slice(0, 4);
+  return `${ano}-${mes}-${dia}`;
+}
+
 document.getElementById('progImportConfirmBtn').addEventListener('click', async () => {
   const texto = document.getElementById('progImportTexto').value;
   const dataRef = document.getElementById('progImportData').value;
@@ -844,7 +907,12 @@ document.getElementById('progImportConfirmBtn').addEventListener('click', async 
     msg.className = 'status-msg status-err';
     return;
   }
-  if (!dataRef) {
+  // A grade traz o dia no proprio titulo; quando traz, ele manda -- inclusive
+  // por cima da data digitada, que e justamente a que costuma vir errada
+  // (colar a grade de amanha com a data de hoje ainda no campo).
+  const dataTitulo = progImportAba === 'B' ? dataDoTituloPlanilhaB(texto, dataRef) : null;
+  const dataPlanilha = dataTitulo || dataRef;
+  if (!dataPlanilha) {
     msg.textContent = 'Informe a data de carregamento desta planilha.';
     msg.className = 'status-msg status-err';
     return;
@@ -854,8 +922,8 @@ document.getElementById('progImportConfirmBtn').addEventListener('click', async 
   msg.className = 'status-msg';
 
   const resultado = progImportAba === 'A'
-    ? await importarPlanilhaA(lerColadoProg(texto), dataRef)
-    : await importarPlanilhaB(lerColadoProg(texto), dataRef);
+    ? await importarPlanilhaA(lerColadoProg(texto), dataPlanilha)
+    : await importarPlanilhaB(lerColadoProg(texto), dataPlanilha);
 
   if (!resultado) return;
   msg.textContent = resultado;
@@ -1189,7 +1257,7 @@ async function importarPlanilhaB(linhas, dataRef) {
     const detalhe = comVariasCargas.map(([num, n]) => `${num} (${n})`).join(', ');
     avisos.push(`${comVariasCargas.length} pedido(s) em mais de uma carga — mostrando só a mais próxima: ${detalhe}`);
   }
-  return `${lista.length} pedido(s) na grade de carregamento.`
+  return `${lista.length} pedido(s) na grade de carregamento de ${dataLonga(dataRef)}.`
     + (avisos.length ? ' ' + avisos.join('; ') + '.' : '');
 }
 
