@@ -573,6 +573,7 @@ function pedidosDoItemHtml(codigoItem) {
             <th style="text-align:left; padding:4px 6px; color:var(--muted); font-size:11px; text-transform:uppercase;">Pedido</th>
             <th style="text-align:left; padding:4px 6px; color:var(--muted); font-size:11px; text-transform:uppercase;">Cliente</th>
             <th style="text-align:right; padding:4px 6px; color:var(--muted); font-size:11px; text-transform:uppercase;">Qtd. pedida</th>
+            <th style="text-align:left; padding:4px 6px; color:var(--muted); font-size:11px; text-transform:uppercase;">Implantação</th>
             <th style="text-align:left; padding:4px 6px; color:var(--muted); font-size:11px; text-transform:uppercase;">Embarque</th>
           </tr>
         </thead>
@@ -582,6 +583,7 @@ function pedidosDoItemHtml(codigoItem) {
               <td style="padding:4px 6px; font-weight:600;">${escapeHtml(l.numero_pedido || '—')}</td>
               <td style="padding:4px 6px;">${escapeHtml(l.nome_abreviado || '—')}</td>
               <td style="padding:4px 6px; text-align:right;">${numeroBR(l.qt_pedido)}</td>
+              <td style="padding:4px 6px;">${escapeHtml(l.emissao || '—')}</td>
               <td style="padding:4px 6px;">${escapeHtml(l.data_embarque || '—')}</td>
             </tr>`).join('')}
         </tbody>
@@ -589,6 +591,7 @@ function pedidosDoItemHtml(codigoItem) {
           <tr style="border-top:2px solid var(--border);">
             <td style="padding:6px; font-weight:700;" colspan="2">Total a atender</td>
             <td style="padding:6px; text-align:right; font-weight:700;">${numeroBR(ordenadas.reduce((soma, l) => soma + (Number(l.qt_pedido) || 0), 0))}</td>
+            <td></td>
             <td></td>
           </tr>
         </tfoot>

@@ -6326,3 +6326,19 @@ Testado localmente: digitar já fica verde antes de sair do campo; salvar
 mantém verde e preenche o tooltip com quem/quando; apagar o texto volta ao
 normal (na hora, e depois de salvar); recarregar a lista (`renderAnalise()`
 do zero) mantém o estado certo por item. Sem erro no console.
+
+## 36. Data de implantação na lista "Pedidos que precisam deste item" (16/09/2026)
+
+O Robson, olhando o modal de "Outras unidades" (que já lista, embaixo, os
+pedidos que precisam daquele item — seção "Compartilhar o modal de
+comparação/sugestão"): *"aqui preciso também o dia que o pedido foi
+implantado"*.
+
+`pedidosDoItemHtml()` (js/analise.js) ganhou a coluna **Implantação**, entre
+Qtd. pedida e Embarque — usa `emissao`, que já vinha de `analise_demanda`
+(`select('*')`, sem precisar de consulta nova) mas não aparecia em lugar
+nenhum da tela. Mesmo texto/fonte das outras colunas da tabela, sem CSS
+novo.
+
+Testado localmente: dois pedidos diferentes, cada um com sua data de
+emissão, aparecem certos na coluna nova. Sem erro no console.
