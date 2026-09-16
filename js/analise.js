@@ -190,6 +190,7 @@ async function carregarAnalise() {
   await carregarSaldoOutrasUnidades();
   renderAnalise();
   propagarObservacaoParaSeparacao(); // fundo, não bloqueia a tela
+  propagarStatusParaSeparacao();     // idem
 }
 
 // A observação ("já solicitei compra", "RESSUPRIMENTO"...) sobrevive à
@@ -283,6 +284,61 @@ async function propagarObservacaoParaSeparacao() {
       .in('id', ids);
     if (error) console.warn('Não foi possível propagar observação pra Separação:', item.codigo_item, error.message);
   }
+}
+
+// "quando eu jogar a planilha dos pedidos na aba de analise de compras, e
+// na aba de separação estiver como pendente, pode mudar os status para
+// separado e reportado" (16/09/2026). A planilha da Análise não tem coluna
+// de Status (diferente da Planilha A da Separação) -- o sinal de "já foi
+// atendido" é Qt. Atendida cobrir a Qt. Pedida inteira (confirmado com o
+// Robson antes de implementar: "Qtd Atendida >= Qtd Pedida").
+//
+// Compara por (numero_pedido, codigo_item), não só por item -- diferente
+// de propagarObservacaoParaSeparacao() (que é por item, porque a nota é do
+// ITEM em falta, qualquer pedido). Aqui é o PEDIDO específico que o ERP diz
+// que já foi atendido; marcar OUTRO pedido do mesmo item como separado
+// seria inventar um fato que a planilha não disse.
+async function propagarStatusParaSeparacao() {
+  const atendidos = analiseDemanda.filter(l => {
+    const pedida = Number(l.qt_pedido) || 0;
+    const atendida = Number(l.qt_atendida) || 0;
+    return pedida > 0 && atendida >= pedida;
+  });
+  const numerosPedido = [...new Set(atendidos.map(l => l.numero_pedido).filter(Boolean))];
+  if (!numerosPedido.length || !unidadeAtual) return;
+
+  const { data: pedidosMatch, error: erroPedidos } = await sb.from('pedidos')
+    .select('id, numero_pedido').eq('unidade', unidadeAtual).in('numero_pedido', numerosPedido);
+  if (erroPedidos || !pedidosMatch || !pedidosMatch.length) return;
+
+  const pedidoIdPorNumero = new Map(
+    pedidosMatch.map(p => [chavePedidoCarregamento(p.numero_pedido), p.id]));
+
+  const { data: candidatos, error: erroItens } = await sb.from('pedido_itens')
+    .select('id, pedido_id, codigo_item')
+    .in('pedido_id', pedidosMatch.map(p => p.id))
+    .eq('status_separacao', 'aguardando');
+  if (erroItens || !candidatos || !candidatos.length) return;
+
+  const idsParaAtualizar = new Set();
+  atendidos.forEach(l => {
+    const pedidoId = pedidoIdPorNumero.get(chavePedidoCarregamento(l.numero_pedido));
+    if (!pedidoId) return;
+    const chaveItem = normalizaCodigoItem(l.codigo_item);
+    candidatos
+      .filter(c => c.pedido_id === pedidoId && normalizaCodigoItem(c.codigo_item) === chaveItem)
+      .forEach(c => idsParaAtualizar.add(c.id));
+  });
+  if (!idsParaAtualizar.size) return;
+
+  // Mesmas colunas que alternarItemSeparado() (js/programacao.js) grava pro
+  // mesmo status -- separado_por é uuid (auth.users), por isso userIdAtual
+  // e não nomeUsuarioAtual. O gatilho recalcular_status_pedido() (banco)
+  // atualiza pedidos.status_geral sozinho, não precisa fazer nada aqui.
+  const { error } = await sb.from('pedido_itens').update({
+    status_separacao: 'separado', separado_por: userIdAtual, separado_em: new Date().toISOString()
+  }).in('id', [...idsParaAtualizar]);
+  if (error) console.warn('Não foi possível sincronizar status pra Separação:', error.message);
 }
 
 // Pros itens em falta, procura saldo nas OUTRAS unidades: o Robson pediu pra

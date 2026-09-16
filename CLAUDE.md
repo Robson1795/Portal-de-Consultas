@@ -6414,3 +6414,34 @@ Testado localmente (mocks de `sb.from`, sem depender de login): item em
 falta com observação preenche o item correspondente que estava vazio;
 item já separado com o mesmo código não é tocado; item de outro código com
 observação própria não é sobrescrito. Sem erro no console.
+
+### Status também sincroniza: Qtd Atendida cobrindo Qtd Pedida (16/09/2026)
+
+O Robson pediu mais uma comunicação entre as duas telas: *"quando eu jogar
+a planilha dos pedidos na aba de analise de compras, e na aba de separação
+estiver como pendente, pode mudar os status para separado e reportado"*.
+
+A planilha da Análise não tem coluna de Status (diferente da Planilha A da
+Separação, que já traz "SEPARADO/REPORTADO" pronto) — só Qtd Pedida e Qtd
+Atendida. Perguntado o que sinaliza "já foi separado" nessa planilha:
+confirmado que é **Qtd Atendida cobrir a Qtd Pedida inteira**.
+
+`propagarStatusParaSeparacao()` compara por **(número do pedido + item)**,
+não só por item — diferente de `propagarObservacaoParaSeparacao()` (que é
+por item, porque a nota vale pra qualquer pedido daquele item em falta).
+Aqui é o PEDIDO ESPECÍFICO que a planilha diz que foi atendido; marcar
+outro pedido do mesmo item como separado inventaria um fato que a planilha
+não disse. Mesmas colunas que `alternarItemSeparado()`
+(js/programacao.js) já grava pro mesmo status (`separado_por`/
+`separado_em`) — `separado_por` é `uuid` (referencia `auth.users`), por
+isso usa `userIdAtual`, não `nomeUsuarioAtual`. O gatilho
+`recalcular_status_pedido()` (banco, fase02) atualiza
+`pedidos.status_geral` sozinho — não precisa fazer nada a mais aqui.
+
+Roda no mesmo lugar da propagação de observação (fim de
+`carregarAnalise()`), então já dispara sozinho assim que a planilha é
+colada (via `gravarAnalise() → carregarAnalise()`).
+
+Testado localmente: pedido com item 10/10 atendido muda pra "separado";
+pedido com item 5/10 (parcial) não é tocado; item diferente do mesmo
+pedido não é confundido com o item que foi atendido. Sem erro no console.
