@@ -6371,3 +6371,46 @@ Testado localmente (mocks de `sb.from`, sem depender de login): observação
 salva e aparece no mapa em memória; excluir o pedido remove os itens da
 tela (volta a "nada parado"), zera a lista em memória e chama o delete da
 observação correspondente. Sem erro no console.
+
+## 38. Observação editável na Separação + comunicação com Análise de Compras (16/09/2026)
+
+O Robson, olhando a lista "Itens para separar" (`pedido_itens`, aba
+Separação da Programação): *"aqui em observação deixa editavel"*. A coluna
+já existia (`item.observacao`), só que era texto fixo — virou `<input>`,
+salva ao sair do campo, mesmo padrão do resto do portal.
+
+Na sequência, olhando a Análise de Compras lado a lado com a Separação:
+*"faça a comunicação com analises de compra e os itens que nao tenho ja
+pode preencher a observação automatica na aba de separação"*.
+
+`propagarObservacaoParaSeparacao()` (js/analise.js) espelha
+`limparObservacoesResolvidas()` que já existia logo acima (mesmo filtro,
+invertido): item em falta (`comprar > 0`) que já tem observação anotada na
+Análise (ex.: "PEDIDO 313.412") propaga essa mesma nota pro(s) item(ns)
+correspondente(s) em `pedido_itens` — quem está separando vê que a compra
+já está andamento, sem precisar abrir a outra aba.
+
+- ⚠️ **Nunca sobrescreve** uma observação que já exista em `pedido_itens`
+  — só preenche o que está vazio (`observacao.is.null,observacao.eq.`).
+  Testado: item com nota própria numa Separação não é tocado.
+- ⚠️ **Só item ainda `aguardando`** — um item já `separado`/`reportado` não
+  precisa mais do aviso, e reescrever o texto dele agora seria mexer num
+  registro que já virou fato. Testado: item separado fica intocado mesmo
+  batendo o código.
+- Roda em dois momentos: ao **carregar** a Análise de Compras (fundo, não
+  bloqueia a tela) e logo depois de **salvar** uma observação nova (efeito
+  quase imediato, sem esperar o próximo F5) — os dois fire-and-forget, sem
+  `await` no chamador.
+- Falha silenciosa (`console.warn`), mesmo tratamento de
+  `limparObservacoesResolvidas()`: é limpeza de fundo entre duas telas, não
+  uma ação que a pessoa pediu na hora — não pode virar mensagem de erro no
+  meio do trabalho dela.
+- Corrigido de passagem: `limparObservacoesResolvidas()` já existia e
+  resetava `analiseNotas` sem os campos `atualizado_em`/`atualizado_por`
+  (adicionados na seção 35) quando uma observação era limpa sozinha —
+  agora preserva o formato completo do mapa.
+
+Testado localmente (mocks de `sb.from`, sem depender de login): item em
+falta com observação preenche o item correspondente que estava vazio;
+item já separado com o mesmo código não é tocado; item de outro código com
+observação própria não é sobrescrito. Sem erro no console.

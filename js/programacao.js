@@ -407,7 +407,10 @@ function renderSeparacao() {
       <td class="loc">${escapeHtml(item.unidade_medida || '—')}</td>
       <td class="num">${escapeHtml(item.quantidade != null ? item.quantidade : '—')}</td>
       <td class="loc">${escapeHtml(item.numero_os_op || '—')}</td>
-      <td>${escapeHtml(item.observacao || '—')}</td>
+      <td>
+        <input type="text" class="prog-item-obs" data-id="${escapeHtml(item.id)}"
+               value="${escapeHtml(item.observacao || '')}" placeholder="—" style="width:130px;">
+      </td>
       <td><span class="cfg-status ${CLASSE_STATUS_ITEM[item.status_separacao] || 'st-pendente'}">${escapeHtml(ROTULO_STATUS_ITEM[item.status_separacao] || 'Pendente')}</span></td>
       <td class="col-acoes">
         <button class="btn prog-alternar" data-id="${escapeHtml(item.id)}">
@@ -424,6 +427,28 @@ document.getElementById('progItensBody').addEventListener('click', async (e) => 
   const btn = e.target.closest('.prog-alternar');
   if (!btn) return;
   await alternarItemSeparado(btn.dataset.id, btn);
+});
+
+// Observação editável (Robson, 16/09/2026: "aqui em observação deixa
+// editavel") -- salva ao sair do campo, mesmo padrão do resto do portal.
+document.getElementById('progItensBody').addEventListener('focusout', async (e) => {
+  const input = e.target.closest('.prog-item-obs');
+  if (!input) return;
+  const id = input.dataset.id;
+  const item = progItens.find(i => String(i.id) === String(id));
+  if (!item) return;
+  const novo = input.value.trim();
+  if (novo === (item.observacao || '')) return; // nada mudou
+
+  input.disabled = true;
+  const { error } = await sb.from('pedido_itens').update({ observacao: novo || null }).eq('id', id);
+  input.disabled = false;
+  if (error) {
+    falhaEscrita(error.message);
+    input.value = item.observacao || '';
+    return;
+  }
+  item.observacao = novo || null;
 });
 
 async function alternarItemSeparado(itemId, botao) {

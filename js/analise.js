@@ -189,6 +189,7 @@ async function carregarAnalise() {
   await limparObservacoesResolvidas();
   await carregarSaldoOutrasUnidades();
   renderAnalise();
+  propagarObservacaoParaSeparacao(); // fundo, não bloqueia a tela
 }
 
 // A observação ("já solicitei compra", "RESSUPRIMENTO"...) sobrevive à
@@ -235,8 +236,53 @@ async function limparObservacoesResolvidas() {
   resolvidos.forEach(item => {
     if (!limpos.has(item.codigo_item)) return;
     const atual = analiseNotaDoItem(item.codigo_item);
-    analiseNotas.set(item.codigo_item, { ignorado: atual.ignorado, observacao: '' });
+    analiseNotas.set(item.codigo_item, { ignorado: atual.ignorado, observacao: '', atualizado_em: null, atualizado_por: '' });
   });
+}
+
+// "faça a comunicação com analises de compra e os itens que nao tenho ja
+// pode preencher a observação automatica na aba de separação" (16/09/2026):
+// item em falta (comprar > 0) com observação anotada aqui (ex.: "PEDIDO
+// 313.412") propaga sozinho pro item correspondente da aba Separação --
+// quem separa vê que já tem compra andamento sem precisar abrir a Análise.
+//
+// Espelha limparObservacoesResolvidas() logo acima -- mesmo filtro
+// (comprar > 0 em vez de <= 0), mesma ideia de rodar de fundo a cada carga.
+// ⚠️ NUNCA sobrescreve uma observação que já exista em pedido_itens -- só
+// preenche o que está vazio, e só pedido ainda 'aguardando' (item já
+// separado não precisa mais do aviso, e mudar o texto dele agora seria
+// reescrever um registro que já virou fato).
+async function propagarObservacaoParaSeparacao() {
+  const emFalta = agruparAnalise()
+    .filter(l => l.comprar > 0 && analiseNotaDoItem(l.codigo_item).observacao);
+  if (!emFalta.length || !unidadeAtual) return;
+
+  const { data: pedidosUnidade, error: erroPedidos } = await sb.from('pedidos')
+    .select('id').eq('unidade', unidadeAtual);
+  if (erroPedidos || !pedidosUnidade || !pedidosUnidade.length) return;
+
+  const { data: candidatos, error: erroItens } = await sb.from('pedido_itens')
+    .select('id, codigo_item')
+    .in('pedido_id', pedidosUnidade.map(p => p.id))
+    .eq('status_separacao', 'aguardando')
+    .or('observacao.is.null,observacao.eq.');
+  if (erroItens || !candidatos || !candidatos.length) return;
+
+  // Uma chamada por item em falta (não por linha): dezenas de itens, não
+  // milhares -- e cada um pode acertar várias linhas de pedido_itens de
+  // uma vez (.in). Falha silenciosa igual a limparObservacoesResolvidas():
+  // é limpeza de fundo, não uma ação que a pessoa pediu na hora.
+  for (const item of emFalta) {
+    const chave = normalizaCodigoItem(item.codigo_item);
+    const ids = candidatos
+      .filter(c => normalizaCodigoItem(c.codigo_item) === chave)
+      .map(c => c.id);
+    if (!ids.length) continue;
+    const { error } = await sb.from('pedido_itens')
+      .update({ observacao: analiseNotaDoItem(item.codigo_item).observacao })
+      .in('id', ids);
+    if (error) console.warn('Não foi possível propagar observação pra Separação:', item.codigo_item, error.message);
+  }
 }
 
 // Pros itens em falta, procura saldo nas OUTRAS unidades: o Robson pediu pra
@@ -1005,6 +1051,7 @@ document.getElementById('analiseBody').addEventListener('focusout', async (e) =>
     : '';
   msg.textContent = `Observação do item ${codigoItem} salva.`;
   msg.className = 'status-msg status-ok';
+  propagarObservacaoParaSeparacao(); // fundo -- já leva pra Separação sem esperar a próxima carga
 });
 
 document.getElementById('analiseBody').addEventListener('keydown', (e) => {
