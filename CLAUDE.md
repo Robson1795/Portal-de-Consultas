@@ -6605,3 +6605,47 @@ com o filtro `ordem_carregamento is null`; o que não tinha data anotada não
 foi tocado, e "SEM SALDO" / "aguardando definição de aço" não viraram data.
 Na ordenação, o pedido de 17/09 ficou atrás de quem tem 16/09 com hora e à
 frente de todos os sem data. Sem erro no console.
+
+## 44. Programação por dia de carregamento (16/09/2026)
+
+Três pedidos do Robson no mesmo assunto, todos sobre enxergar o dia:
+
+1. *"na aba separação pode colocar meio que uma divisao só dos pedidos que
+   carregam amanhã, ou pode colocar outra aba de separaçaõ com o titulo
+   carregamento do dia 17/09/2026"*
+2. *"A data nessa aba do carregamento é importante tambem"*
+3. *"pode deixar da melhor forma possivel para o meu pessoal separar o
+   pedido"*
+
+**Separação.** Em vez de uma aba nova por dia (que teria de nascer e morrer
+a cada planilha colada), a lista sai **dividida por dia** — uma faixa
+`Carregamento 17/09/2026` com `N pedido(s) · N item(ns)` abrindo cada
+bloco — mais um seletor `#progFiltroEmbarque` pra isolar um dia só. Como a
+lista já vinha ordenada por data (seção 39), cada dia é um bloco contínuo:
+basta abrir a divisão quando a data muda. As opções do seletor saem da
+lista **antes** dos filtros, senão escolher um dia tiraria os outros do
+próprio seletor, sem caminho de volta; e a escolha sobrevive aos
+re-renders (`renderSeparacao()` roda a cada tecla na busca).
+
+**Carregamento.** O agrupamento de topo era o **veículo**, e o dia não
+aparecia em lugar nenhum — ruim já com um dia, pior quando a grade acumula
+vários. Agora o topo é o **dia** (`Carregamento 17/09/2026`) e o horário
+segue como subgrupo, igual à planilha de origem, que é literalmente
+"PEDIDOS PROGRAMADOS 17/09" com blocos de hora. O veículo não se perde:
+virou etiqueta no card, ao lado do frete.
+
+**E o bug que apareceu no meio disso:** o print da aba Carregamento mostrava
+blocos chamados "08H" com o horário vazio ("—") logo abaixo. A coluna de
+bloco da planilha às vezes traz o veículo ("TRUCK 8,5M - ENTREGA 09/09") e
+às vezes só a hora ("08H") — na CONTROLE DE PATIO do Robson vem a hora. Ler
+isso como nome de veículo deixava **todo pedido sem horário**, o que também
+tirava da ordenação o critério que ele pediu desde o começo ("sequencia de
+pedido conforme horario de agendamento dos caminhões"). Agora
+`importarPlanilhaB()` testa a coluna com `horarioDoTextoProg()` primeiro: se
+o texto é hora, é hora.
+
+Testado localmente com a grade real do print (hora na 1ª coluna): "08H"
+virou 08:00 e foi repassado pro pedido seguinte sem hora própria, "09H" e
+"11H" idem, nenhum veículo inventado. Na Separação, três divisões
+(16/09, 17/09, sem data) na ordem certa, e filtrar 17/09 deixou só os dois
+pedidos daquele dia, com a escolha preservada. Sem erro no console.

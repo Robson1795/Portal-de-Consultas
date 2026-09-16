@@ -1538,3 +1538,16 @@ td.col-acoes { white-space: nowrap; text-align: center; }
   border-color: var(--ok-borda) !important;
   color: var(--ok-texto);
 }
+
+/* Divisao por dia de carregamento na Separacao (16/09/2026) */
+.prog-grupo td {
+  background: var(--azul-fundo);
+  border-top: 2px solid var(--azul-borda);
+  color: var(--blue-texto);
+  font-weight: 700;
+}
+.prog-grupo-contagem {
+  color: var(--muted);
+  font-weight: 400;
+  margin-left: 8px;
+}

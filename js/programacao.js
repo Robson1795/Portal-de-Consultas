@@ -319,6 +319,14 @@ function dataCurta(data) {
   return (ano && mes && dia) ? `${dia}/${mes}` : String(data);
 }
 
+// Com ano: o titulo da divisao de carregamento diz o dia inteiro, pra nao
+// deixar duvida de qual 17/09 e quando a lista pega mais de um mes.
+function dataLonga(data) {
+  if (!data) return '—';
+  const [ano, mes, dia] = String(data).split('-');
+  return (ano && mes && dia) ? `${dia}/${mes}/${ano}` : String(data);
+}
+
 // ---- Prioridade (a razao de ser da aba Carregamento) ------------------------
 // A view vw_pedidos_prioridade ja calcula tudo isso no banco (mesmo lugar
 // pra todo mundo, sem depender do relogio do navegador de cada um). Aqui so
@@ -389,6 +397,29 @@ function compararPorUrgencia(pedidoA, pedidoB) {
 }
 
 // ---- Aba 1: Separação -------------------------------------------------------
+// Robson, 16/09/2026: "na aba separação pode colocar meio que uma divisao só
+// dos pedidos que carregam amanhã, ou pode colocar outra aba de separaçaõ com
+// o titulo carregamento do dia 17/09/2026". Em vez de uma aba nova por dia
+// (que teria de ser recriada a cada planilha colada), o seletor filtra por dia
+// e a lista sai dividida por dia -- mesmo efeito, sem aba que nasce e morre.
+function preencherFiltroEmbarque(linhas) {
+  const sel = document.getElementById('progFiltroEmbarque');
+  const datas = [...new Set(linhas
+    .map(({ pedido }) => pedido && pedido.data_carregamento)
+    .filter(Boolean))].sort();
+  const temSemData = linhas.some(({ pedido }) => !(pedido && pedido.data_carregamento));
+
+  const html = ['<option value="">Todas as datas</option>']
+    .concat(datas.map(d => `<option value="${escapeHtml(d)}">Carregamento ${escapeHtml(dataLonga(d))}</option>`))
+    .concat(temSemData ? ['<option value="sem">Sem data de embarque</option>'] : [])
+    .join('');
+  if (sel.innerHTML === html) return; // sem novidade: nao mexe, pra nao perder a escolha
+
+  const escolhido = sel.value;
+  sel.innerHTML = html;
+  sel.value = [...sel.options].some(o => o.value === escolhido) ? escolhido : '';
+}
+
 function renderSeparacao() {
   const total = progItens.length;
   const concluidos = progItens.filter(itemConcluido).length;
@@ -403,6 +434,16 @@ function renderSeparacao() {
     const pedido = progPedidos.find(p => p.id === i.pedido_id);
     return { item: i, pedido };
   });
+
+  // As opcoes saem da lista INTEIRA, antes de qualquer filtro -- senao escolher
+  // um dia tiraria os outros dias do proprio seletor e nao teria como voltar.
+  preencherFiltroEmbarque(linhas);
+  const filtroEmbarque = document.getElementById('progFiltroEmbarque').value;
+  if (filtroEmbarque === 'sem') {
+    linhas = linhas.filter(({ pedido }) => !(pedido && pedido.data_carregamento));
+  } else if (filtroEmbarque) {
+    linhas = linhas.filter(({ pedido }) => pedido && pedido.data_carregamento === filtroEmbarque);
+  }
 
   if (busca) {
     linhas = linhas.filter(({ item, pedido }) =>
@@ -434,7 +475,17 @@ function renderSeparacao() {
   const ROTULO_STATUS_ITEM = { aguardando: 'Pendente', separado: 'Separado', reportado: 'Separado', falta_reporte: 'Falta reporte' };
   const CLASSE_STATUS_ITEM = { aguardando: 'st-pendente', separado: 'st-ativo', reportado: 'st-ativo', falta_reporte: 'st-atencao' };
 
-  corpo.innerHTML = linhas.map(({ item, pedido }) => `
+  // A lista ja vem ordenada por dia de carregamento, entao cada dia e um bloco
+  // continuo: basta abrir uma divisao toda vez que a data muda.
+  const grupos = [];
+  linhas.forEach(linha => {
+    const data = (linha.pedido && linha.pedido.data_carregamento) || null;
+    const atual = grupos[grupos.length - 1];
+    if (atual && atual.data === data) atual.linhas.push(linha);
+    else grupos.push({ data, linhas: [linha] });
+  });
+
+  const linhaHtml = ({ item, pedido }) => `
     <tr>
       <td class="item">${escapeHtml(pedido ? pedido.numero_pedido : '—')}</td>
       <td>${escapeHtml(pedido && pedido.cliente ? pedido.cliente : '—')}</td>
@@ -455,11 +506,24 @@ function renderSeparacao() {
           ${escapeHtml(ROTULO_BOTAO_SEPARACAO[item.status_separacao] || ROTULO_BOTAO_SEPARACAO.aguardando)}
         </button>
       </td>
-    </tr>`).join('');
+    </tr>`;
+
+  corpo.innerHTML = grupos.map(grupo => {
+    const pedidos = new Set(grupo.linhas.map(l => l.pedido && l.pedido.id));
+    const titulo = grupo.data
+      ? `Carregamento ${dataLonga(grupo.data)}`
+      : 'Sem data de embarque';
+    const contagem = `${pedidos.size} pedido(s) · ${grupo.linhas.length} item(ns)`;
+    return `
+    <tr class="prog-grupo">
+      <td colspan="12">${escapeHtml(titulo)} <span class="prog-grupo-contagem">${escapeHtml(contagem)}</span></td>
+    </tr>` + grupo.linhas.map(linhaHtml).join('');
+  }).join('');
 }
 
 document.getElementById('progBusca').addEventListener('input', renderSeparacao);
 document.getElementById('progFiltroStatus').addEventListener('change', renderSeparacao);
+document.getElementById('progFiltroEmbarque').addEventListener('change', renderSeparacao);
 
 document.getElementById('progItensBody').addEventListener('click', async (e) => {
   const btn = e.target.closest('.prog-alternar');
@@ -566,26 +630,32 @@ function renderCarregamento() {
   vazio.style.display = naGrade.length ? 'none' : 'block';
   if (!naGrade.length) { alvo.innerHTML = ''; return; }
 
-  // Agrupa como a planilha original: bloco de veículo, e dentro dele, horário.
-  const blocos = {};
+  // Agrupa como a planilha original, que e por DIA ("PEDIDOS PROGRAMADOS
+  // 17/09") e, dentro do dia, por horario do caminhao. Robson, 16/09/2026,
+  // apontando pra esta aba: "a data nessa aba do carregamento é importante
+  // tambem" -- antes o titulo do bloco era o veiculo e o dia nao aparecia em
+  // lugar nenhum, o que fica pior ainda quando a grade acumula mais de um dia.
+  // O veiculo nao se perde: vira etiqueta no card, junto do frete.
+  const porDia = {};
   naGrade.forEach(p => {
-    const veiculo = p.tipo_veiculo || 'Sem veículo definido';
+    const dia = p.data_carregamento || 'sem data';
     const hora = horaCurta(p.horario_carregamento);
-    blocos[veiculo] = blocos[veiculo] || {};
-    blocos[veiculo][hora] = blocos[veiculo][hora] || [];
-    blocos[veiculo][hora].push(p);
+    porDia[dia] = porDia[dia] || {};
+    porDia[dia][hora] = porDia[dia][hora] || [];
+    porDia[dia][hora].push(p);
   });
 
-  alvo.innerHTML = Object.keys(blocos).sort().map(veiculo => {
-    const horas = blocos[veiculo];
+  alvo.innerHTML = Object.keys(porDia).sort().map(dia => {
+    const horas = porDia[dia];
     const corpoHoras = Object.keys(horas).sort().map(hora => `
       <div class="prog-hora">
         <div class="prog-hora-rotulo">${escapeHtml(hora)}</div>
         ${horas[hora].map(p => cardPedidoCarregamento(p)).join('')}
       </div>`).join('');
+    const titulo = dia === 'sem data' ? 'Sem data de carregamento' : `Carregamento ${dataLonga(dia)}`;
     return `
       <div class="prog-bloco">
-        <div class="prog-bloco-titulo">${escapeHtml(veiculo)}</div>
+        <div class="prog-bloco-titulo">${escapeHtml(titulo)}</div>
         ${corpoHoras}
       </div>`;
   }).join('');
@@ -608,6 +678,7 @@ function cardPedidoCarregamento(p) {
         <b>${escapeHtml(p.numero_pedido)}</b>
         <span class="cfg-status ${st.classe}">${st.rotulo}</span>
         ${p.modalidade_frete ? `<span class="cad-um">${escapeHtml(p.modalidade_frete)}</span>` : ''}
+        ${p.tipo_veiculo ? `<span class="cad-um">${escapeHtml(p.tipo_veiculo)}</span>` : ''}
       </div>
       <div class="cad-desc">${escapeHtml(p.cliente || '—')}${destino ? ' · ' + escapeHtml(destino) : ''}</div>
       ${p.observacao_carregamento
@@ -1035,10 +1106,21 @@ async function importarPlanilhaB(linhas, dataRef) {
 
     // Forward-fill: quando a linha traz bloco/horario, eles passam a valer
     // para ela e para as seguintes ate aparecer o proximo bloco.
+    // A coluna do bloco as vezes traz o VEICULO ("TRUCK 8,5M - ENTREGA 09/09")
+    // e as vezes so o HORARIO ("08H") -- depende de como cada unidade monta a
+    // planilha. Na do Robson (CONTROLE DE PATIO) vem o horario ali, e ler isso
+    // como nome de veiculo deixava todo pedido sem hora: a aba Carregamento
+    // mostrava blocos chamados "08H" com o horario vazio ("—") embaixo, e a
+    // coluna Embarque da Separacao so a data. Se o texto for hora, e hora.
     if (bloco) {
-      const sep = separarBlocoVeiculo(bloco);
-      veiculoAtual = sep.veiculo;
-      entregaAtual = sep.entrega;
+      const horaNoBloco = horarioDoTextoProg(bloco);
+      if (horaNoBloco) {
+        horarioAtual = horaNoBloco;
+      } else {
+        const sep = separarBlocoVeiculo(bloco);
+        veiculoAtual = sep.veiculo;
+        entregaAtual = sep.entrega;
+      }
     }
     if (horaCol) {
       const hora = horarioDoTextoProg(horaCol);
