@@ -6509,3 +6509,37 @@ sozinha, sem precisar escolher o filtro toda vez que abre a tela.
 Testado localmente: com o filtro no padrão, marcar um dos dois itens
 visíveis faz a lista cair de 2 para 1 linha na hora, sem precisar de F5 nem
 trocar o filtro. Sem erro no console.
+
+## 41. Sequência da Separação: desempate final pela ordem da planilha colada (16/09/2026)
+
+Depois da correção da seção anterior (data primeiro, hora como desempate),
+sobrava o caso mais comum de todos: dois pedidos do **mesmo dia**, **os
+dois sem hora** — a maioria real da planilha B, que quase nunca já vem com
+horário exato digitado. Perguntado o que decide a ordem entre eles, o
+Robson: *"a ordem que aparece na planilha colada"* — o PCP já digita a
+planilha de Carregamento numa sequência que reflete a intenção de
+carregamento, mesmo sem hora exata pra cada pedido ainda.
+
+Sem esse desempate, dois pedidos empatados em data e hora ficavam na ordem
+que o `Array.sort()` do navegador decidisse — instável entre motores, podia
+mudar sozinha a cada F5.
+
+Nova coluna `ordem_carregamento` (integer) em `pedidos`
+(`sql/fase57-pedidos-ordem-carregamento.sql`), gravada em
+`importarPlanilhaB()`: guarda a posição (1, 2, 3…) em que cada
+`numero_pedido` apareceu **pela primeira vez** na planilha colada — um
+`Map` (`ordemPorPedido`) acumulado durante o parse, junto com o resto dos
+campos do pedido. `compararPorUrgencia()` ganhou um terceiro nível de
+comparação, só usado quando data E hora empatam: pedido sem
+`ordem_carregamento` nenhum (nunca importado por planilha) vai pro fim;
+entre dois com ordem, o menor número (apareceu antes na planilha) vem
+primeiro.
+
+Cascata final em `compararPorUrgencia()`: **data** → **hora** (desempate)
+→ **ordem da planilha colada** (desempate final, mesmo dia sem hora).
+
+Testado localmente: 3 pedidos colados fora de ordem (B, depois A, depois
+C), mesmo dia, sem bloco/horário antes de nenhum — `importarPlanilhaB()`
+gravou `ordem_carregamento` 1/2/3 na ordem exata da colagem, e
+`compararPorUrgencia()` ordenou a lista de volta pra B, A, C. Sem erro no
+console.

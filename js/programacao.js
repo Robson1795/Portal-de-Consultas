@@ -355,6 +355,15 @@ function tagPrioridade(pedido) {
 // sequenciar), e só usa a HORA como desempate de quem tem data igual --
 // pedido com hora definida vem antes do que só tem a data (é a informação
 // mais precisa que se tem), e entre dois com hora, o mais cedo primeiro.
+//
+// Último desempate: `ordem_carregamento` (posição em que o pedido apareceu
+// na planilha de Carregamento colada). O Robson, perguntado o que decide a
+// ordem entre pedidos do MESMO dia sem hora nenhuma (a maioria): "a ordem
+// que aparece na planilha colada" -- geralmente já reflete a sequência de
+// carregamento que o PCP pretendeu, mesmo sem hora exata digitada ainda.
+// Sem isso, dois pedidos empatados em data e hora (as duas ausentes, o caso
+// mais comum) ficavam na ordem que o JS array.sort() decidisse, que não é
+// garantida estável em todo motor -- podia mudar sozinha a cada F5.
 function compararPorUrgencia(pedidoA, pedidoB) {
   const dataA = pedidoA ? pedidoA.data_carregamento : null;
   const dataB = pedidoB ? pedidoB.data_carregamento : null;
@@ -365,10 +374,18 @@ function compararPorUrgencia(pedidoA, pedidoB) {
 
   const horaA = pedidoA.horario_carregamento;
   const horaB = pedidoB.horario_carregamento;
-  if (!horaA && !horaB) return 0;
-  if (!horaA) return 1;
-  if (!horaB) return -1;
-  return horaA < horaB ? -1 : (horaA > horaB ? 1 : 0);
+  if (horaA !== horaB) {
+    if (!horaA) return 1;
+    if (!horaB) return -1;
+    return horaA < horaB ? -1 : 1;
+  }
+
+  const ordemA = pedidoA.ordem_carregamento;
+  const ordemB = pedidoB.ordem_carregamento;
+  if (!ordemA && !ordemB) return 0;
+  if (!ordemA) return 1;
+  if (!ordemB) return -1;
+  return ordemA - ordemB;
 }
 
 // ---- Aba 1: Separação -------------------------------------------------------
@@ -960,6 +977,12 @@ async function importarPlanilhaB(linhas, dataRef) {
   const msg = document.getElementById('progImportMsg');
   const pedidos = new Map();
   const cargasPorPedido = new Map(); // so pra avisar quem tem mais de uma
+  // Posição do pedido na planilha colada (1ª vez que aparece) -- Robson,
+  // 16/09/2026: "a ordem que aparece na planilha colada" decide a sequência
+  // de quem separa primeiro, pra pedido do MESMO DIA sem horário exato
+  // (a maioria) -- ver compararPorUrgencia() em js/programacao.js e
+  // sql/fase57-pedidos-ordem-carregamento.sql.
+  const ordemPorPedido = new Map();
   let veiculoAtual = null;
   let horarioAtual = null;
   let entregaAtual = null;
@@ -985,6 +1008,7 @@ async function importarPlanilhaB(linhas, dataRef) {
     // Titulo da planilha ("PEDIDOS PROGRAMADOS 08/09") e cabecalho.
     if (/^(n?[ºo°]?\s*pedido|pedido)/i.test(numero)) return;
     if (!numero) { ignoradas++; return; }
+    if (!ordemPorPedido.has(numero)) ordemPorPedido.set(numero, ordemPorPedido.size + 1);
 
     const dataDaCarga = entregaAtual ? `${String(dataRef).slice(0, 4)}-${entregaAtual}` : dataRef;
 
@@ -1016,7 +1040,8 @@ async function importarPlanilhaB(linhas, dataRef) {
       data_carregamento: dataDaCarga,
       horario_carregamento: horarioAtual,
       observacao_carregamento: col[COL_B.observacao] || null,
-      flag_adicional: flagDoTextoProg(col[COL_B.flag])
+      flag_adicional: flagDoTextoProg(col[COL_B.flag]),
+      ordem_carregamento: ordemPorPedido.get(numero)
     });
   });
 
