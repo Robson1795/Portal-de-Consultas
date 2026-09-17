@@ -7612,3 +7612,20 @@ descrevem a lógica de cálculo, não o nome do menu.
 Testado localmente: `montarMenu()` renderiza "Etiqueta Pátio" na sidebar;
 "Contagem por Metragem" não aparece mais em lugar nenhum do HTML
 renderizado. Sem erro no console.
+
+## 72. m² com 3 casas decimais, sempre com o zero no final (17/09/2026)
+
+O Robson, vendo a tela: *"aqui tem que ter o zero no final EXP 55,560 M2"*
+-- a tabela mostrava "55,56" (2 casas), ele queria "55,560" (3 casas, com o
+zero final mesmo quando a conta fecha redondo) -- mesmo formato do mockup
+original da folha (seção 63).
+
+`formatarM2()` (js/metragem.js) é a ÚNICA função que formata m² no portal
+-- reaproveitada em toda parte que mostra essa unidade: a célula da tabela
+e a linha de totais da Etiqueta Pátio, o TOTAL das duas folhas de
+conferência (Etiqueta Pátio e Devolução), a coluna m² e a etiqueta da
+Devolução. Trocado `minimumFractionDigits`/`maximumFractionDigits` de 2
+pra 3 -- um lugar só, muda em todo canto de uma vez, sem risco de ficar
+"55,56" numa tela e "55,560" em outra pro mesmo número.
+
+Testado: `formatarM2(55.56)` → `"55,560"`.
