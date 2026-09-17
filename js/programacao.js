@@ -5058,17 +5058,39 @@ function renderCanceladosAlm() {
 // no endereço do almoxarifado. Reversível (mesmo espírito de conferir_exp_
 // notas/exp_pedido_aviso_preparo): fica como histórico em vez de excluir a
 // linha, então dá pra ver depois quem confirmou e quando.
+//
+// Robson, 17/09/2026: "quando apertar material devolvido ele ja sai do
+// endereço que estava no EXP né?" -- não saía. Quem cancelou pelo 🗑 já tinha
+// tirado o item do Controle EXP na hora (fase56); quem cancelou só pelo "📣
+// Enviar notificação" (seção 58, não exclui nada) via o item continuar lá
+// pra sempre, porque esta confirmação só fechava o AVISO, nunca o endereço.
+// Agora ela também tira o que ainda estiver no Controle EXP -- confirmar que
+// o material voltou pro almoxarifado só pode significar que ele não está
+// mais na expedição.
 document.getElementById('canceladoAlmBody').addEventListener('click', async (e) => {
   const btn = e.target.closest('.canceladoalm-devolvido');
   if (!btn) return;
   const pedido = btn.dataset.pedido;
-  if (!confirm(`Confirmar que o material do pedido ${pedido} já voltou pro endereço do almoxarifado?`)) return;
+  if (!confirm(`Confirmar que o material do pedido ${pedido} já voltou pro endereço do almoxarifado? Se ele ainda estiver no Controle EXP, sai de lá também.`)) return;
 
   btn.disabled = true;
   const { error } = await sb.from('exp_pedido_cancelado_alm').update({
     status: 'devolvido', devolvido_por: nomeUsuarioAtual, devolvido_em: new Date().toISOString()
   }).eq('unidade', unidadeAtual).eq('numero_pedido', pedido);
   if (error) { alert('Não foi possível confirmar: ' + error.message); btn.disabled = false; return; }
+
+  const aindaNoExp = progExpControle.filter(l => chavePedidoFolha(l.numero_pedido) === pedido);
+  if (aindaNoExp.length) {
+    const { error: erroExp } = await sb.from('exp_controle_itens').delete().in('id', aindaNoExp.map(l => l.id));
+    if (erroExp) {
+      console.warn('Material devolvido confirmado, mas não foi possível tirar do Controle EXP:', erroExp.message);
+    } else {
+      await sb.from('exp_pedido_parado_obs').delete().eq('unidade', unidadeAtual).eq('numero_pedido', pedido);
+      paradosObsMap.delete(pedido);
+    }
+  }
+
+  await carregarProgramacao(); // atualiza Parados/Controle EXP também, não só esta aba
   await carregarCanceladosAlm();
   renderCanceladosAlm();
 });

@@ -7198,3 +7198,32 @@ a observação exata (sem cortar nem alterar), disparou o broadcast com o
 mesmo texto no payload, e o pedido continuou em Parados (🗑 ainda lá) — o
 botão virou "✓ Notificado" e desabilitou. A observação apareceu certinha na
 aba nova e no card de notificação. Sem erro no console.
+
+## 59. "Material devolvido" agora tira o item do Controle EXP também (17/09/2026)
+
+O Robson, olhando o card de "↩️ Voltar ao Almox.": *"so pra confirmar, quando
+apertar material devolvido ele ja sai do endereço que estava no EXP né?"*.
+Não saía. O botão só fechava o AVISO (`exp_pedido_cancelado_alm.status =
+'devolvido'`), nunca tocava em `exp_controle_itens`.
+
+Isso não era problema pra quem cancelou pelo 🗑 (que já exclui o item na hora,
+seção 34/57) — mas quem cancelou só pelo **"📣 Enviar notificação"** (seção
+58, que de propósito não exclui nada) via o item ficar pra sempre no Controle
+EXP, mesmo depois de confirmar a devolução. A pergunta do Robson revelou
+exatamente essa lacuna.
+
+"Material devolvido" agora também exclui, de `exp_controle_itens`, qualquer
+item que ainda esteja lá pra aquele pedido (casa pelo mesmo `chavePedidoFolha`
+usado em toda a aba Parados) — e limpa a observação de Parados junto, mesmo
+comportamento do 🗑. Se o pedido já tinha sido excluído antes (veio do 🗑,
+não do 📣), não encontra nada pra excluir e só confirma a devolução — sem
+tentar excluir de novo nem gerar erro por linha que já não existe.
+
+Confirmar que o material voltou pro almoxarifado só pode significar uma
+coisa: ele não está mais na expedição.
+
+Testado localmente os dois cenários: (1) item ainda em `exp_controle_itens`
+(cancelado só por notificação) — confirmar gravou o "devolvido", excluiu o
+item certo do Controle EXP e limpou a observação; (2) item já removido antes
+(cancelado pelo 🗑) — confirmar só gravou o "devolvido", sem tentar excluir
+nada. Sem erro no console.
