@@ -7286,3 +7286,20 @@ unidade]: 47", clicar no código chamou `openCompareModal('147059')`; digitar
 rápido três vezes seguidas gerou uma única consulta ao banco (debounce); e
 assim que a busca achou resultado local, o aviso sumiu sozinho. Sem erro no
 console.
+
+## 62. Aviso de outra unidade fica chamativo, quantidade em destaque (17/09/2026)
+
+Continuação direta da 61. O Robson, vendo o aviso novo como texto corrido:
+*"deixe mais chamativo e com a quantidade facil de ver"*.
+
+Virou cartão, um por item, dentro de um bloco azul (`.outra-unidade-aviso`) —
+tom **azul/informativo de propósito**, diferente do vermelho do aviso de
+estoque baixo: aquele é alerta de problema, este é achado bom ("olha, tem
+ali"). Cada cartão separa claramente código+descrição (esquerda) de
+onde+quanto (direita), e a quantidade (`.outra-unidade-qtd`) sai grande,
+em negrito — é o número que decide se vale pedir transferência, não pode
+ficar perdido no meio de uma frase.
+
+Testado localmente com 2 unidades tendo o mesmo item: o cartão saiu com
+código, descrição, unidade, quantidade (47) em destaque e o selo
+"+1 unidade" indicando saldo em mais um lugar. Sem erro no console.

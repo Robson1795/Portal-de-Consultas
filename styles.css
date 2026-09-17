@@ -732,6 +732,86 @@
   cursor: pointer; padding: 2px 6px; flex: 0 0 auto;
 }
 .aviso-estoque-seguro #avisoEstoqueSeguroFechar:hover { color: var(--erro-texto); }
+/* Item nao encontrado na unidade aberta, mas achado em outra (17/09/2026) --
+   tom azul/informativo de proposito, diferente do vermelho do estoque baixo:
+   aqui e achado bom ("olha, tem ali"), nao alerta de problema. */
+.outra-unidade-aviso {
+  max-width: 640px;
+  margin: 0 auto;
+  background: var(--azul-fundo);
+  border: 1px solid var(--azul-borda);
+  border-radius: 12px;
+  padding: 16px 18px;
+  text-align: left;
+}
+.outra-unidade-titulo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--blue-texto);
+  margin-bottom: 10px;
+}
+.outra-unidade-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  background: var(--panel);
+  border: 1px solid var(--border-forte);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-top: 8px;
+}
+.outra-unidade-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.outra-unidade-desc {
+  color: var(--ink);
+  font-size: 13px;
+}
+.outra-unidade-onde {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+}
+.outra-unidade-local {
+  color: var(--muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+/* A quantidade é o número que decide se vale pedir transferência --
+   "chamativo" e "fácil de ver" (Robson, 17/09/2026) significa grande e
+   destacado, não mais um dado no meio da frase. */
+.outra-unidade-qtd {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--blue-dark);
+  min-width: 56px;
+  text-align: right;
+  line-height: 1;
+}
+.outra-unidade-mais {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--blue-texto);
+  background: var(--panel);
+  border: 1px solid var(--azul-borda);
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+.outra-unidade-resto {
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: var(--blue-texto);
+}
 .aviso-item-btn {
   background: var(--panel); border: 1px solid var(--erro-fundo); color: var(--erro-texto);
   border-radius: 999px; padding: 1px 9px; font-weight: 700; font-size: 12.5px;

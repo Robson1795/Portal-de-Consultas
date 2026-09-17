@@ -327,17 +327,37 @@ function checarOutrasUnidadesNaBuscaVazia() {
     const exemplos = itens.slice(0, 3);
     const resto = itens.length > 3 ? itens.length - 3 : 0;
 
+    // Robson, 17/09/2026: "deixe mais chamativo e com a quantidade facil de
+    // ver" -- o aviso de estoque baixo (linha corrida, número no meio do
+    // texto) não chamava atenção o bastante pra isto, que é achado bom
+    // ("olha, tem ali") e não alerta de problema. Cartão por item, com a
+    // quantidade grande de propósito -- é o número que decide se vale pedir
+    // transferência.
     const linhas = exemplos.map(i => {
       const [primeiraUnidade, primeiraQtd] = i.unidadesComSaldo[0];
       const maisUnidades = i.unidadesComSaldo.length > 1
-        ? ` (+${i.unidadesComSaldo.length - 1} unidade${i.unidadesComSaldo.length > 2 ? 's' : ''})`
+        ? `<div class="outra-unidade-mais">+${i.unidadesComSaldo.length - 1} unidade${i.unidadesComSaldo.length > 2 ? 's' : ''}</div>`
         : '';
-      return `<button type="button" class="aviso-item-btn" data-item="${escapeHtml(i.item)}" title="Ver comparativo entre unidades">${escapeHtml(i.item)}</button>`
-        + ` — ${escapeHtml(i.descricao || '')} — tem em ${escapeHtml(rotuloUnidade(primeiraUnidade))}: ${primeiraQtd.toLocaleString('pt-BR')}${maisUnidades}`;
-    }).join('<br>');
+      return `
+      <div class="outra-unidade-card">
+        <div class="outra-unidade-info">
+          <button type="button" class="aviso-item-btn" data-item="${escapeHtml(i.item)}" title="Ver comparativo entre unidades">${escapeHtml(i.item)}</button>
+          <span class="outra-unidade-desc">${escapeHtml(i.descricao || '')}</span>
+        </div>
+        <div class="outra-unidade-onde">
+          <span class="outra-unidade-local">📍 ${escapeHtml(rotuloUnidade(primeiraUnidade))}</span>
+          <span class="outra-unidade-qtd">${primeiraQtd.toLocaleString('pt-BR')}</span>
+          ${maisUnidades}
+        </div>
+      </div>`;
+    }).join('');
 
-    alvo.innerHTML = `Nenhum item encontrado em ${escapeHtml(rotuloUnidade(unidadeAtual))} pra "${escapeHtml(termo)}" -- mas:<br>${linhas}`
-      + (resto ? `<br>e mais ${resto} item(ns) só em outras unidades.` : '');
+    alvo.innerHTML = `
+      <div class="outra-unidade-aviso">
+        <div class="outra-unidade-titulo">🔎 Não tem em ${escapeHtml(rotuloUnidade(unidadeAtual))}, mas achamos em outra unidade:</div>
+        ${linhas}
+        ${resto ? `<div class="outra-unidade-resto">e mais ${resto} item(ns) só em outras unidades.</div>` : ''}
+      </div>`;
     alvo.style.display = 'block';
   }, 400);
 }
