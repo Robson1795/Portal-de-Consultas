@@ -80,7 +80,7 @@ const PAGINAS = {
   // VEZES 1,04 / TELHA... faça avaliando a descrição do item"). Calculadora
   // avulsa -- não lê nem grava em tabela nenhuma, é conta de cabeça feita
   // pelo portal em vez de na mão (ver js/metragem.js).
-  metragem: { rotulo: 'Contagem por Metragem', icone: '📏', elemento: 'metragemContent' },
+  metragem: { rotulo: 'Etiqueta Pátio', icone: '📏', elemento: 'metragemContent' },
   // Demanda dos pedidos x saldo do almoxarifado: o que falta comprar.
   // Só lê o estoque -- não mexe em saldo nenhum (ver js/analise.js).
   analise: { rotulo: 'Análise de Compras', icone: '📊', elemento: 'analiseComprasContent' },

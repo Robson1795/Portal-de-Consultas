@@ -7589,3 +7589,26 @@ com descrição de telha → `{ m2: 55.56 }`; texto da folha confirmado como
 "QTD: 12 PÇS DE 4.630 MM · TOTAL: 55,56 M²"; os três rótulos "(mm)"
 conferidos no DOM (th da Contagem por Metragem, th da Devolução,
 placeholder/title do Registrar Manual). Sem erro no console.
+
+## 71. Menu "Contagem por Metragem" renomeado pra "Etiqueta Pátio" (17/09/2026)
+
+O Robson, com print do botão da sidebar: *"pode mudar o titulo para etiqueta
+patio"* -- nome mais fiel ao uso real da ferramenta (a folha impressa é
+colada nos fardos no pátio, ver seção 65).
+
+Só rótulo, nada de lógica/estrutura: `rotulo` da entrada `metragem` em
+`PAGINAS` (js/navegacao.js) -- a chave interna (`metragem`) e o `elemento`
+(`metragemContent`) continuam os mesmos, então nada mais no código precisou
+mudar. Junto, os outros dois lugares que mostravam o nome antigo pro
+usuário: o `<h2>` da própria tela (index.html) e o `<title>` da aba que abre
+com a folha impressa (js/metragem.js) -- pra não ficar um botão "Etiqueta
+Pátio" abrindo uma tela que ainda se chama "Contagem por Metragem". Também
+o tooltip do "m²" na tabela de Devolução, que citava o nome antigo.
+
+Comentários de código que mencionam "Contagem por Metragem" como conceito
+técnico (a conta pçs × metragem × fator) foram mantidos como estão --
+descrevem a lógica de cálculo, não o nome do menu.
+
+Testado localmente: `montarMenu()` renderiza "Etiqueta Pátio" na sidebar;
+"Contagem por Metragem" não aparece mais em lugar nenhum do HTML
+renderizado. Sem erro no console.

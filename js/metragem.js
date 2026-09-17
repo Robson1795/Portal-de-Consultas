@@ -211,7 +211,7 @@ document.getElementById('metragemImprimirBtn').addEventListener('click', () => {
   // portal (ativação transitória do clique).
   const aba = window.open('', '_blank');
   if (!aba) { alert('O navegador bloqueou a nova aba. Libere pop-ups pra este site e tente de novo.'); return; }
-  aba.document.write(montarHtmlFolhaConferenciaMetragem(folhas, 'Contagem por Metragem'));
+  aba.document.write(montarHtmlFolhaConferenciaMetragem(folhas, 'Etiqueta Pátio'));
   aba.document.close();
 });
 
