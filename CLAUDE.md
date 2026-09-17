@@ -6872,3 +6872,79 @@ para nao confundir com a quantidade do pedido"*. Foi pro fim da linha, colada
 no botão que usa a informação, e o cabeçalho passou a dizer de onde vem o
 número: **"Estoque ALM"**. Conferido: "Qtd" na 8ª coluna e "Estoque ALM" na
 13ª, sem vizinhança.
+
+## 51. Painel de Separação: a tela de quem separa (17/09/2026)
+
+O Robson trouxe um protótipo pronto — "Tela de Monitoramento e Separação de
+Pedidos", HTML autocontido, feita pra rodar num monitor grande ou tablet no
+almoxarifado com o auxiliar operando **de pé** — e o contexto completo das
+decisões que ele tomou junto com quem a construiu. *"minha ideia é fazer a
+programação desse modelo"*.
+
+**Entra como tela nova, não substitui a aba Separação.** Confirmado com ele.
+São duas leituras dos mesmos dados, para duas pessoas: a aba Separação é de
+quem coordena (filtros, busca, divisão por dia, Pendências, marcar pedido
+inteiro, saldo); o Painel é de quem está separando agora. Como as duas leem
+`progPedidos`/`progItens`, não há dado duplicado nem risco de divergirem.
+
+**O gap que não era gap.** O protótipo listava "endereço no almoxarifado
+(rua/bloco/prateleira)" como pendente de definição, com endereços fictícios.
+Mas o portal **já tem isso**: `estoque.localizacao` (ex. `A-01-01-01`), que o
+próprio Robson mantém, com histórico em `estoque_localizacao_historico`
+(fase 34). `buscarSaldoAlmoxarifado()` passou a trazer a localização junto do
+saldo — uma consulta só — e o Painel ordena os itens do pedido por endereço,
+que é a ordem de coleta. Item com mais de um endereço fica com o da linha de
+maior quantidade: é de lá que a coleta sai na prática.
+
+**OS x OP sai dos dados, não de cadastro.** O protótipo tinha `tipoDocumento`
+como campo manual porque não dava pra inferir. Dá, pela regra que o próprio
+documento descreve: dentro do pedido, o número de `numero_os_op` que **se
+repete** em várias linhas é a OS (o kit padrão); número que aparece **uma vez
+só** é OP de item fabricado sob medida. São esses que exigem a segunda
+confirmação.
+
+**As duas confirmações, sem inventar status.** SEPARADO (embalou) e OP
+REPORTADA (conferiu no Datasul que a produção apontou) são independentes — o
+Robson relatou item embalado com a OP esquecida sem reporte, virando problema
+fiscal. O enum `status_separacao` já cobria a ordem normal disso:
+`falta_reporte` = separado com reporte pendente, `reportado` = os dois. Ele
+continua sendo a fonte de verdade do portal inteiro (aba Separação, EXP,
+docas, gatilho no banco). A coluna nova `op_reportada` existe **só** pro caso
+que o enum não representa: a OP ser reportada ANTES de separarem a peça.
+
+**Quem fez, pelo nome.** `separado_por` é o uuid de quem está logado — e o
+tablet fica numa bancada, com uma conta só, enquanto JOEL, NILSON, ANGEL,
+ANGELO e MAIKO se revezam. Por isso o pop-up de SEPARADO pergunta o nome. E
+pergunta **dois** nomes quando o item tem OP: esses são produzidos no CDB, por
+equipe própria que separa e confere cada peça na hora. Item sem OP pede só
+quem separou — a conferência desses é a do pedido inteiro, na bancada, no
+fim: é o que o pop-up de Concluir Pedido registra (`separador_nome`,
+`conferente_nome`).
+
+**Clicar não marca.** Abre confirmação. A tela tem botão grande lado a lado
+num tablet — um toque sem querer não pode mudar o estado do pedido.
+
+Também porta do protótipo: selo de urgência com quanto falta pro caminhão,
+"SEPARAR AGORA" no primeiro da fila, observação com "URGENTE" em vermelho, e
+o quadrado de cor RAL extraído da descrição (catálogo RAL Classic → HEX
+embutido). Código RAL fora do catálogo sai com quadrado **hachurado**, não
+colorido: mostrar cor errada é pior que não mostrar cor. É referência de
+tela — a cor oficial de conferência é sempre a tabela RAL física.
+
+SQL: `sql/fase59-painel-separacao-assinaturas.sql`.
+
+Testado localmente com dois pedidos e a regra de OS/OP dos dados reais: a fila
+saiu ordenada por carregamento com "SEPARAR AGORA" no primeiro; os itens do
+pedido saíram na ordem dos endereços (A-01-01-01 → A-01-02-03 → C-06-01-02);
+só o item de número único ganhou a etiqueta OP e o segundo botão; o pop-up de
+item sem OP pediu um nome e o de item com OP pediu dois, travando o Confirmar
+até os dois; gravou `falta_reporte` no item com OP e `separado` no sem OP; OP
+REPORTADA levou o item pra `reportado`; e o Concluir só liberou com todos os
+itens completos, gravando separador, conferente e `concluido_em`. Sem erro no
+console.
+
+**Próximas etapas do protótipo, ainda não feitas:** fechamento de volumes
+(catálogo de embalagens CX-MASTER/AMR-6M etc.) e cálculo de unidades físicas
+(rolos/barras). As duas dependem de um cadastro por item que o PCP-FOR-001 não
+traz — `categoriaVolume`, `comprimentoBarra`, `comprimentoUnidade` — e por
+isso ficaram para depois do núcleo operacional.

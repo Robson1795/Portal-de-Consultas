@@ -855,6 +855,38 @@
   </div>
   <!-- ================= FIM DEVOLUÇÃO ================= -->
 
+  <!-- ================= PAINEL DE SEPARAÇÃO ================= -->
+  <!-- Tela do AUXILIAR, pra monitor grande/tablet no almoxarifado: card por
+       pedido na ordem do carregamento, botão grande, confirmação em pop-up
+       com o nome de quem fez. Lê os mesmos pedidos/itens da Programação de
+       Separação (ver js/painelseparacao.js) -- a aba de lá continua sendo a
+       visão do líder. -->
+  <div id="painelSeparacaoContent" style="display:none;">
+    <div class="panel">
+      <div class="cfg-barra">
+        <h2 style="margin:0;">🧰 Painel de Separação</h2>
+        <span class="cfg-status st-pendente" style="margin-left:8px;">
+          <span id="painelContaPendentes">0</span> pedido(s) a separar
+        </span>
+        <button class="btn" id="painelAtualizarBtn" style="margin-left:auto;">Atualizar</button>
+      </div>
+      <div class="status-msg" id="painelMsg" style="padding:0 16px;"></div>
+
+      <div class="painel-colunas">
+        <div class="painel-coluna-fila">
+          <div class="painel-coluna-titulo">Pedidos pendentes</div>
+          <div id="painelFila"></div>
+        </div>
+        <div class="painel-coluna-atual">
+          <div class="painel-coluna-titulo">Pedido atual</div>
+          <div id="painelAtual"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="painel-popup-overlay" id="painelPopup" style="display:none;"></div>
+  <!-- ================= FIM PAINEL DE SEPARAÇÃO ================= -->
+
   <!-- ================= CONTAGEM POR METRAGEM ================= -->
   <!-- Calculadora avulsa: pçs x metragem x fator, com o fator escolhido
        sozinho a partir da descrição do item (ver js/metragem.js). Não lê
@@ -2562,6 +2594,7 @@
 <script src="js/debitodireto.js"></script>
 <script src="js/devolucao.js"></script>
 <script src="js/metragem.js"></script>
+<script src="js/painelseparacao.js"></script>
 <script src="js/mfg.js"></script>
 <script src="js/tour.js"></script>
 <!-- Depois dos outros: usa escapeHtml, rotuloUnidade e os globais de sessão. -->

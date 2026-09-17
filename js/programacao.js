@@ -168,6 +168,7 @@ async function carregarProgramacao() {
   renderSeparacao();
   renderPendencias();
   renderCarregamento();
+  renderPainelSeparacao(); // tela do auxiliar (js/painelseparacao.js), mesmos dados
   renderExpControle(expCtrl.error ? expCtrl.error.message : null);
   if (!expCtrl.error) {
     renderConferencia(); // barato (so filtra em memoria); sem isso a Conferencia so atualizava ao trocar de sub-aba
@@ -454,16 +455,18 @@ function celulaEstoqueHtml(item) {
 }
 
 async function buscarSaldoAlmoxarifado(codigos) {
+  progLocalMap = new Map();
   const unicos = [...new Set((codigos || []).filter(Boolean).map(String))];
   if (!unicos.length) return new Map();
 
   const mapa = new Map();
+  const maiorPorItem = new Map(); // de qual endereco vem a maior parte da peca
   // Em pedaços: a lista de itens da separacao passa de 300 codigos, e tudo
   // isso num `in(...)` viraria uma URL grande demais pro PostgREST.
   for (let i = 0; i < unicos.length; i += 150) {
     const pedaco = unicos.slice(i, i + 150);
     const { data, error } = await sb.from('estoque')
-      .select('item, quantidade')
+      .select('item, quantidade, localizacao')
       .in('item', pedaco)
       .eq('unidade', unidadeAtual)
       .eq('deposito', 'alm');
@@ -474,9 +477,16 @@ async function buscarSaldoAlmoxarifado(codigos) {
       return mapa;
     }
     // O mesmo item pode ter mais de uma linha (localizacoes diferentes) --
-    // o que interessa pra quem separa e o total.
+    // o que interessa pra quem separa e o total. Pro ENDERECO, fica o da
+    // linha com mais peca: e de la que a coleta sai na pratica.
     (data || []).forEach(r => {
-      mapa.set(String(r.item), (mapa.get(String(r.item)) || 0) + parseQtd(r.quantidade));
+      const item = String(r.item);
+      const qtd = parseQtd(r.quantidade);
+      mapa.set(item, (mapa.get(item) || 0) + qtd);
+      if (r.localizacao && qtd > (maiorPorItem.get(item) || -1)) {
+        maiorPorItem.set(item, qtd);
+        progLocalMap.set(item, String(r.localizacao));
+      }
     });
   }
   return mapa;

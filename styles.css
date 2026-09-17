@@ -1569,6 +1569,187 @@ td.col-acoes { white-space: nowrap; text-align: center; }
   padding: 2px 10px;
 }
 
+/* ===== Painel de Separacao -- tela do auxiliar (17/09/2026) =================
+   Monitor grande ou tablet, pessoa de pe: fonte grande, alto contraste,
+   area de toque larga. Nada aqui e pensado pra caber em telefone. */
+.painel-colunas {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 14px;
+  padding: 14px 16px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .painel-colunas { grid-template-columns: 1fr; }
+}
+.painel-coluna-titulo {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.painel-coluna-fila { max-height: 72vh; overflow-y: auto; }
+
+.painel-card-pedido {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--panel);
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  color: var(--ink);
+}
+.painel-card-ativo { border-color: var(--blue); box-shadow: var(--sombra); }
+.painel-card-pronto { opacity: .55; }
+.painel-separar-agora {
+  display: inline-block;
+  background: var(--erro-borda);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin-bottom: 6px;
+}
+.painel-card-numero { font-size: 21px; font-weight: 800; }
+.painel-card-cliente { color: var(--muted); font-size: 14px; margin: 2px 0 6px; }
+.painel-card-progresso { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+.painel-doc {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 4px;
+}
+.painel-doc-os { background: var(--azul-fundo); color: var(--blue-texto); }
+.painel-doc-op { background: var(--aviso-fundo); color: var(--aviso-texto); }
+
+.painel-selo {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+.painel-urg-tranquilo { background: var(--azul-fundo); color: var(--blue-texto); }
+.painel-urg-atencao   { background: var(--aviso-fundo); color: var(--aviso-texto); }
+.painel-urg-urgente   { background: var(--erro-fundo); color: var(--erro-texto); }
+.painel-urg-atrasado  { background: var(--erro-borda); color: #fff; }
+.painel-urg-sem       { background: var(--row-alt); color: var(--muted); }
+
+.painel-coluna-atual { min-width: 0; }
+.painel-atual-topo {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.painel-atual-numero { font-size: 28px; font-weight: 800; }
+.painel-atual-cliente { font-size: 16px; color: var(--muted); }
+.painel-atual-progresso { font-size: 13px; color: var(--muted); margin: 6px 0 10px; }
+.painel-itens { max-height: 60vh; overflow-y: auto; }
+
+.painel-item {
+  background: var(--panel);
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+.painel-item-ok { border-color: var(--ok-borda); background: var(--ok-fundo); }
+.painel-item-topo { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.painel-item-codigo { font-size: 20px; font-weight: 800; }
+.painel-item-qtd { font-size: 20px; font-weight: 800; color: var(--blue-texto); }
+.painel-endereco {
+  font-size: 13px;
+  font-weight: 700;
+  background: var(--azul-fundo);
+  color: var(--blue-texto);
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+.painel-endereco-sem { background: var(--row-alt); color: var(--muted); }
+.painel-saldo { font-size: 12px; color: var(--muted); }
+.painel-item-desc { font-size: 19px; margin: 6px 0; }
+
+.painel-ral { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.painel-ral-cor {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  border: 1px solid var(--border-forte);
+  display: inline-block;
+}
+/* Cor fora do catalogo sai hachurada: mostrar cor ERRADA e pior que nao mostrar */
+.painel-ral-sem {
+  background: repeating-linear-gradient(45deg, var(--row-alt), var(--row-alt) 4px, var(--border-forte) 4px, var(--border-forte) 8px);
+}
+.painel-ral-nome { font-size: 13px; color: var(--muted); }
+
+.painel-item-obs { font-size: 14px; color: var(--muted); margin-bottom: 8px; }
+.painel-item-urgente {
+  color: var(--erro-texto);
+  font-weight: 700;
+  background: var(--erro-fundo);
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+.painel-item-acoes { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+.painel-item-acoes .btn { font-size: 15px; font-weight: 700; padding: 10px 18px; }
+.painel-btn-separado { background: var(--blue); color: #fff; border-color: var(--blue); }
+.painel-btn-op { background: var(--aviso-acao); color: #fff; border-color: var(--aviso-acao); }
+.painel-feito { font-size: 14px; font-weight: 700; color: var(--ok-texto); align-self: center; }
+
+.painel-concluir {
+  width: 100%;
+  margin-top: 8px;
+  padding: 16px;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  background: var(--ok-acao);
+  color: #fff;
+  border-color: var(--ok-acao);
+}
+.painel-concluir:disabled { background: var(--row-alt); color: var(--muted); border-color: var(--border); }
+
+.painel-popup-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1200;
+  padding: 16px;
+}
+.painel-popup-caixa {
+  background: var(--panel);
+  border-radius: 12px;
+  padding: 22px;
+  max-width: 560px;
+  width: 100%;
+  box-shadow: var(--sombra);
+}
+.painel-popup-titulo { font-size: 20px; font-weight: 800; margin-bottom: 6px; }
+.painel-popup-sub { font-size: 14px; color: var(--muted); margin-bottom: 14px; }
+.painel-popup-campo { margin-bottom: 14px; }
+.painel-popup-rotulo { font-size: 13px; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
+.painel-nomes { display: flex; gap: 8px; flex-wrap: wrap; }
+.painel-nome { font-size: 15px; font-weight: 700; padding: 10px 16px; }
+.painel-nome-ativo { background: var(--blue); color: #fff; border-color: var(--blue); }
+.painel-nome-conferente.painel-nome-ativo { background: var(--ok-acao); border-color: var(--ok-acao); }
+.painel-popup-acoes { display: flex; gap: 10px; justify-content: flex-end; margin-top: 8px; }
+.painel-popup-acoes .btn { font-size: 15px; padding: 10px 20px; }
+
 /* Saldo do almoxarifado na Separacao: cor diz se da pra separar (16/09/2026) */
 .prog-estoque { font-weight: 700; }
 .prog-estoque-ok      { color: var(--ok-texto); }
