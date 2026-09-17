@@ -3598,6 +3598,17 @@ const LOGO_KINGSPAN_DATAURI = `data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAM0
 // FOLHA" -- não é só a quantidade, é tudo: letra grande em toda a folha,
 // não só uma linha. Tamanhos generosos de propósito -- é pra colar num
 // fardo e ler de longe, não pra caber comportado numa página.
+//
+// Esses tamanhos generosos, sem nenhum ajuste, não cabiam de pé numa folha
+// A4 paisagem só (~223mm de altura de conteúdo pra 186mm de área
+// imprimível) -- por isso o diálogo de impressão do Chrome ficava
+// avisando "2 folhas" a menos que a pessoa reduzisse a escala na mão. O
+// Robson achou 65% "ideal" (imprimindo assim, dá 1 folha só) e pediu pra
+// automatizar. Não dá pra controlar a caixa "Escala" do diálogo de
+// impressão por código (o navegador não expõe essa API de propósito) --
+// então em vez disso todo tamanho aqui (fonte, preenchimento, borda,
+// largura máxima) foi multiplicado por 0,65, produzindo o MESMO resultado
+// físico sem precisar mexer em nada na hora de imprimir.
 function montarHtmlFolhaConferenciaMetragem(folhasHtml, titulo) {
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
 <title>${escapeHtml(titulo)} — ${new Date().toLocaleDateString('pt-BR')}</title>
@@ -3606,22 +3617,22 @@ function montarHtmlFolhaConferenciaMetragem(folhasHtml, titulo) {
   :root { color-scheme: light; }
   body { font-family: Arial, sans-serif; margin: 0; background: #fff; color: #000; }
   .folha-conf {
-    box-sizing: border-box; padding: 10mm; text-align: center;
+    box-sizing: border-box; padding: 6.5mm; text-align: center;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     min-height: 100vh;
-    border: 3mm solid #000;
+    border: 2mm solid #000;
     page-break-after: always; break-after: page;
   }
   .folha-conf:last-child { page-break-after: auto; break-after: auto; }
-  .conf-logo { height: 24mm; margin-bottom: 10mm; }
-  .conf-item { font-size: 32mm; font-weight: 900; line-height: 1.1; overflow-wrap: anywhere; margin-bottom: 8mm; }
-  .conf-desc { font-size: 18mm; font-weight: 700; line-height: 1.2; margin-bottom: 10mm; max-width: 250mm; }
-  .conf-qtd { font-size: 22mm; font-weight: 700; margin-bottom: 6mm; }
+  .conf-logo { height: 15.6mm; margin-bottom: 6.5mm; }
+  .conf-item { font-size: 20.8mm; font-weight: 900; line-height: 1.1; overflow-wrap: anywhere; margin-bottom: 5.2mm; }
+  .conf-desc { font-size: 11.7mm; font-weight: 700; line-height: 1.2; margin-bottom: 6.5mm; max-width: 162.5mm; }
+  .conf-qtd { font-size: 14.3mm; font-weight: 700; margin-bottom: 3.9mm; }
   .conf-total {
-    font-size: 28mm; font-weight: 900; padding: 6mm 12mm;
-    border-top: 1.5mm solid #000; border-bottom: 1.5mm solid #000;
+    font-size: 18.2mm; font-weight: 900; padding: 3.9mm 7.8mm;
+    border-top: 1mm solid #000; border-bottom: 1mm solid #000;
   }
-  .conf-rodape { font-size: 7mm; color: #333; margin-top: 10mm; }
+  .conf-rodape { font-size: 4.6mm; color: #333; margin-top: 6.5mm; }
 </style></head><body>
 ${folhasHtml}
 ${'<script>window.onload = () => window.print();<' + '/script>'}

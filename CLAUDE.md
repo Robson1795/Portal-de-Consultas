@@ -7732,3 +7732,36 @@ desabilitado, digitado "2000" sem tocar no checkbox -- uma única
 gravação com `{qtd_caixa_master: "2000", sem_padrao_caixa: false}`,
 checkbox desmarcado sozinho na tela, resumo do popup (seção 74) atualizado
 pra "40 cx master". Sem erro no console.
+
+## 77. Folha de conferência por metragem: tamanhos ajustados pra caber numa folha sem escala manual (17/09/2026)
+
+O Robson, com print do diálogo de impressão do Chrome: escala manual em
+"Tamanho real" 65% ("Total: 1 folha de papel"), seta apontando pra
+Etiqueta Pátio: *"esse tamanho ficou ideal, tem como deixar automatico na
+hora de imprimir sem ajustar?"*.
+
+Não tem como controlar por código a caixa "Escala" do diálogo de
+impressão do navegador -- não existe API web pra isso (o navegador não
+expõe de propósito, senão todo site forçaria a própria escala). O motivo
+de precisar de 65% pra começo de conversa: os tamanhos da seção 69/70
+(logo 24mm, ITEM 32mm, descrição 18mm, QTD 22mm, TOTAL 28mm, rodapé 7mm,
+mais a borda da seção 74) somam ~223mm de altura de conteúdo, mais alto
+que os 186mm de área imprimível de uma A4 paisagem (210mm - 12mm de
+margem `@page` de cada lado) -- por isso o Chrome avisava "2 folhas" sem
+ajuste manual.
+
+Fix: todo tamanho da folha (fonte, preenchimentos, borda, largura máxima)
+multiplicado por 0,65 direto no CSS de `montarHtmlFolhaConferenciaMetragem()`
+(js/programacao.js) -- reproduz o MESMO resultado físico que a escala
+manual de 65% produzia, só que automático, sem precisar tocar em nada no
+diálogo de impressão. Compartilhada entre Devolução e Etiqueta Pátio (seção
+69), então vale pras duas telas de uma vez.
+
+Sem SQL nova -- é só CSS.
+
+Testado localmente: renderizando a folha (item 3838410, descrição de 3
+linhas) numa viewport do tamanho de uma A4 paisagem (1123×794px a 96dpi) --
+altura total do conteúdo (miolo + preenchimento + borda) deu 182,9mm,
+dentro dos 186mm imprimíveis. Tamanhos de fonte conferidos no DOM (ITEM
+~20,8mm, TOTAL ~18,2mm, convertidos pra px). Visual comparado ao print do
+Robson -- mesma proporção, moldura preta completa, sem corte.
