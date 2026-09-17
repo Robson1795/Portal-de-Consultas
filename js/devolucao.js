@@ -83,6 +83,26 @@ function divergenciaDevolucao(item) {
   return Number(item.qtd_fisico) - Number(item.qtd_nf || 0);
 }
 
+// Robson, 17/09/2026: "essa contagem metragem joga dentro da aba devolução,
+// dai ja sai todos os dados junto" -- confirmado que é o m² calculado no
+// PRÓPRIO item (não uma calculadora à parte). Reaproveita a mesma regra de
+// fator por descrição da Contagem por Metragem (categoriaMetragem/
+// calcularLinhaMetragem, js/metragem.js) -- mesma pergunta ("que categoria é
+// esta peça?"), mesma resposta, sem duplicar a lógica em dois arquivos.
+//
+// Os dois campos são opcionais (fase63): parafuso/massa/gaxeta não têm
+// "metragem por peça" nem cabem nas 3 categorias -- null explícito, não
+// zero, é "não se aplica aqui", igual ao resto do padrão de conferência
+// desta tela (qtd_fisico null = "ainda não conferido", não "zero").
+function metragemDevolucao(item) {
+  if (item.qtd_pecas == null || item.metragem_peca == null) return null;
+  return calcularLinhaMetragem({
+    descricao: item.descricao_produto || '',
+    qtd: String(item.qtd_pecas),
+    metragem: String(item.metragem_peca)
+  });
+}
+
 function linhasFiltradasDevolucao() {
   const busca = document.getElementById('devolucaoBusca').value.trim().toLowerCase();
   const filtro = document.getElementById('devolucaoFiltroStatus').value;
@@ -150,6 +170,22 @@ function renderDevolucao() {
         <input type="text" class="devolucao-local" data-id="${escapeHtml(item.id)}"
                value="${escapeHtml(item.localizacao || '')}" placeholder="—" style="width:110px;">
       </td>
+      <td class="num">
+        <input type="text" inputmode="decimal" class="devolucao-pecas" data-id="${escapeHtml(item.id)}"
+               value="${item.qtd_pecas != null ? escapeHtml(item.qtd_pecas) : ''}"
+               placeholder="—" style="width:60px; text-align:right;">
+      </td>
+      <td class="num">
+        <input type="text" inputmode="decimal" class="devolucao-metragem-peca" data-id="${escapeHtml(item.id)}"
+               value="${item.metragem_peca != null ? escapeHtml(item.metragem_peca) : ''}"
+               placeholder="—" style="width:70px; text-align:right;">
+      </td>
+      <td class="num">${(() => {
+        const m = metragemDevolucao(item);
+        if (!m) return '—';
+        if (!m.cat) return '<span class="cfg-status st-pendente" title="Categoria não reconhecida na descrição -- FRIGO/EVO/FACHADA/TELHA">?</span>';
+        return `<span title="${escapeHtml(m.cat.rotulo)} · fator ${m.cat.fator.toLocaleString('pt-BR')}">${formatarM2(m.m2)}</span>`;
+      })()}</td>
       <td class="num">${escapeHtml(item.qtd_nf != null ? item.qtd_nf : '—')}</td>
       <td class="num">
         <input type="text" inputmode="decimal" class="devolucao-fisico" data-id="${escapeHtml(item.id)}"
@@ -212,9 +248,11 @@ document.getElementById('devolucaoBody').addEventListener('change', async (e) =>
   const campoFisico = e.target.closest('.devolucao-fisico');
   const campoObs = e.target.closest('.devolucao-obs');
   const campoLocal = e.target.closest('.devolucao-local');
-  if (!campoFisico && !campoObs && !campoLocal) return;
+  const campoPecas = e.target.closest('.devolucao-pecas');
+  const campoMetragemPeca = e.target.closest('.devolucao-metragem-peca');
+  if (!campoFisico && !campoObs && !campoLocal && !campoPecas && !campoMetragemPeca) return;
 
-  const id = (campoFisico || campoObs || campoLocal).dataset.id;
+  const id = (campoFisico || campoObs || campoLocal || campoPecas || campoMetragemPeca).dataset.id;
   const item = devolucaoItens.find(i => String(i.id) === String(id));
   if (!item) return;
 
@@ -229,11 +267,19 @@ document.getElementById('devolucaoBody').addEventListener('change', async (e) =>
     if (ok) renderDevolucao();
   } else if (campoObs) {
     await gravarConferenciaDevolucao(id, { observacoes: campoObs.value.trim() || null });
-  } else {
+  } else if (campoLocal) {
     // Localização em maiúscula -- mesmo padrão do Controle EXP (12/09/2026):
     // endereço digitado de jeito diferente por pessoas diferentes vira duas
     // "localizações" na busca/agrupamento.
     await gravarConferenciaDevolucao(id, { localizacao: campoLocal.value.trim().toUpperCase() || null });
+  } else if (campoPecas) {
+    const texto = campoPecas.value.trim();
+    const ok = await gravarConferenciaDevolucao(id, { qtd_pecas: texto === '' ? null : parseQtd(texto) });
+    if (ok) renderDevolucao(); // o m² calculado depende deste campo
+  } else {
+    const texto = campoMetragemPeca.value.trim();
+    const ok = await gravarConferenciaDevolucao(id, { metragem_peca: texto === '' ? null : parseQtd(texto) });
+    if (ok) renderDevolucao();
   }
 });
 
@@ -607,14 +653,23 @@ document.getElementById('devolucaoManualId').addEventListener('keydown', (e) => 
 // mesma coluna da tabela) e a metragem (qtd_nf + um -- é o que a NF diz que
 // tem, disponível na hora de etiquetar, antes até da conferência física
 // preencher qtd_fisico).
+//
+// Fase63 (mesmo dia): quando o item TEM qtd_pecas + metragem_peca (painel/
+// telha, "todos os dados junto" da Contagem por Metragem), o m² calculado é
+// o dado mais útil pra colar no fardo -- substitui o qtd_nf+um simples, que
+// continua servindo de fallback pros itens sem essas duas colunas (a
+// maioria: parafuso, massa, gaxeta não têm "metragem por peça").
 // ===========================================================================
 
 function montarHtmlEtiquetasDevolucao(linhas) {
   const impressoEm = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
   const quem = nomeUsuarioAtual || emailUsuarioAtual || '—';
   const etiquetas = linhas.map(item => {
-    const metragem = item.qtd_nf != null && item.qtd_nf !== ''
-      ? `${numeroBR(item.qtd_nf)}${item.um ? ' ' + escapeHtml(item.um) : ''}` : '';
+    const calculo = metragemDevolucao(item);
+    const metragem = (calculo && calculo.cat)
+      ? `${formatarM2(calculo.m2)} m²`
+      : (item.qtd_nf != null && item.qtd_nf !== ''
+          ? `${numeroBR(item.qtd_nf)}${item.um ? ' ' + escapeHtml(item.um) : ''}` : '');
     return `
     <section class="etiqueta">
       <div class="etq-topo">

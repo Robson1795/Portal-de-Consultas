@@ -7384,3 +7384,44 @@ Testado localmente: `grande:true` produz `font-size:20px; font-weight:700`
 no corpo; sem o parâmetro, sai `font-size:12px; font-weight:400` — os
 outros usos da função (nenhum deles passa `grande`) ficam do jeito que
 sempre foram. Sem erro no console.
+
+## 66. Metragem calculada em cada item da Devolução (17/09/2026)
+
+Continuação da 64. O Robson: *"essa contagem metragem joga dentro da aba
+devolução, dai ja sai todos os dados junto"*. Perguntado se era calculadora
+à parte ali dentro ou o m² calculado no próprio item — confirmado o
+segundo: *"Calculada em cada item"* — pra sair junto com NF/código/
+localização, na mesma tabela e na mesma etiqueta, sem abrir outra tela pra
+cruzar o número.
+
+**Dois campos novos** em `devolucao_itens` (`sql/fase63-devolucao-
+metragem.sql`): `qtd_pecas` e `metragem_peca` — os dois **opcionais**, porque
+nem todo item de devolução é painel/telha (parafuso, massa, gaxeta não têm
+"metragem por peça" nem cabem em nenhuma das 3 categorias). Sem os dois
+juntos, o item simplesmente não calcula m² nenhum — nem na tela, nem na
+etiqueta.
+
+**Não grava o resultado, recalcula na hora** — mesmo princípio já usado no
+resto do portal. `metragemDevolucao(item)` reaproveita
+`calcularLinhaMetragem()`/`categoriaMetragem()` de js/metragem.js (a mesma
+regra de fator por descrição: FRIGO 1,13 · EVO/FACHADA 1,04 · TELHA 1),
+sem duplicar a lógica — as duas telas fazem a mesma pergunta ("que
+categoria é essa peça, pela descrição?") e usam a mesma resposta.
+
+Três colunas novas na tabela (Qtd Peças, Metragem/Peça, m² — as duas
+primeiras editáveis, a terceira só mostra o resultado, com o fator usado
+no `title`), salvando pelo mesmo padrão de sempre (grava ao sair do campo).
+Item com descrição não reconhecida mostra "?" em vez de arriscar um m²
+com fator chutado — mesmo cuidado da Contagem por Metragem original.
+
+**Etiqueta**: quando o item tem o cálculo (`qtd_pecas` + `metragem_peca` +
+categoria reconhecida), o m² substitui a linha simples de "qtd_nf + um" da
+seção 64 — é o dado mais útil pra colar no fardo. Sem essas colunas
+(a maioria dos itens), continua caindo no `qtd_nf + um` de antes.
+
+Testado localmente com 2 itens (uma telha com 12 peças de 4630m = 55.560,00
+m² — bate exatamente com o exemplo da folha de Metragem mostrada pelo
+Robson — e um parafuso sem essas colunas): a tabela mostrou "55.560,00" e
+"—" respectivamente; editar Qtd Peças do parafuso gravou só aquele campo;
+e a etiqueta saiu "55.560,00 m²" pra telha e "50 Pç" (fallback) pro
+parafuso. Sem erro no console.
