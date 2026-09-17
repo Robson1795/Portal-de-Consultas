@@ -1826,3 +1826,100 @@ td.col-acoes { white-space: nowrap; text-align: center; }
 .painel-popup-acoes { display: flex; gap: 10px; justify-content: flex-end; margin-top: 8px; }
 .painel-popup-acoes .btn { font-size: 15px; padding: 10px 20px; }
 
+
+/* ===================== CHAT =====================
+   Robson, 17/09/2026: "monte um chat aonde eu possa conversar com os usuarios
+   ativos". Duas colunas: quem falar com (esquerda) e a conversa (direita).
+   Só tokens de cor -- o tema escuro reaproveita tudo sem uma regra a mais. */
+.chat-layout {
+  display: grid;
+  grid-template-columns: 250px 1fr;
+  gap: 12px;
+  height: 60vh;
+  min-height: 400px;
+}
+/* No celular as duas colunas lado a lado não caberiam: viram uma embaixo da
+   outra, com a lista curta em cima (é escolha rápida) e a conversa ocupando
+   o resto. */
+@media (max-width: 760px) {
+  .chat-layout { grid-template-columns: 1fr; height: auto; }
+  .chat-lista { max-height: 180px; }
+  .chat-msgs { min-height: 300px; }
+}
+
+.chat-coluna-lista { display: flex; flex-direction: column; min-height: 0; }
+.chat-busca {
+  width: 100%; box-sizing: border-box; padding: 8px 10px; font-size: 13px;
+  border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px;
+  background: var(--panel); color: var(--ink);
+}
+.chat-lista {
+  flex: 1; overflow-y: auto; border: 1px solid var(--border);
+  border-radius: 10px; background: var(--panel-2); padding: 6px;
+}
+.chat-grupo-titulo {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .04em; color: var(--muted); padding: 10px 6px 4px;
+}
+.chat-contato {
+  width: 100%; display: flex; align-items: center; gap: 7px;
+  padding: 8px 9px; border: none; border-radius: 8px; cursor: pointer;
+  background: transparent; color: var(--ink); font-size: 13px; text-align: left;
+}
+.chat-contato:hover { background: var(--azul-fundo); }
+.chat-contato.ativo { background: var(--blue); color: var(--sobre-acento); }
+.chat-contato.ativo .chat-contato-unidade { color: var(--sobre-acento); opacity: .85; }
+.chat-contato-geral { font-weight: 700; }
+.chat-contato-nome { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-contato-unidade { font-size: 11px; color: var(--muted); }
+/* Bolinha de presença: verde = ping recente (portal aberto agora). */
+.chat-bolinha { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.chat-bolinha.on  { background: var(--ok-borda); }
+.chat-bolinha.off { background: var(--border-forte); border: 1px solid var(--muted); }
+.chat-nao-lidas {
+  background: var(--erro-borda); color: var(--sobre-acento);
+  font-size: 11px; font-weight: 700; border-radius: 10px; padding: 1px 6px; flex: none;
+}
+.chat-vazio-mini { font-size: 12px; color: var(--muted); padding: 4px 8px; }
+
+.chat-coluna-conversa {
+  display: flex; flex-direction: column; min-height: 0;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--panel);
+}
+.chat-topo {
+  padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 14px;
+}
+.chat-topo-info { font-size: 11.5px; color: var(--muted); margin-left: 8px; }
+.chat-msgs {
+  flex: 1; overflow-y: auto; padding: 12px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.chat-msg { max-width: 76%; padding: 7px 10px; border-radius: 10px; }
+/* Minha mensagem à direita, a do outro à esquerda -- é o que a leitura de
+   qualquer chat já espera, e dispensa repetir "Você" a cada linha. */
+.chat-msg.minha {
+  align-self: flex-end; background: var(--blue); color: var(--sobre-acento);
+}
+.chat-msg.dele {
+  align-self: flex-start; background: var(--panel-2); border: 1px solid var(--border);
+}
+.chat-msg-topo { font-size: 11px; opacity: .8; margin-bottom: 2px; }
+.chat-msg-texto { font-size: 13.5px; line-height: 1.35; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-apagar {
+  border: none; background: transparent; cursor: pointer;
+  color: inherit; font-size: 11px; opacity: .7; padding: 0 2px; margin-left: 4px;
+}
+.chat-vazio { color: var(--muted); font-size: 13px; margin: auto; text-align: center; }
+
+.chat-form { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--border); }
+.chat-form textarea {
+  flex: 1; resize: vertical; padding: 8px 10px; font-size: 13.5px;
+  font-family: inherit; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--panel); color: var(--ink);
+}
+
+/* Bolinha com o número de não lidas no item do menu lateral. */
+.nav-badge {
+  margin-left: auto; background: var(--erro-borda); color: var(--sobre-acento);
+  font-size: 11px; font-weight: 700; border-radius: 10px; padding: 1px 6px;
+}

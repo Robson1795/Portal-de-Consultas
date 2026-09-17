@@ -19,10 +19,10 @@
 // ela move separacao, enderecamento e saida de material de verdade, diferente
 // da Requisicao (que e so pedir). Quem faz esse fluxo e o ALM da unidade.
 const PERFIS = {
-  consultor:   { rotulo: 'Consultor',   paginas: ['painel', 'estoque'] },
-  estoque_alm: { rotulo: 'Estoque ALM', paginas: ['painel', 'estoque', 'sesmt', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'debitodireto', 'devolucao', 'metragem', 'analise', 'mfg'] },
-  estoque_aco: { rotulo: 'Estoque Aço', paginas: ['painel', 'bobinas', 'requisicao'] },
-  admin:       { rotulo: 'Admin',       paginas: ['painel', 'estoque', 'sesmt', 'bobinas', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'debitodireto', 'devolucao', 'metragem', 'analise', 'mfg', 'config'] }
+  consultor:   { rotulo: 'Consultor',   paginas: ['painel', 'estoque', 'chat'] },
+  estoque_alm: { rotulo: 'Estoque ALM', paginas: ['painel', 'estoque', 'sesmt', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'debitodireto', 'devolucao', 'metragem', 'analise', 'mfg', 'chat'] },
+  estoque_aco: { rotulo: 'Estoque Aço', paginas: ['painel', 'bobinas', 'requisicao', 'chat'] },
+  admin:       { rotulo: 'Admin',       paginas: ['painel', 'estoque', 'sesmt', 'bobinas', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'debitodireto', 'devolucao', 'metragem', 'analise', 'mfg', 'config', 'chat'] }
 };
 
 const PAGINAS = {
@@ -90,7 +90,14 @@ const PAGINAS = {
   // olha o que saiu a mais do que devia. Não escreve em estoque nenhum: lê
   // um arquivo, calcula e guarda só o resultado (ver js/mfg.js).
   mfg: { rotulo: 'Análise MFG', icone: '📐', elemento: 'mfgContent' },
-  config:  { rotulo: 'Configurações',     icone: '⚙️', elemento: 'configContent' }
+  config:  { rotulo: 'Configurações',     icone: '⚙️', elemento: 'configContent' },
+  // Robson, 17/09/2026: "monte um chat aonde eu possa conversar com os
+  // usuarios ativos". Fica por último de propósito -- foi onde ele apontou
+  // no print (abaixo de Configurações), e é a única tela que não é sobre
+  // material nenhum. Aparece pra TODO perfil, inclusive consultor: é quem
+  // tem menos tela e nenhum outro canal dentro do portal (mesmo motivo do
+  // botão de sugestão em montarMenu()).
+  chat: { rotulo: 'Chat', icone: '💬', elemento: 'chatContent' }
 };
 
 let perfilAtual = 'consultor';
@@ -200,6 +207,17 @@ function mostrarPagina(id) {
   // direto pra Etiqueta Pátio sem passar pelo Controle EXP acharia a lista
   // vazia e a descrição nunca puxaria sozinha.
   if (id === 'metragem') { carregarCatalogoExp(); }
+  // Chat: mesma regra do Painel de Docas -- a releitura periódica (presença,
+  // não lidas, conversa aberta) só roda com a tela aberta. O PING de presença
+  // não entra aqui de propósito: ele é do portal inteiro e começa no login
+  // (js/auth.js), senão a pessoa só apareceria "online" pros outros enquanto
+  // estivesse olhando o chat.
+  if (id === 'chat') {
+    carregarChat();
+    iniciarChatTempoReal();
+  } else if (typeof pararChatTempoReal === 'function') {
+    pararChatTempoReal();
+  }
   // Catálogo EXP primeiro, DEPOIS a Programação -- buscarDescricoesItens()
   // olha catalogoExpItens em memória (não busca de novo), então se essa
   // promise ainda não tivesse terminado (o catálogo tem centenas de linhas,

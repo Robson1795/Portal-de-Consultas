@@ -481,3 +481,104 @@ async function iniciarAvisoCanceladoAlm() {
     })
     .subscribe();
 }
+
+// ---- Chat (17/09/2026) ------------------------------------------------------
+//
+// Robson: "monte um chat aonde eu possa conversar com os usuarios ativos".
+// Mensagem que chega com a pessoa em outra tela precisa aparecer em algum
+// lugar -- senão um chat só funciona pra quem já está olhando pro chat.
+//
+// DUAS DIFERENÇAS dos outros avisos daqui:
+//
+//   1. Canal ÚNICO, sem sufixo de unidade (`chat-portal`): este chat
+//      atravessa as fábricas de propósito (escolha do Robson) -- por isso
+//      também não precisa reassinar ao trocar de unidade.
+//   2. Todo perfil recebe, inclusive consultor. Os outros avisos são de
+//      trabalho de um setor; este é gente falando com gente.
+function podeVerAvisoChat() {
+  return !!userIdAtual;
+}
+
+function notificarMensagemChat({ remetenteId, remetenteNome, destinatarioId, texto }) {
+  // O próprio eco não vira notificação (o broadcast volta pra quem enviou).
+  if (!remetenteId || remetenteId === userIdAtual) return;
+  // Privada de OUTRA pessoa não é da minha conta -- o RLS já não deixaria ler
+  // o conteúdo, mas o broadcast é solto: sem este filtro, o portal mostraria
+  // um aviso sobre conversa alheia.
+  if (destinatarioId && destinatarioId !== userIdAtual) return;
+
+  const privada = !!destinatarioId;
+
+  // Já está com a conversa aberta na tela? Não precisa de popup -- a
+  // mensagem aparece sozinha ali (releitura de 20s / envio).
+  const conversaAberta = paginaAtual === 'chat'
+    && chatConversaAtual === (privada ? remetenteId : CHAT_MURAL);
+  if (conversaAberta) return;
+
+  mostrarNotificacao({
+    icone: '💬',
+    titulo: privada ? `Mensagem de ${remetenteNome || 'alguém'}`
+                    : `${remetenteNome || 'Alguém'} escreveu no Geral`,
+    texto: escapeHtml(texto || ''),
+    acaoRotulo: 'Responder',
+    aoClicarAcao: () => {
+      if (typeof mostrarPagina === 'function') mostrarPagina('chat');
+      if (typeof abrirConversaChat === 'function') {
+        abrirConversaChat(privada ? remetenteId : CHAT_MURAL);
+      }
+    },
+    // Chave por remetente + instante: cada mensagem é um aviso novo. Duas
+    // mensagens seguidas da mesma pessoa são duas coisas pra ler, não uma
+    // repetição da mesma (ao contrário de "tem pedido pendente").
+    chave: 'chat:' + remetenteId + ':' + Date.now()
+  });
+}
+
+let canalChatAviso = null;
+
+// Chamado nos mesmos lugares dos outros avisos (js/auth.js depois de
+// montarMenu). Não precisa reassinar ao trocar de unidade -- canal único.
+async function iniciarAvisoChat() {
+  if (canalChatAviso) { sb.removeChannel(canalChatAviso); canalChatAviso = null; }
+  if (!podeVerAvisoChat()) return;
+
+  garantirPermissaoNotificacao();
+
+  // Quem chegou depois: conta o que ficou esperando e acende a bolinha do
+  // menu. Sem isto, mensagem recebida offline só apareceria se a pessoa
+  // abrisse o chat por conta própria.
+  if (typeof carregarNaoLidasChat === 'function') {
+    await carregarNaoLidasChat();
+    await carregarNaoLidasMural();
+    atualizarBadgeChat();
+    const total = chatTotalNaoLidas();
+    if (total > 0) {
+      mostrarNotificacao({
+        icone: '💬',
+        titulo: total === 1 ? '1 mensagem não lida no chat' : `${total} mensagens não lidas no chat`,
+        texto: 'Alguém falou com você enquanto o portal estava fechado.',
+        acaoRotulo: 'Abrir o chat',
+        aoClicarAcao: () => { if (typeof mostrarPagina === 'function') mostrarPagina('chat'); },
+        chave: 'chat-nao-lidas'
+      });
+    }
+  }
+
+  canalChatAviso = sb.channel('chat-portal')
+    .on('broadcast', { event: 'mensagem' }, async (msg) => {
+      const payload = msg.payload || {};
+      notificarMensagemChat(payload);
+      // Bolinha do menu e, se a tela estiver aberta, a conversa em si.
+      if (typeof carregarNaoLidasChat === 'function' && payload.remetenteId !== userIdAtual) {
+        await carregarNaoLidasChat();
+        await carregarNaoLidasMural();
+        atualizarBadgeChat();
+        if (paginaAtual === 'chat') {
+          await carregarMensagensChat();
+          renderListaChat();
+          renderMensagensChat();
+        }
+      }
+    })
+    .subscribe();
+}

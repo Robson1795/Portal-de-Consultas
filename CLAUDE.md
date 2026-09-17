@@ -7765,3 +7765,65 @@ altura total do conteúdo (miolo + preenchimento + borda) deu 182,9mm,
 dentro dos 186mm imprimíveis. Tamanhos de fonte conferidos no DOM (ITEM
 ~20,8mm, TOTAL ~18,2mm, convertidos pra px). Visual comparado ao print do
 Robson -- mesma proporção, moldura preta completa, sem corte.
+
+## 78. Chat entre os usuários do portal (17/09/2026) — sql/fase64-chat.sql
+
+O Robson, apontando pro espaço vazio embaixo de Configurações na sidebar:
+*"monte um chat aonde eu possa conversar com os usuarios ativos"*.
+Perguntado alcance e formato, respondeu: **todas as unidades** (quem está na
+mesma unidade normalmente está no mesmo prédio -- o valor é falar com
+Anápolis/Cambuí) e **mural geral + conversa privada**.
+
+**A tela** (js/chat.js, `#chatContent`): duas colunas -- esquerda a lista
+("📢 Geral", depois "Online agora", depois "Offline", com busca e bolinha de
+não lidas); direita a conversa, com balão à direita pro que é meu e à
+esquerda pro que é do outro. Enter manda, Shift+Enter quebra linha. Dá pra
+apagar a PRÓPRIA mensagem.
+
+**A lista de pessoas NÃO vem do cadastro.** O RLS de `usuarios_permitidos`
+(fase1c) só deixa cada um ver a própria linha -- a lista inteira é de admin.
+Lendo de lá, consultor abriria o chat e não veria ninguém; e abrir aquela
+tabela pra todo mundo seria alargar permissão de cadastro (perfil, unidade,
+aprovação) por causa de chat. A agenda sai de `chat_presenca`: entra quem
+abre o portal. Efeito colateral bom -- a lista é "quem usa o portal", não
+"todo cadastro que já existiu". Preço: no primeiro dia ela começa vazia e
+enche conforme cada um entra (o mural funciona desde o primeiro minuto).
+
+**"Ativo" é ping recente, não login.** O log de `acessos` não serve: registra
+o login e nunca mais é tocado -- quem entrou de manhã e foi embora
+continuaria "ativo" à tarde. Cada portal aberto regrava o próprio
+`ultimo_ping` a cada 45s e "online" é ping < 2 min. Tabela comum em vez do
+Presence do Realtime, de propósito: dá pra abrir no Supabase e VER quem está
+online quando alguém disser "fulano aparece online e não está".
+O ping é do PORTAL, não da tela do chat (começa no login, js/auth.js) --
+senão a pessoa só apareceria alcançável enquanto estivesse olhando o chat.
+
+**A privacidade mora no banco, não na tela** (fase64): o RLS de leitura
+devolve mural pra todo aprovado, mas mensagem com destinatário só pras duas
+pontas; escrita exige `remetente_id = auth.uid()` (ninguém escreve no nome de
+outro); "marcar como lida" é UPDATE com GRANT só da coluna `lido_em` -- sem
+isso a política deixaria o destinatário reescrever o texto de quem mandou.
+Identidade por `auth.uid()` e não por e-mail: é a chave que o RLS confere
+sozinho, e neste tenant o mesmo login aparece em domínios diferentes.
+
+**Notificação** (js/notificacoes.js): mesmo desenho dos outros avisos, com
+duas diferenças -- canal único `chat-portal` (sem sufixo de unidade, porque
+o chat atravessa as fábricas, então não precisa reassinar ao trocar de
+unidade) e vale pra TODO perfil, inclusive consultor (os outros avisos são
+trabalho de um setor; este é gente falando com gente). Não notifica: eco da
+própria mensagem, privada de terceiros, e conversa que já está aberta na
+tela. Bolinha com o número de não lidas no item do menu, pra mensagem que
+chega com a pessoa em outra tela não depender de ela ter visto o popup.
+
+**Rodar `sql/fase64-chat.sql` no Supabase** -- sem isso a tela abre com o
+aviso apontando o arquivo.
+
+Testado localmente com banco falso em memória (3 pessoas, mensagens de mural
+e privadas): lista separando online/offline pelo ping, eu fora da minha
+própria lista, não lidas por pessoa e do mural, conversa privada trazendo os
+dois sentidos **sem vazar a conversa Caio↔Ana**, marcar como lida mandando
+só `lido_em`, envio gravando + broadcast, apagar a própria mensagem,
+notificação nos 4 casos (notifica pra mim / não notifica de terceiros / não
+notifica eco / não notifica com a conversa aberta), badge somando mural +
+privadas, e **XSS**: mensagem com `<img onerror>` virou texto, sem executar
+nem criar elemento. Sem erro no console.

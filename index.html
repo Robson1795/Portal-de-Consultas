@@ -853,6 +853,38 @@
   </div>
   <!-- ================= FIM CONTAGEM POR METRAGEM ================= -->
 
+  <!-- ================= CHAT ================= -->
+  <!-- Robson, 17/09/2026: "monte um chat aonde eu possa conversar com os
+       usuarios ativos". Mural geral + conversa privada, atravessando as
+       unidades (escolha dele). A lista de pessoas sai de `chat_presenca`,
+       não do cadastro -- ver o comentário no topo de js/chat.js. -->
+  <div id="chatContent" style="display:none;">
+    <div class="panel">
+      <h2 style="margin:0 0 4px;">💬 Chat</h2>
+      <div class="modal-text" style="margin-bottom:12px;">
+        Conversa com quem usa o portal, de qualquer unidade. Em <b>📢 Geral</b> todo mundo lê;
+        clicando num nome, a conversa fica só entre vocês dois. Quem está offline recebe assim que entrar.
+      </div>
+      <div class="status-msg" id="chatMsg" style="margin-bottom:8px;"></div>
+
+      <div class="chat-layout">
+        <div class="chat-coluna-lista">
+          <input type="text" id="chatBusca" class="chat-busca" placeholder="Procurar pessoa ou unidade...">
+          <div id="chatLista" class="chat-lista"></div>
+        </div>
+        <div class="chat-coluna-conversa">
+          <div id="chatConversaTopo" class="chat-topo"></div>
+          <div id="chatMensagens" class="chat-msgs"></div>
+          <div class="chat-form">
+            <textarea id="chatTexto" rows="2" placeholder="Escreva e aperte Enter (Shift+Enter quebra linha)"></textarea>
+            <button class="btn btn-primary" id="chatEnviarBtn">Enviar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- ================= FIM CHAT ================= -->
+
   <!-- ================= ANÁLISE DE COMPRAS ================= -->
   <!-- Cola a planilha dos pedidos que estão entrando pra separação e compara
        o total pedido de cada item com o saldo do almoxarifado da unidade:
@@ -2552,6 +2584,7 @@
 <script src="js/debitodireto.js"></script>
 <script src="js/devolucao.js"></script>
 <script src="js/metragem.js"></script>
+<script src="js/chat.js"></script>
 <script src="js/painelseparacao.js"></script>
 <script src="js/mfg.js"></script>
 <script src="js/tour.js"></script>

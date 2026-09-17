@@ -279,6 +279,14 @@ async function mostrarTelaCorreta(session) {
     iniciarAvisoPreparo();
     // Idem, canal de devolução ao almoxarifado também por unidade.
     if (typeof iniciarAvisoCanceladoAlm === 'function') iniciarAvisoCanceladoAlm();
+    // Chat: presença e aviso de mensagem valem pro portal INTEIRO, não só pra
+    // tela do chat -- "usuário ativo" (Robson) é quem está com o portal
+    // aberto, e mensagem que chega precisa aparecer esteja a pessoa em que
+    // tela estiver. Diferente dos avisos acima, NÃO precisa reassinar ao
+    // trocar de unidade: o canal é único porque o chat atravessa as fábricas.
+    // A unidade nova entra sozinha no próximo ping de presença.
+    if (typeof iniciarPresencaChat === 'function') iniciarPresencaChat();
+    if (typeof iniciarAvisoChat === 'function') iniciarAvisoChat();
   } else {
     authScreen.style.display = 'none';
     pendingScreen.style.display = 'block';
