@@ -7339,3 +7339,28 @@ Testado localmente três cenários: unidade com 544 contra pedidos somando
 mostrou "✓ já tem o suficiente (720 de 5000)"; sem pedido pendente algum, o
 bloco não apareceu. Modal confirmado em 760px de largura máxima. Sem erro
 no console.
+
+## 64. Etiqueta de Devolução ganha NF e metragem (17/09/2026)
+
+O Robson: *"Aqui preciso para tirar etiqueta das devoluçoes, preciso colocar
+numero da NF, codigo do produto, descrição do produto e a metragem"*.
+Código e descrição já estavam na etiqueta (seção 52); faltavam os outros
+dois.
+
+**NF** entra na mesma linha de Protocolo/Pedido, na frente: `nf_devolucao`
+— mesma coluna já usada na tabela da tela ("NF Devolução"). **Metragem** é
+`qtd_nf` + `um` juntos (ex.: "144,5 M") — o que a NF diz que tem, disponível
+na hora de etiquetar, antes até de `qtd_fisico` (conferência física) ser
+preenchido. Vira uma linha própria, grande (15mm, entre a descrição e a
+linha de NF/protocolo/pedido) — depois de código (22mm) e antes do endereço
+(40mm, que continua o maior elemento da etiqueta).
+
+Os dois campos são opcionais na tela (import/manual não exigem NF nem
+Qtd NF preenchidos) — a etiqueta reflete isso: item sem NF ou sem
+metragem simplesmente não mostra aquela linha, sem "—" nem espaço vazio.
+
+Testado localmente com 2 itens (um completo, um só com código/descrição/
+localização): o completo saiu com "144,5 M" na linha de metragem e "NF
+123456 · Protocolo PROT-88 · Pedido KV900111" na linha seguinte; o
+incompleto saiu sem a linha de metragem e sem a linha de NF/protocolo/
+pedido, sem quebrar o layout. Sem erro no console.

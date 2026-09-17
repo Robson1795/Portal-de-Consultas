@@ -600,12 +600,22 @@ document.getElementById('devolucaoManualId').addEventListener('keydown', (e) => 
 // paisagem, texto grande, sem depender de rede. Marca "DEVOLUÇÃO" no lugar
 // de "TRADING"/"ITEM DÉBITO DIRETO", e leva o Nº da devolução (pequeno) além
 // do produto e da localização.
+//
+// Robson, 17/09/2026: "preciso para tirar etiqueta das devoluçoes, preciso
+// colocar numero da NF, codigo do produto, descrição do produto e a
+// metragem" -- código e descrição já existiam; faltavam a NF (nf_devolucao,
+// mesma coluna da tabela) e a metragem (qtd_nf + um -- é o que a NF diz que
+// tem, disponível na hora de etiquetar, antes até da conferência física
+// preencher qtd_fisico).
 // ===========================================================================
 
 function montarHtmlEtiquetasDevolucao(linhas) {
   const impressoEm = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
   const quem = nomeUsuarioAtual || emailUsuarioAtual || '—';
-  const etiquetas = linhas.map(item => `
+  const etiquetas = linhas.map(item => {
+    const metragem = item.qtd_nf != null && item.qtd_nf !== ''
+      ? `${numeroBR(item.qtd_nf)}${item.um ? ' ' + escapeHtml(item.um) : ''}` : '';
+    return `
     <section class="etiqueta">
       <div class="etq-topo">
         <span class="etq-marca">DEVOLUÇÃO</span>
@@ -613,10 +623,12 @@ function montarHtmlEtiquetasDevolucao(linhas) {
       </div>
       <div class="etq-item">${escapeHtml(item.cod_produto || '—')}</div>
       <div class="etq-desc">${escapeHtml(item.descricao_produto || '')}${item.cliente ? ' · ' + escapeHtml(item.cliente) : ''}</div>
-      <div class="etq-qtd">${item.id_devolucao ? 'Protocolo ' + escapeHtml(item.id_devolucao) + ' · ' : ''}${item.numero_pedido ? 'Pedido ' + escapeHtml(item.numero_pedido) : ''}</div>
+      ${metragem ? `<div class="etq-metragem">${metragem}</div>` : ''}
+      <div class="etq-qtd">${item.nf_devolucao ? 'NF ' + escapeHtml(item.nf_devolucao) + ' · ' : ''}${item.id_devolucao ? 'Protocolo ' + escapeHtml(item.id_devolucao) + ' · ' : ''}${item.numero_pedido ? 'Pedido ' + escapeHtml(item.numero_pedido) : ''}</div>
       <div class="etq-local">${escapeHtml(item.localizacao || '—')}</div>
       <div class="etq-rodape">Impresso por ${escapeHtml(quem)} — ${escapeHtml(impressoEm)}</div>
-    </section>`).join('');
+    </section>`;
+  }).join('');
 
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
 <title>Devolução — ${new Date().toLocaleDateString('pt-BR')}</title>
@@ -637,6 +649,7 @@ function montarHtmlEtiquetasDevolucao(linhas) {
   .etq-unidade { font-size: 4mm; color: #333; }
   .etq-item { font-size: 22mm; font-weight: 900; line-height: 1.1; overflow-wrap: anywhere; }
   .etq-desc { font-size: 9mm; font-weight: 700; line-height: 1.15; margin-top: 3mm; }
+  .etq-metragem { font-size: 15mm; font-weight: 900; margin-top: 3mm; }
   .etq-qtd { font-size: 8mm; font-weight: 700; margin-top: 3mm; color: #333; }
   .etq-local {
     font-size: 40mm; font-weight: 900; line-height: 1.05; letter-spacing: 0.02em;
