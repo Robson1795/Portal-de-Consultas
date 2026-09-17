@@ -7303,3 +7303,39 @@ ficar perdido no meio de uma frase.
 Testado localmente com 2 unidades tendo o mesmo item: o cartão saiu com
 código, descrição, unidade, quantidade (47) em destaque e o selo
 "+1 unidade" indicando saldo em mais um lugar. Sem erro no console.
+
+## 63. Comparativo entre unidades: modal mais largo e a necessidade calculada (17/09/2026)
+
+O Robson, no comparativo entre unidades (mesmo modal do "⇄"), com a tabela
+"Pedidos que precisam deste item" cortada na lateral: *"aumente a tela para
+aparecer tudo o que esta escrito, e acrescente a necessidade que preciso
+para atender os pedidos, facilita para eu mandar o print completo quando eu
+pedir transferência"*.
+
+**Modal mais largo.** `#compareModalBox` tinha `max-width: 560px` — estreito
+demais pra caber a tabela de unidades E a de pedidos (5 colunas, datas por
+extenso) uma embaixo da outra sem cortar cabeçalho/data. Foi pra 760px,
+mesma faixa de outros modais de detalhe com tabela (mfgDetalheBox,
+buscaGlobalBox).
+
+**Necessidade calculada.** Novo bloco em destaque, logo abaixo dos botões
+Compartilhar/Imagem: `Total a atender` (soma dos pedidos pendentes) menos o
+que a unidade ABERTA já tem — é literalmente a pergunta de quem vai pedir
+transferência: "quanto preciso conseguir emprestado?". Zero ou negativo
+mostra confirmação verde ("já tem o suficiente") em vez do número, porque
+"0" ali pareceria alerta em vez de boa notícia.
+
+A ponte entre os dois módulos é um atributo, não parâmetro de função:
+`pedidosDoItemHtml()` (js/analise.js) já roda e devolve uma STRING pronta
+antes de `openCompareModal()` (js/estoque.js) sequer saber o estoque da
+unidade aberta — os dois nunca se encontram em código, só nesse HTML que
+passa de um pro outro. `data-total-a-atender="720"` no `div` que envolve a
+tabela de pedidos é o que `openCompareModal()` lê de volta (regex na string,
+antes dela virar DOM) pra fazer a conta. Sem essa tabela (nenhum pedido
+pendente pro item), o bloco de necessidade simplesmente não aparece.
+
+Testado localmente três cenários: unidade com 544 contra pedidos somando
+720 mostrou "Necessário conseguir: 176"; unidade com estoque de sobra
+mostrou "✓ já tem o suficiente (720 de 5000)"; sem pedido pendente algum, o
+bloco não apareceu. Modal confirmado em 760px de largura máxima. Sem erro
+no console.

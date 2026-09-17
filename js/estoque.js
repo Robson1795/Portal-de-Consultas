@@ -1764,6 +1764,29 @@ async function openCompareModal(itemCode, extraHtml) {
 
   const nomeItem = todasAsLinhas[0] ? todasAsLinhas[0].descricao : '';
 
+  // Robson, 17/09/2026: "acrescente a necessidade que preciso para atender
+  // os pedidos, facilita para eu mandar o print completo quando eu pedir
+  // transferência" -- o total dos pedidos (`data-total-a-atender`, escrito
+  // por pedidosDoItemHtml() em js/analise.js, a única ponte entre as duas
+  // telas) contra o que JÁ tem na unidade aberta agora: o que falta é o que
+  // ele de fato precisa pedir emprestado de outra unidade.
+  const matchTotalAAtender = String(extraHtml || '').match(/data-total-a-atender="([\d.]+)"/);
+  const totalAAtender = matchTotalAAtender ? Number(matchTotalAAtender[1]) : null;
+  const estoqueAqui = porUnidade[unidadeAtual] ? porUnidade[unidadeAtual].totalQtd : 0;
+  const necessidade = totalAAtender != null ? Math.max(0, totalAAtender - estoqueAqui) : null;
+
+  const necessidadeHtml = totalAAtender == null ? '' : (necessidade > 0 ? `
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; background:var(--aviso-fundo); border:1px solid var(--aviso-borda); border-radius:10px; padding:10px 14px; margin:10px 0;">
+      <div>
+        <div style="font-weight:700; color:var(--aviso-texto); font-size:13px;">Necessário conseguir</div>
+        <div style="font-size:11.5px; color:var(--muted);">Pedidos precisam de ${escapeHtml(totalAAtender.toLocaleString('pt-BR'))} · ${escapeHtml(rotuloUnidade(unidadeAtual))} tem ${escapeHtml(estoqueAqui.toLocaleString('pt-BR'))}</div>
+      </div>
+      <div style="font-size:26px; font-weight:800; color:var(--aviso-texto); white-space:nowrap;">${escapeHtml(necessidade.toLocaleString('pt-BR'))}</div>
+    </div>` : `
+    <div style="display:flex; align-items:center; gap:10px; background:var(--ok-fundo); border:1px solid var(--ok-borda); border-radius:10px; padding:10px 14px; margin:10px 0; color:var(--ok-texto); font-weight:600; font-size:13px;">
+      ✓ ${escapeHtml(rotuloUnidade(unidadeAtual))} já tem o suficiente pros pedidos (${escapeHtml(totalAAtender.toLocaleString('pt-BR'))} de ${escapeHtml(estoqueAqui.toLocaleString('pt-BR'))}).
+    </div>`);
+
   compareModalBox.innerHTML = `
     <button class="modal-close" id="compareCloseBtn2">✕</button>
     <h3 style="padding-right:24px;">${escapeHtml(nomeItem || itemCode)}</h3>
@@ -1772,6 +1795,7 @@ async function openCompareModal(itemCode, extraHtml) {
       <button type="button" class="btn modal-acao-compartilhar" id="compareShareBtn" title="Compartilhar ou copiar como texto — pra pedir transferência a outra unidade, ou justificar reposição pro compras">📤 Compartilhar</button>
       <button type="button" class="btn modal-acao-compartilhar" id="compareShareImgBtn" title="Compartilhar como imagem — pro WhatsApp, que não mostra tabela colada">🖼️ Imagem</button>
     </div>
+    ${necessidadeHtml}
     <table style="width:100%; border-collapse:collapse; margin-top:10px; font-size:13px; table-layout:fixed;">
       <thead>
         <tr style="border-bottom:2px solid var(--border);">

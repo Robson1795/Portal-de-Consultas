@@ -516,7 +516,12 @@
     background: var(--panel); border-radius: 14px; max-width: 480px; width: 100%;
     max-height: 85vh; overflow-y: auto; padding: 20px; position: relative;
   }
-  #compareModalBox { max-width: 560px; }
+  /* Robson, 17/09/2026: "aumente a tela para aparecer tudo o que esta
+     escrito" -- com a tabela de "Pedidos que precisam deste item" (5
+     colunas, datas por extenso) encaixada embaixo da tabela de unidades,
+     560px cortava cabeçalho e data. Mesma faixa de largura de outros modais
+     de detalhe com tabela (mfgDetalheBox/buscaGlobalBox, 720px). */
+  #compareModalBox { max-width: 760px; }
   .modal-close {
     position: absolute; top: 12px; right: 12px; border: none; background: var(--row-alt);
     border-radius: 50%; width: 30px; height: 30px; cursor: pointer; font-size: 16px;

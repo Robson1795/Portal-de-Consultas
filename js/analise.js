@@ -562,8 +562,15 @@ function pedidosDoItemHtml(codigoItem) {
     return 0;
   });
 
+  // Vai num atributo, não só no rodapé da tabela: é como openCompareModal()
+  // (js/estoque.js) recupera este número pra calcular "quanto falta" contra
+  // o que a unidade aberta tem -- este HTML já está pronto (string) antes
+  // daquela função ainda saber o estoque local, e as duas telas não têm
+  // outro jeito de conversar.
+  const totalAAtender = ordenadas.reduce((soma, l) => soma + (Number(l.qt_pedido) || 0), 0);
+
   return `
-    <div style="margin-top:16px; padding-top:12px; border-top:2px solid var(--border);">
+    <div data-total-a-atender="${totalAAtender}" style="margin-top:16px; padding-top:12px; border-top:2px solid var(--border);">
       <div style="font-size:11px; text-transform:uppercase; color:var(--muted); font-weight:700; margin-bottom:6px;">
         Pedidos que precisam deste item
       </div>
@@ -590,7 +597,7 @@ function pedidosDoItemHtml(codigoItem) {
         <tfoot>
           <tr style="border-top:2px solid var(--border);">
             <td style="padding:6px; font-weight:700;" colspan="2">Total a atender</td>
-            <td style="padding:6px; text-align:right; font-weight:700;">${numeroBR(ordenadas.reduce((soma, l) => soma + (Number(l.qt_pedido) || 0), 0))}</td>
+            <td style="padding:6px; text-align:right; font-weight:700;">${numeroBR(totalAAtender)}</td>
             <td></td>
             <td></td>
           </tr>
