@@ -7046,3 +7046,34 @@ frágil.
 
 Testado localmente com as duas planilhas reais, nas quatro combinações: cada
 uma passa na sua aba e é barrada com a mensagem certa na aba trocada.
+
+## 55. A aba Separação sai; sobram Carregamento e Painel do Separador (17/09/2026)
+
+*"aba de separaçao nao precisa ja que consigo jogar a planilha direto no
+painel"*. Antes de tirar, perguntei: a importação da planilha não depende da
+aba — o botão "Importar planilhas" fica na barra de cima, vale pra todas — e
+ele confirmou mesmo assim, sabendo disso.
+
+Removidos: a sub-aba (tabela, cartões de contagem, busca, filtro de status,
+filtro de dia, Desfazer/Ctrl+Z, textarea de observação que crescia sozinha) e
+todo o código só dela — `renderSeparacao()`, `alternarItemSeparado()`,
+`reabrirItemSeparacao()`, `marcarPedidoInteiro()`, `preencherFiltroEmbarque()`,
+`celulaEstoqueHtml()`, `momentoSeparacao()`, o par `ajustarAlturaObs()`/
+`ajustarTodasAlturasObs()`, e a pilha de desfazer inteira (`desfazerSeparacao`,
+`empilharDesfazer()`, `atualizarBotaoDesfazer()`, `desfazerUltimaSeparacao()`).
+
+O que ficou, por ser infraestrutura compartilhada e não exclusiva da aba:
+`itemConcluido()` (usado pelo status consolidado do Carregamento),
+`compararPorUrgencia()`, `dataCurta()`/`horaCurta()`/`dataLonga()`/`hojeIso()`,
+`buscarSaldoAlmoxarifado()` + `progEstoqueMap`/`progLocalMap` (o Painel lê
+direto), e `registrarLogProgramacao()` (usado pelo Carregamento, pelo
+Controle EXP e pelo Painel).
+
+Carregamento vira a aba padrão (era Separação); `progAbaAtual` inicial ajustado
+de `'separacao'` para `'carregamento'`.
+
+Testado localmente: só duas abas no seletor (Carregamento, 🧰 Painel do
+Separador), `#progSeparacao` não existe mais no DOM, Carregamento abre visível
+por padrão, e trocar pro Painel mostra a fila e os itens normalmente — mesmos
+dados de `carregarProgramacao()`, sem nenhuma chamada a função removida. Sem
+erro no console ligado à remoção.

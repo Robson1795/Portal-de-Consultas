@@ -616,8 +616,7 @@
     <div class="panel">
       <div class="cfg-barra">
         <div id="progAbas" style="display:flex; gap:8px; flex-wrap:wrap;">
-          <button class="btn" data-prog-aba="carregamento">Carregamento</button>
-          <button class="btn btn-primary" data-prog-aba="separacao">Separação</button>
+          <button class="btn btn-primary" data-prog-aba="carregamento">Carregamento</button>
           <button class="btn" data-prog-aba="painel">🧰 Painel do Separador<span id="painelContaPendentes"></span></button>
         </div>
         <button class="btn" id="progImportarBtn" style="margin-left:auto;">Importar planilhas</button>
@@ -625,72 +624,15 @@
       </div>
       <div class="status-msg" id="progMsg" style="padding:0 16px;"></div>
 
-      <!-- ---- Aba 1: Separação (itens da Planilha A) ---- -->
-      <div id="progSeparacao" class="prog-aba">
-        <div class="stat-cards" style="padding:14px 16px 0;">
-          <div class="stat-card">
-            <div class="stat-icone azul">📋</div>
-            <div class="stat-texto">
-              <div class="stat-rotulo">Itens no total</div>
-              <div class="stat-valor" id="progTotalItens">-</div>
-            </div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icone" style="background:var(--aviso-fundo);">⏳</div>
-            <div class="stat-texto">
-              <div class="stat-rotulo">Pendentes</div>
-              <div class="stat-valor" id="progPendentes">-</div>
-            </div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icone" style="background:var(--ok-fundo);">✅</div>
-            <div class="stat-texto">
-              <div class="stat-rotulo">Separados</div>
-              <div class="stat-valor" id="progSeparados">-</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="cfg-barra">
-          <input type="text" id="progBusca" placeholder="Buscar pedido, cliente ou item..." style="flex:1; min-width:200px;">
-          <select id="progFiltroStatus">
-            <option value="aguardando" selected>Só pendentes</option>
-            <option value="">Todos os status</option>
-            <option value="separado">Só separados</option>
-          </select>
-          <select id="progFiltroEmbarque">
-            <option value="">Todas as datas</option>
-          </select>
-          <button class="btn" id="progDesfazerBtn" disabled title="Nada para desfazer">↶ Desfazer (Ctrl+Z)</button>
-        </div>
-
-        <div class="scroll-area">
-          <table id="progTabelaItens">
-            <thead>
-              <tr>
-                <th>Pedido</th><th>Cliente</th><th>Embarque</th><th>Seq</th><th>Item</th>
-                <th>Descrição</th><th>UM</th><th>Qtd</th><th>OS/OP</th>
-                <th>Observação</th><th>Status</th><th>Separado em</th>
-                <th>Estoque ALM</th><th>Ação</th>
-              </tr>
-            </thead>
-            <tbody id="progItensBody"></tbody>
-          </table>
-        </div>
-        <div class="empty-msg" id="progItensVazio" style="display:none;">
-          Nenhum item importado ainda. Use "Importar planilhas".
-        </div>
-      </div>
-
-      <!-- ---- Aba 2: Carregamento (grade por bloco e horário) ---- -->
-      <div id="progCarregamento" class="prog-aba" style="display:none;">
+      <!-- ---- Aba 1: Carregamento (grade por bloco e horário) ---- -->
+      <div id="progCarregamento" class="prog-aba">
         <div id="progGrade" style="padding:14px 16px;"></div>
         <div class="empty-msg" id="progGradeVazio" style="display:none;">
           Nenhum pedido programado. Importe a planilha de carregamento.
         </div>
       </div>
 
-      <!-- ---- Aba 3: Painel do Separador (tela do auxiliar, tablet/monitor) ---- -->
+      <!-- ---- Aba 2: Painel do Separador (tela do auxiliar, tablet/monitor) ---- -->
       <!-- Mesmos pedidos e itens das outras abas, outra leitura: aqui é quem
            separa, de pé, com botão grande e confirmação em pop-up. Ver
            js/painelseparacao.js. -->

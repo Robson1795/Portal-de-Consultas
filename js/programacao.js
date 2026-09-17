@@ -17,7 +17,7 @@
 // (sql/programacao-01-tabelas-e-rls.sql). Esta tela não filtra por unidade
 // de propósito: filtrar aqui daria a impressão de que a tela é que protege.
 
-let progAbaAtual = 'separacao';
+let progAbaAtual = 'carregamento';
 let progImportAba = 'A';
 let progPedidos = [];       // vw_pedidos_prioridade (pedido + contagem de itens)
 let progItens = [];         // pedido_itens dos pedidos carregados
@@ -166,7 +166,6 @@ async function carregarProgramacao() {
       .sort((a, b) => new Date(b.criado_em) - new Date(a.criado_em))[0].numero_pedido || null;
   }
 
-  renderSeparacao();
   renderCarregamento();
   renderPainelSeparacao(); // tela do auxiliar (js/painelseparacao.js), mesmos dados
   renderExpControle(expCtrl.error ? expCtrl.error.message : null);
@@ -209,12 +208,8 @@ function trocarAbaProgramacao(aba) {
   document.querySelectorAll('#progAbas [data-prog-aba]').forEach(b => {
     b.className = b.dataset.progAba === aba ? 'btn btn-primary' : 'btn';
   });
-  document.getElementById('progSeparacao').style.display = aba === 'separacao' ? 'block' : 'none';
   document.getElementById('progCarregamento').style.display = aba === 'carregamento' ? 'block' : 'none';
   document.getElementById('progPainelSeparador').style.display = aba === 'painel' ? 'block' : 'none';
-  // Campo de observacao so consegue se medir com a aba aberta (ver
-  // ajustarAlturaObs): ao voltar pra Separacao, remede o que ficou de fora.
-  if (aba === 'separacao') ajustarTodasAlturasObs();
 }
 
 document.getElementById('progAtualizarBtn').addEventListener('click', carregarProgramacao);
@@ -292,26 +287,6 @@ function itemConcluido(item) {
     || item.status_separacao === 'falta_reporte';
 }
 
-// Ciclo do botão manual da Separação (15/09/2026): Pendente -> Separado/
-// Reportado -> Falta reporte -> Pendente de novo. 'reportado' (só chega por
-// importação da planilha) avança pra 'falta_reporte' igual a 'separado' --
-// não tem um quarto clique só pra ele.
-function proximoStatusSeparacao(atual) {
-  if (atual === 'aguardando') return 'separado';
-  if (atual === 'separado' || atual === 'reportado') return 'falta_reporte';
-  return 'aguardando';
-}
-
-const ROTULO_BOTAO_SEPARACAO = {
-  aguardando: 'Marcar separado/reportado',
-  separado: 'Marcar falta reporte',
-  reportado: 'Marcar falta reporte',
-  falta_reporte: 'Reabrir (pendente)'
-};
-
-const ROTULO_STATUS_ITEM = { aguardando: 'Pendente', separado: 'Separado', reportado: 'Separado', falta_reporte: 'Falta reporte' };
-const CLASSE_STATUS_ITEM = { aguardando: 'st-pendente', separado: 'st-ativo', reportado: 'st-ativo', falta_reporte: 'st-atencao' };
-
 function pedidoDoNumero(numero) {
   return progPedidos.find(p => p.numero_pedido === numero);
 }
@@ -337,16 +312,6 @@ function dataCurta(data) {
 function hojeIso() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-// Quando o item foi marcado como separado. Robson, 16/09/2026: "coloca data e
-// horario da separação tambem". `separado_em` e timestamp UTC do banco; aqui
-// vira hora local de quem olha, que e a que o pessoal do almoxarifado usa.
-function momentoSeparacao(quando) {
-  if (!quando) return '—';
-  const d = new Date(quando);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
 // Com ano: o titulo da divisao de carregamento diz o dia inteiro, pra nao
@@ -426,33 +391,14 @@ function compararPorUrgencia(pedidoA, pedidoB) {
   return ordemA - ordemB;
 }
 
-// ---- Saldo do Almoxarifado na lista de separação ----------------------------
-// Robson, 16/09/2026, vendo o botao "sem estoque" em item que ele TEM:
-// "puxa o estoque na aba do almoxarifado e coloca ali". Sem o saldo do lado,
-// decidir se o item vira pendencia era memoria ou ir conferir em outra tela.
+// ---- Saldo do Almoxarifado (usado no Painel do Separador) -------------------
+// Robson, 16/09/2026, vendo um botao de "sem estoque" em item que ele TEM:
+// "puxa o estoque na aba do almoxarifado e coloca ali". Sem o saldo à vista,
+// decidir se dá pra separar era memória ou ir conferir em outra tela.
 //
 // Mesma fonte da Consulta de Itens: tabela `estoque`, depósito 'alm' e a
 // unidade aberta -- saldo de outra unidade nao ajuda quem esta separando aqui.
 let progEstoqueMap = new Map();
-
-// Verde quando o saldo cobre o que o pedido precisa, vermelho quando nao tem
-// nada, amarelo quando tem mas nao o suficiente -- e o que decide se o item
-// pode ser separado agora, vira pendencia ou sai parcial.
-//
-// Fica no fim da linha, colado no botao que usa essa informacao, e NAO ao lado
-// de "Qtd". Robson, 16/09/2026: "estoque coloque em outra coluna para nao
-// confundir com a quantidade do pedido" -- duas colunas de numero vizinhas,
-// uma dizendo quanto o cliente pediu e outra quanto tem na prateleira, davam
-// leitura trocada. O cabecalho tambem diz de onde vem o numero: "Estoque ALM".
-function celulaEstoqueHtml(item) {
-  const saldo = progEstoqueMap.get(String(item.codigo_item));
-  if (saldo == null) return '<td class="num prog-estoque">—</td>';
-  const precisa = parseQtd(item.quantidade);
-  const classe = saldo <= 0 ? 'prog-estoque-zero'
-    : (precisa > 0 && saldo < precisa) ? 'prog-estoque-parcial'
-    : 'prog-estoque-ok';
-  return `<td class="num prog-estoque ${classe}">${escapeHtml(saldo.toLocaleString('pt-BR'))}</td>`;
-}
 
 async function buscarSaldoAlmoxarifado(codigos) {
   progLocalMap = new Map();
@@ -492,448 +438,9 @@ async function buscarSaldoAlmoxarifado(codigos) {
   return mapa;
 }
 
-// ---- Aba 1: Separação -------------------------------------------------------
-// Robson, 16/09/2026: "na aba separação pode colocar meio que uma divisao só
-// dos pedidos que carregam amanhã, ou pode colocar outra aba de separaçaõ com
-// o titulo carregamento do dia 17/09/2026". Em vez de uma aba nova por dia
-// (que teria de ser recriada a cada planilha colada), o seletor filtra por dia
-// e a lista sai dividida por dia -- mesmo efeito, sem aba que nasce e morre.
-let filtroEmbarquePadraoAplicado = false;
-
-function preencherFiltroEmbarque(linhas) {
-  const sel = document.getElementById('progFiltroEmbarque');
-  const datas = [...new Set(linhas
-    .map(({ pedido }) => pedido && pedido.data_carregamento)
-    .filter(Boolean))].sort();
-  const temSemData = linhas.some(({ pedido }) => !(pedido && pedido.data_carregamento));
-
-  const html = ['<option value="">Todas as datas</option>']
-    .concat(datas.map(d => `<option value="${escapeHtml(d)}">Carregamento ${escapeHtml(dataLonga(d))}</option>`))
-    .concat(temSemData ? ['<option value="sem">Sem data de embarque</option>'] : [])
-    .join('');
-  if (sel.innerHTML === html) return; // sem novidade: nao mexe, pra nao perder a escolha
-
-  const escolhido = sel.value;
-  sel.innerHTML = html;
-  sel.value = [...sel.options].some(o => o.value === escolhido) ? escolhido : '';
-
-  // Abre no proximo dia de carregamento. Robson, 16/09/2026: "quero que pegue
-  // só o do dia posterior, tipo hoje pega de amanhã amanhã pega do dia 18" --
-  // e o que ele vai separar HOJE. So na primeira montagem: depois disso a
-  // escolha e dele, e re-render (cada tecla na busca) nao pode puxar de volta.
-  if (!filtroEmbarquePadraoAplicado && datas.length) {
-    const proximo = datas.find(d => d > hojeIso());
-    if (proximo) sel.value = proximo;
-    filtroEmbarquePadraoAplicado = true;
-  }
-}
-
-function renderSeparacao() {
-  const doDia = progItens;
-  const total = doDia.length;
-  const concluidos = doDia.filter(itemConcluido).length;
-  document.getElementById('progTotalItens').textContent = total.toLocaleString('pt-BR');
-  document.getElementById('progPendentes').textContent = (total - concluidos).toLocaleString('pt-BR');
-  document.getElementById('progSeparados').textContent = concluidos.toLocaleString('pt-BR');
-
-  const busca = document.getElementById('progBusca').value.trim().toLowerCase();
-  const filtro = document.getElementById('progFiltroStatus').value;
-
-  let linhas = doDia.map(i => {
-    const pedido = progPedidos.find(p => p.id === i.pedido_id);
-    return { item: i, pedido };
-  });
-
-  // As opcoes saem da lista INTEIRA, antes de qualquer filtro -- senao escolher
-  // um dia tiraria os outros dias do proprio seletor e nao teria como voltar.
-  preencherFiltroEmbarque(linhas);
-  const filtroEmbarque = document.getElementById('progFiltroEmbarque').value;
-  if (filtroEmbarque === 'sem') {
-    linhas = linhas.filter(({ pedido }) => !(pedido && pedido.data_carregamento));
-  } else if (filtroEmbarque) {
-    linhas = linhas.filter(({ pedido }) => pedido && pedido.data_carregamento === filtroEmbarque);
-  }
-
-  if (busca) {
-    linhas = linhas.filter(({ item, pedido }) =>
-      String(pedido && pedido.numero_pedido).toLowerCase().includes(busca) ||
-      String(pedido && pedido.cliente).toLowerCase().includes(busca) ||
-      String(item.codigo_item).toLowerCase().includes(busca) ||
-      String(item.descricao).toLowerCase().includes(busca));
-  }
-  if (filtro === 'aguardando') linhas = linhas.filter(({ item }) => !itemConcluido(item));
-  if (filtro === 'separado')   linhas = linhas.filter(({ item }) => itemConcluido(item));
-
-  // A razao desta aba existir: separar primeiro o que tem caminhao saindo
-  // antes. Ordena pelo pedido (momento_carregamento); dentro do mesmo
-  // pedido mantem a ordem que ja vinha (seq), sem embaralhar os itens.
-  linhas = [...linhas].sort((a, b) => compararPorUrgencia(a.pedido, b.pedido));
-
-  const corpo = document.getElementById('progItensBody');
-  const vazio = document.getElementById('progItensVazio');
-  document.getElementById('progTabelaItens').style.display = linhas.length ? 'table' : 'none';
-  vazio.style.display = linhas.length ? 'none' : 'block';
-  if (!linhas.length) {
-    vazio.textContent = progItens.length
-      ? 'Nenhum item bate com o filtro.'
-      : 'Nenhum item importado ainda. Use "Importar planilhas".';
-    corpo.innerHTML = '';
-    return;
-  }
-
-  // A lista ja vem ordenada por dia de carregamento, entao cada dia e um bloco
-  // continuo: basta abrir uma divisao toda vez que a data muda.
-  const grupos = [];
-  linhas.forEach(linha => {
-    const data = (linha.pedido && linha.pedido.data_carregamento) || null;
-    const atual = grupos[grupos.length - 1];
-    if (atual && atual.data === data) atual.linhas.push(linha);
-    else grupos.push({ data, linhas: [linha] });
-  });
-
-  const linhaHtml = ({ item, pedido }) => `
-    <tr>
-      <td class="item">${escapeHtml(pedido ? pedido.numero_pedido : '—')}</td>
-      <td>${escapeHtml(pedido && pedido.cliente ? pedido.cliente : '—')}</td>
-      <td class="loc">${pedido && pedido.data_carregamento ? escapeHtml(dataCurta(pedido.data_carregamento) + ' ' + horaCurta(pedido.horario_carregamento)) : '—'}</td>
-      <td class="loc">${escapeHtml(item.seq != null ? item.seq : '—')}</td>
-      <td class="item">${escapeHtml(item.codigo_item || '—')}</td>
-      <td>${escapeHtml(item.descricao || '—')}</td>
-      <td class="loc">${escapeHtml(item.unidade_medida || '—')}</td>
-      <td class="num">${escapeHtml(item.quantidade != null ? item.quantidade : '—')}</td>
-      <td class="loc">${escapeHtml(item.numero_os_op || '—')}</td>
-      <td>
-        <textarea class="prog-item-obs" data-id="${escapeHtml(item.id)}" rows="1"
-                  placeholder="—">${escapeHtml(item.observacao || '')}</textarea>
-      </td>
-      <td><span class="cfg-status ${CLASSE_STATUS_ITEM[item.status_separacao] || 'st-pendente'}">${escapeHtml(ROTULO_STATUS_ITEM[item.status_separacao] || 'Pendente')}</span></td>
-      <td class="loc">${escapeHtml(momentoSeparacao(item.separado_em))}</td>
-      ${celulaEstoqueHtml(item)}
-      <td class="col-acoes">
-        <button class="btn prog-alternar" data-id="${escapeHtml(item.id)}">
-          ${escapeHtml(ROTULO_BOTAO_SEPARACAO[item.status_separacao] || ROTULO_BOTAO_SEPARACAO.aguardando)}
-        </button>
-        ${item.status_separacao && item.status_separacao !== 'aguardando'
-          ? `<button class="btn prog-reabrir" data-id="${escapeHtml(item.id)}"
-                     title="Voltar este item para Pendente">↶ Pendente</button>`
-          : ''}
-      </td>
-    </tr>`;
-
-  // Dentro do dia, cada PEDIDO ganha sua propria faixa. Robson, 16/09/2026:
-  // "pode deixar cada pedido separado com um espaço" e "pode colocar tambem
-  // alguma coisa como selecionar todos os itens de cada pedido" -- a faixa
-  // resolve os dois: separa visualmente e e onde mora o botao de marcar o
-  // pedido inteiro. Os itens ja vem juntos (a ordenacao e por pedido), entao
-  // basta abrir faixa nova quando o pedido muda.
-  const porPedido = (linhasDoGrupo) => {
-    const blocos = [];
-    linhasDoGrupo.forEach(linha => {
-      const id = linha.pedido ? linha.pedido.id : null;
-      const atual = blocos[blocos.length - 1];
-      if (atual && atual.id === id) atual.linhas.push(linha);
-      else blocos.push({ id, pedido: linha.pedido, linhas: [linha] });
-    });
-    return blocos;
-  };
-
-  corpo.innerHTML = grupos.map(grupo => {
-    const pedidos = new Set(grupo.linhas.map(l => l.pedido && l.pedido.id));
-    const titulo = grupo.data
-      ? `Carregamento ${dataLonga(grupo.data)}`
-      : 'Sem data de embarque';
-    const contagem = `${pedidos.size} pedido(s) · ${grupo.linhas.length} item(ns)`;
-    const blocosHtml = porPedido(grupo.linhas).map(bloco => {
-      const pedido = bloco.pedido;
-      const pendentes = bloco.linhas.filter(l => !itemConcluido(l.item)).length;
-      const cabecalho = [
-        pedido ? pedido.numero_pedido : 'Sem pedido',
-        pedido && pedido.cliente ? pedido.cliente : null,
-        pedido && pedido.data_carregamento
-          ? dataCurta(pedido.data_carregamento) + ' ' + horaCurta(pedido.horario_carregamento)
-          : null
-      ].filter(Boolean).join(' · ');
-      const botao = (pedido && pendentes)
-        ? `<button class="btn prog-marcar-pedido" data-pedido-id="${escapeHtml(pedido.id)}">
-             Marcar os ${pendentes} pendente(s)
-           </button>`
-        : '';
-      return `
-    <tr class="prog-pedido">
-      <td colspan="14">
-        <span class="prog-pedido-nome">${escapeHtml(cabecalho)}</span>
-        <span class="prog-grupo-contagem">${escapeHtml(`${bloco.linhas.length} item(ns)`)}</span>
-        ${botao}
-      </td>
-    </tr>` + bloco.linhas.map(linhaHtml).join('');
-    }).join('');
-    return `
-    <tr class="prog-grupo">
-      <td colspan="14">${escapeHtml(titulo)} <span class="prog-grupo-contagem">${escapeHtml(contagem)}</span></td>
-    </tr>` + blocosHtml;
-  }).join('');
-
-  ajustarTodasAlturasObs();
-  atualizarBotaoDesfazer();
-}
-
-// Robson, 16/09/2026, com "SEM SALDO PEDID..." cortado no campo: "deixe
-// maleavel conforme a escrita aumenta esse retangulo". Campo de uma linha so
-// escondia o resto do recado -- que e justamente o que quem separa precisa ler.
-function ajustarAlturaObs(campo) {
-  campo.style.height = 'auto';
-  // Aba fechada nao tem layout: scrollHeight vem 0 e travaria o campo em
-  // altura zero ate o proximo render. Sem medida, deixa o CSS mandar.
-  const altura = campo.scrollHeight;
-  if (altura > 0) campo.style.height = altura + 'px';
-  else campo.style.removeProperty('height');
-}
-
-function ajustarTodasAlturasObs() {
-  document.querySelectorAll('#progItensBody .prog-item-obs').forEach(ajustarAlturaObs);
-}
-
-document.getElementById('progItensBody').addEventListener('input', (e) => {
-  if (e.target.classList.contains('prog-item-obs')) ajustarAlturaObs(e.target);
-});
-
-document.getElementById('progBusca').addEventListener('input', renderSeparacao);
-document.getElementById('progFiltroStatus').addEventListener('change', renderSeparacao);
-document.getElementById('progFiltroEmbarque').addEventListener('change', renderSeparacao);
-
-document.getElementById('progItensBody').addEventListener('click', async (e) => {
-  const pedidoTodo = e.target.closest('.prog-marcar-pedido');
-  if (pedidoTodo) { await marcarPedidoInteiro(pedidoTodo.dataset.pedidoId, pedidoTodo); return; }
-  const reabrir = e.target.closest('.prog-reabrir');
-  if (reabrir) { await reabrirItemSeparacao(reabrir.dataset.id, reabrir); return; }
-  const btn = e.target.closest('.prog-alternar');
-  if (!btn) return;
-  await alternarItemSeparado(btn.dataset.id, btn);
-});
-
-// Observação editável (Robson, 16/09/2026: "aqui em observação deixa
-// editavel") -- salva ao sair do campo, mesmo padrão do resto do portal.
-document.getElementById('progItensBody').addEventListener('focusout', async (e) => {
-  const input = e.target.closest('.prog-item-obs');
-  if (!input) return;
-  const id = input.dataset.id;
-  const item = progItens.find(i => String(i.id) === String(id));
-  if (!item) return;
-  const novo = input.value.trim();
-  if (novo === (item.observacao || '')) return; // nada mudou
-
-  input.disabled = true;
-  const { error } = await sb.from('pedido_itens').update({ observacao: novo || null }).eq('id', id);
-  input.disabled = false;
-  if (error) {
-    falhaEscrita(error.message);
-    input.value = item.observacao || '';
-    return;
-  }
-  item.observacao = novo || null;
-});
-
-async function alternarItemSeparado(itemId, botao) {
-  const item = progItens.find(i => String(i.id) === String(itemId));
-  if (!item) return;
-  const msg = document.getElementById('progMsg');
-  const anterior = item.status_separacao;
-  const novo = proximoStatusSeparacao(item.status_separacao);
-  const concluindo = novo !== 'aguardando';
-
-  botao.disabled = true;
-  const { error } = await sb.from('pedido_itens').update({
-    status_separacao: novo,
-    separado_por: concluindo ? userIdAtual : null,
-    separado_em: concluindo ? new Date().toISOString() : null
-  }).eq('id', item.id);
-  botao.disabled = false;
-
-  if (error) {
-    // O cliente do Supabase devolve { error } em vez de lançar: sem conferir,
-    // a linha ficaria verde na tela sem ter gravado. AUDITORIA.md, item A1.
-    msg.textContent = 'NÃO SALVOU: ' + error.message;
-    msg.className = 'status-msg status-err';
-    return;
-  }
-
-  item.status_separacao = novo;
-  const pedido = progPedidos.find(p => p.id === item.pedido_id);
-  empilharDesfazer({
-    pedidoId: item.pedido_id,
-    itens: [{ id: item.id, statusAnterior: anterior }],
-    descricao: `${pedido ? pedido.numero_pedido : 'pedido'} · item ${item.codigo_item || '—'} volta para "${ROTULO_STATUS_ITEM[anterior] || 'Pendente'}"`
-  });
-  await registrarLogProgramacao(item.pedido_id, 'item_separado', { item_id: item.id, status: novo });
-  // O gatilho no banco recalcula pedidos.status_geral -- recarrega para a aba
-  // EXP refletir o status consolidado novo.
-  await carregarProgramacao();
-}
-
-// Marca de uma vez todos os itens ainda pendentes de um pedido. Robson,
-// 16/09/2026: "pode colocar tambem alguma coisa como selecionar todos os itens
-// de cada pedido" -- pedido com 15 acessorios eram 15 cliques, e cada clique
-// some com a linha (filtro "Só pendentes"), entao ele perdia o lugar na lista.
-//
-// So mexe em quem esta PENDENTE: item ja marcado nao volta atras nem avanca
-// pro ciclo seguinte, senao "marcar o pedido" viraria uma roleta do que ja
-// estava certo. Vai inteiro pra pilha de desfazer, como UMA acao.
-async function marcarPedidoInteiro(pedidoId, botao) {
-  const pendentes = progItens.filter(i =>
-    String(i.pedido_id) === String(pedidoId) && !itemConcluido(i));
-  if (!pendentes.length) return;
-  const msg = document.getElementById('progMsg');
-  const pedido = progPedidos.find(p => String(p.id) === String(pedidoId));
-
-  botao.disabled = true;
-  const { error } = await sb.from('pedido_itens').update({
-    status_separacao: 'separado',
-    separado_por: userIdAtual,
-    separado_em: new Date().toISOString()
-  }).in('id', pendentes.map(i => i.id));
-  botao.disabled = false;
-
-  if (error) {
-    msg.textContent = 'NÃO SALVOU: ' + error.message;
-    msg.className = 'status-msg status-err';
-    return;
-  }
-
-  const itensDesfazer = pendentes.map(i => ({ id: i.id, statusAnterior: i.status_separacao }));
-  pendentes.forEach(i => { i.status_separacao = 'separado'; });
-  empilharDesfazer({
-    pedidoId,
-    itens: itensDesfazer,
-    descricao: `${pedido ? pedido.numero_pedido : 'pedido'} · ${itensDesfazer.length} item(ns) voltam para "Pendente"`
-  });
-  await registrarLogProgramacao(pedidoId, 'item_separado',
-    { itens: itensDesfazer.map(i => i.id), status: 'separado', pedido_inteiro: true });
-  msg.textContent = `${itensDesfazer.length} item(ns) marcado(s) em ${pedido ? pedido.numero_pedido : 'pedido'}.`;
-  msg.className = 'status-msg status-ok';
-  await carregarProgramacao();
-}
-
-// Volta o item direto pra "Pendente", sem passar pelo ciclo do botao.
-// Robson, 16/09/2026: "esse item que marquei como separado mas ele nao tenho em
-// estoque dai quero voltar" -- pelo ciclo (separado -> falta reporte ->
-// aguardando) ele teria que passar por "falta reporte", que afirma o contrario
-// do que aconteceu: falta reporte quer dizer que a peca FOI separada e so o
-// relatorio nao saiu. Item que nao tem em estoque volta pra pendente e pronto.
-async function reabrirItemSeparacao(itemId, botao) {
-  const item = progItens.find(i => String(i.id) === String(itemId));
-  if (!item || item.status_separacao === 'aguardando') return;
-  const msg = document.getElementById('progMsg');
-  const anterior = item.status_separacao;
-
-  botao.disabled = true;
-  const { error } = await sb.from('pedido_itens').update({
-    status_separacao: 'aguardando', separado_por: null, separado_em: null
-  }).eq('id', item.id);
-  botao.disabled = false;
-
-  if (error) {
-    msg.textContent = 'NÃO SALVOU: ' + error.message;
-    msg.className = 'status-msg status-err';
-    return;
-  }
-
-  item.status_separacao = 'aguardando';
-  const pedido = progPedidos.find(p => p.id === item.pedido_id);
-  empilharDesfazer({
-    pedidoId: item.pedido_id,
-    itens: [{ id: item.id, statusAnterior: anterior }],
-    descricao: `${pedido ? pedido.numero_pedido : 'pedido'} · item ${item.codigo_item || '—'} volta para "${ROTULO_STATUS_ITEM[anterior] || 'Pendente'}"`
-  });
-  await registrarLogProgramacao(item.pedido_id, 'item_separado',
-    { item_id: item.id, status: 'aguardando', reaberto: true });
-  await carregarProgramacao();
-}
-
-// ---- Desfazer da Separação --------------------------------------------------
-// Robson, 16/09/2026: "quero um botao de voltar tipo Ctrl Z as vezes acabo
-// marcando um item sem querer dai nao consigo voltar". O status ate cicla
-// (aguardando -> separado -> falta reporte -> aguardando), mas com o filtro
-// "Só pendentes" -- que e o padrao desde a secao 40 -- o item SOME da lista no
-// primeiro clique, entao nao da nem pra clicar de novo pra dar a volta.
-//
-// Pilha em memoria, so desta sessao: e pra corrigir o clique errado de agora,
-// nao pra virar histórico (esse ja existe em log_movimentacao).
-const desfazerSeparacao = [];
-const LIMITE_DESFAZER = 20;
-
-function empilharDesfazer(entrada) {
-  desfazerSeparacao.push(entrada);
-  if (desfazerSeparacao.length > LIMITE_DESFAZER) desfazerSeparacao.shift();
-  atualizarBotaoDesfazer();
-}
-
-function atualizarBotaoDesfazer() {
-  const btn = document.getElementById('progDesfazerBtn');
-  if (!btn) return;
-  const ultimo = desfazerSeparacao[desfazerSeparacao.length - 1];
-  btn.disabled = !ultimo;
-  btn.title = ultimo ? 'Desfazer: ' + ultimo.descricao : 'Nada para desfazer';
-}
-
-async function desfazerUltimaSeparacao() {
-  const ultimo = desfazerSeparacao[desfazerSeparacao.length - 1];
-  if (!ultimo) return;
-  const msg = document.getElementById('progMsg');
-  const btn = document.getElementById('progDesfazerBtn');
-  if (btn) btn.disabled = true;
-
-  // Um pedido inteiro pode ter sido marcado de uma vez, e cada item pode ter
-  // vindo de um status diferente -- agrupa por status pra gravar de uma vez
-  // cada grupo, em vez de um update por item.
-  const porStatus = new Map();
-  ultimo.itens.forEach(({ id, statusAnterior }) => {
-    if (!porStatus.has(statusAnterior)) porStatus.set(statusAnterior, []);
-    porStatus.get(statusAnterior).push(id);
-  });
-
-  for (const [status, ids] of porStatus) {
-    // Mesma regra do alternar: so quem termina em status concluido carrega
-    // assinatura. Voltar pra "aguardando" limpa quem separou e quando.
-    const concluindo = status !== 'aguardando';
-    const { error } = await sb.from('pedido_itens').update({
-      status_separacao: status,
-      separado_por: concluindo ? userIdAtual : null,
-      separado_em: concluindo ? new Date().toISOString() : null
-    }).in('id', ids);
-    if (error) {
-      msg.textContent = 'NÃO SALVOU: ' + error.message;
-      msg.className = 'status-msg status-err';
-      atualizarBotaoDesfazer();
-      return;
-    }
-  }
-
-  desfazerSeparacao.pop();
-  ultimo.itens.forEach(({ id, statusAnterior }) => {
-    const item = progItens.find(i => String(i.id) === String(id));
-    if (item) item.status_separacao = statusAnterior;
-  });
-  await registrarLogProgramacao(ultimo.pedidoId, 'item_separado',
-    { itens: ultimo.itens.map(i => i.id), desfeito: true });
-  msg.textContent = 'Desfeito — ' + ultimo.descricao;
-  msg.className = 'status-msg status-ok';
-  await carregarProgramacao();
-}
-
-document.getElementById('progDesfazerBtn').addEventListener('click', desfazerUltimaSeparacao);
-
-document.addEventListener('keydown', (e) => {
-  if (!(e.ctrlKey || e.metaKey) || String(e.key).toLowerCase() !== 'z') return;
-  // Ctrl+Z dentro de campo de texto e o desfazer do proprio campo -- nao roubar.
-  const alvo = e.target;
-  if (alvo && (alvo.tagName === 'INPUT' || alvo.tagName === 'TEXTAREA' || alvo.isContentEditable)) return;
-  const pagina = document.getElementById('programacaoContent');
-  if (!pagina || getComputedStyle(pagina).display === 'none') return;
-  if (!desfazerSeparacao.length) return;
-  e.preventDefault();
-  desfazerUltimaSeparacao();
-});
-
+// registrarLogProgramacao() -- log de auditoria (log_movimentacao), usado
+// pelo Carregamento (registro de saída), pelo Controle EXP e pelo Painel do
+// Separador (js/painelseparacao.js). Não é específico de nenhuma aba.
 async function registrarLogProgramacao(pedidoId, evento, detalhe) {
   const { error } = await sb.from('log_movimentacao').insert({
     pedido_id: pedidoId, evento, usuario_id: userIdAtual, detalhe: detalhe || null
