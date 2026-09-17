@@ -232,7 +232,7 @@ function trocarAbaExpAcessorios(aba) {
   // a outra é o confronto entre as duas pontas. Registrar movimentação a partir
   // de uma tela de conferência seria mexer no que se está medindo.
   document.getElementById('expRegistroContainer').style.display =
-    (aba === 'catalogo' || aba === 'conferir' || aba === 'auditoria' || aba === 'doca' || aba === 'parados' || aba === 'avisoprep') ? 'none' : 'block';
+    (aba === 'catalogo' || aba === 'conferir' || aba === 'auditoria' || aba === 'doca' || aba === 'parados' || aba === 'avisoprep' || aba === 'canceladoalm') ? 'none' : 'block';
   document.getElementById('expEntradaAba').style.display = aba === 'entrada' ? 'block' : 'none';
   document.getElementById('progConferencia').style.display = aba === 'saida' ? 'block' : 'none';
   document.getElementById('expCatalogoAba').style.display = aba === 'catalogo' ? 'block' : 'none';
@@ -241,6 +241,7 @@ function trocarAbaExpAcessorios(aba) {
   document.getElementById('expDocaAba').style.display = aba === 'doca' ? 'block' : 'none';
   document.getElementById('expParadosAba').style.display = aba === 'parados' ? 'block' : 'none';
   document.getElementById('expAvisoPrepAba').style.display = aba === 'avisoprep' ? 'block' : 'none';
+  document.getElementById('expCanceladoAlmAba').style.display = aba === 'canceladoalm' ? 'block' : 'none';
   if (aba === 'saida') renderConferencia();
   if (aba === 'conferir') {
     renderConferirExp(); // mostra rápido com o que já tem em memória (a 1ª vez, sem observação/exclusão ainda)
@@ -266,6 +267,9 @@ function trocarAbaExpAcessorios(aba) {
   }
   if (aba === 'avisoprep') {
     carregarAvisosPreparo().then(renderAvisosPreparo);
+  }
+  if (aba === 'canceladoalm') {
+    carregarCanceladosAlm().then(renderCanceladosAlm);
   }
 }
 
@@ -4417,15 +4421,53 @@ function renderParadosExp() {
 // não está mais na expedição de verdade) e a observação que tinha sido
 // anotada pra ele -- não sobra referência solta a um pedido que a pessoa
 // disse que não existe mais nesta lista.
+//
+// Robson, 17/09/2026, na mesma aba: "quando eu marcar como cancelado abre uma
+// nova aba ou um aviso para gente voltar material para o almoxarifado, dai a
+// responsavel pelo exp acessorios ja visualiza a notificação". O clique já
+// significava "cancelado" -- agora também grava a tarefa de devolução
+// (exp_pedido_cancelado_alm, fase61) ANTES de excluir, porque depois de
+// excluído não sobra de onde tirar item/localização pra essa foto.
 document.getElementById('paradosBody').addEventListener('click', async (e) => {
   const btn = e.target.closest('.parado-excluir');
   if (!btn) return;
   const pedido = btn.dataset.pedido;
   const ids = btn.dataset.ids.split(',').filter(Boolean);
   const rotuloPedido = pedido === '(sem pedido)' ? 'sem nº de pedido' : 'pedido ' + pedido;
-  if (!confirm(`Excluir os ${ids.length} item(ns) do ${rotuloPedido} do Controle EXP? Use quando o pedido foi cancelado e o material voltou pro almoxarifado. Não tem como desfazer.`)) return;
+  if (!confirm(`Marcar o ${rotuloPedido} como cancelado? Os ${ids.length} item(ns) saem do Controle EXP, e quem cuida do EXP é avisado pra devolver o material físico ao almoxarifado. Não tem como desfazer a exclusão.`)) return;
 
   btn.disabled = true;
+
+  // A foto tem que ser tirada AGORA: depois do delete abaixo, exp_controle_itens
+  // não tem mais essas linhas, e a lista de devolução ficaria sem dizer o que
+  // volta pra onde. Só grava a tarefa quando dá pra dizer QUAL pedido (sem nº
+  // de pedido não tem como avisar quem cuida do EXP do que precisa voltar).
+  if (pedido !== '(sem pedido)') {
+    const idsSet = new Set(ids);
+    const itensParaFoto = progExpControle.filter(l => idsSet.has(String(l.id)));
+    const itensResumo = itensParaFoto.map(l => ({
+      codigo_item: l.codigo_item,
+      descricao: (expCtrlDescMap.get(normalizaCodigoItem(l.codigo_item)) || {}).descricao || null,
+      quantidade: l.quantidade,
+      localizacao: l.localizacao || null
+    }));
+
+    const { error: erroAviso } = await sb.from('exp_pedido_cancelado_alm').upsert({
+      unidade: unidadeAtual, numero_pedido: pedido, itens_resumo: itensResumo,
+      status: 'pendente', cancelado_por: nomeUsuarioAtual, cancelado_em: new Date().toISOString(),
+      devolvido_por: null, devolvido_em: null
+    }, { onConflict: 'unidade,numero_pedido' });
+
+    if (erroAviso) {
+      alert(/exp_pedido_cancelado_alm/.test(erroAviso.message)
+        ? 'Não foi possível avisar: falta rodar sql/fase61-exp-pedido-cancelado-alm.sql no Supabase.'
+        : 'Não foi possível avisar sobre a devolução: ' + erroAviso.message);
+      btn.disabled = false;
+      return;
+    }
+    dispararAlertaCanceladoAlm({ pedido, itens: itensResumo.length, canceladoPor: nomeUsuarioAtual });
+  }
+
   const { error } = await sb.from('exp_controle_itens').delete().in('id', ids);
   if (error) { alert('Não foi possível excluir: ' + error.message); btn.disabled = false; return; }
 
@@ -4899,6 +4941,114 @@ document.getElementById('avisoPrepHistBody').addEventListener('click', async (e)
   await carregarAvisosPreparo();
   renderAvisosPreparo();
 });
+
+// ---- Aba Voltar ao Almoxarifado: pedido cancelado no EXP -----------------
+// Robson, 17/09/2026, na aba Parados: "quando eu marcar como cancelado abre
+// uma nova aba ou um aviso para gente voltar material para o almoxarifado,
+// dai a responsavel pelo exp acessorios ja visualiza a notificação". Mesmo
+// desenho do aviso de Preparar, na direção oposta: lá o encarregado da
+// expedição avisa o almoxarifado a separar; aqui o almoxarifado (aba
+// Parados) avisa quem cuida do EXP que um material físico precisa voltar.
+//
+// `itens_resumo` é a FOTO gravada no instante do cancelamento (ver o handler
+// de 🗑 em Parados, acima) -- as linhas de exp_controle_itens já foram
+// excluídas quando esta aba é aberta, então é dali, não de uma consulta nova,
+// que vem o que precisa voltar e de onde.
+let canceladosAlmMap = new Map(); // numero_pedido -> registro
+
+async function carregarCanceladosAlm() {
+  canceladosAlmMap = new Map();
+  const { data, error } = await sb.from('exp_pedido_cancelado_alm')
+    .select('*').eq('unidade', unidadeAtual);
+  if (error) {
+    // Silencioso de propósito (mesmo padrão de carregarAvisosPreparo): se o
+    // fase61 ainda não rodou, a aba abre vazia em vez de travar o resto do
+    // Controle EXP.
+    console.warn('Não foi possível carregar os pedidos cancelados aguardando devolução:', error.message);
+    return;
+  }
+  (data || []).forEach(r => canceladosAlmMap.set(r.numero_pedido, r));
+}
+
+function canceladosAlmPendentes() {
+  return [...canceladosAlmMap.values()].filter(r => r.status === 'pendente')
+    .sort((a, b) => new Date(a.cancelado_em) - new Date(b.cancelado_em)); // mais antigo primeiro
+}
+
+function renderCanceladosAlm() {
+  const pendentes = canceladosAlmPendentes();
+  const corpo = document.getElementById('canceladoAlmBody');
+  const vazio = document.getElementById('canceladoAlmVazio');
+  const contagem = document.getElementById('canceladoAlmContagem');
+  const contador = document.getElementById('canceladoAlmContador');
+
+  contagem.textContent = pendentes.length ? `${pendentes.length} pedido(s)` : '';
+  vazio.style.display = pendentes.length ? 'none' : 'block';
+  if (contador) contador.textContent = pendentes.length ? ` (${pendentes.length})` : '';
+
+  corpo.innerHTML = pendentes.map(r => {
+    const itens = Array.isArray(r.itens_resumo) ? r.itens_resumo : [];
+    return `
+    <div style="border:1px solid var(--erro-borda); border-radius:10px; margin-top:12px; overflow:hidden;">
+      <div class="cfg-barra" style="background:var(--erro-fundo); flex-wrap:wrap;">
+        <span class="loc-chip">Pedido ${escapeHtml(r.numero_pedido)}</span>
+        <span style="font-size:12px; color:var(--erro-texto);" title="${r.cancelado_por ? escapeHtml(r.cancelado_por) : ''}">
+          cancelado ${escapeHtml(formatarDataHoraBR(r.cancelado_em))}${r.cancelado_por ? ' por ' + escapeHtml(r.cancelado_por) : ''}
+        </span>
+        <button class="btn btn-primary canceladoalm-devolvido" data-pedido="${escapeHtml(r.numero_pedido)}" style="margin-left:auto;">✓ Material devolvido</button>
+      </div>
+      <div class="scroll-area">
+        <table>
+          <thead><tr><th>Item</th><th>Descrição</th><th>Qtd</th><th>Localização</th></tr></thead>
+          <tbody>
+            ${itens.length ? itens.map(i => `
+              <tr>
+                <td class="item">${escapeHtml(i.codigo_item || '—')}</td>
+                <td>${escapeHtml(i.descricao || '—')}</td>
+                <td class="num">${i.quantidade != null ? escapeHtml(i.quantidade) : '—'}</td>
+                <td class="loc"><span class="loc-chip">${escapeHtml(i.localizacao || '—')}</span></td>
+              </tr>`).join('') : `
+              <tr><td colspan="4" style="color:var(--muted);">Sem detalhe de item guardado.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// "✓ Material devolvido" -- confirma que o material físico já está de volta
+// no endereço do almoxarifado. Reversível (mesmo espírito de conferir_exp_
+// notas/exp_pedido_aviso_preparo): fica como histórico em vez de excluir a
+// linha, então dá pra ver depois quem confirmou e quando.
+document.getElementById('canceladoAlmBody').addEventListener('click', async (e) => {
+  const btn = e.target.closest('.canceladoalm-devolvido');
+  if (!btn) return;
+  const pedido = btn.dataset.pedido;
+  if (!confirm(`Confirmar que o material do pedido ${pedido} já voltou pro endereço do almoxarifado?`)) return;
+
+  btn.disabled = true;
+  const { error } = await sb.from('exp_pedido_cancelado_alm').update({
+    status: 'devolvido', devolvido_por: nomeUsuarioAtual, devolvido_em: new Date().toISOString()
+  }).eq('unidade', unidadeAtual).eq('numero_pedido', pedido);
+  if (error) { alert('Não foi possível confirmar: ' + error.message); btn.disabled = false; return; }
+  await carregarCanceladosAlm();
+  renderCanceladosAlm();
+});
+
+// Avisa quem cuida do EXP em tempo real (js/notificacoes.js:
+// iniciarAvisoCanceladoAlm) -- mesmo desenho de dispararAlertaPreparo(): canal
+// POR UNIDADE, broadcast, não trava o cancelamento se falhar (a tarefa já
+// está gravada em exp_pedido_cancelado_alm; só o popup ao vivo se perderia).
+function dispararAlertaCanceladoAlm({ pedido, itens, canceladoPor }) {
+  try {
+    sb.channel(`alertas-cancelado-alm-${unidadeAtual}`).send({
+      type: 'broadcast', event: 'pedido_cancelado_alm',
+      payload: { pedido, itens: itens || 0, unidade: unidadeAtual, canceladoPor: canceladoPor || null, quando: new Date().toISOString() }
+    });
+  } catch (e) {
+    console.warn('Não foi possível avisar sobre a devolução ao almoxarifado:', e.message);
+  }
+}
 
 // ---- Aba Auditoria: caminhada física pela expedição --------------------
 // Robson, 11/09/2026: "vou lá na expedição, vou ver cada endereço pra ver

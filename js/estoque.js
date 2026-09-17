@@ -2649,5 +2649,8 @@ async function trocarUnidade(cod) {
   // UNIDADE -- sem reassinar aqui, quem trocasse de fábrica continuaria
   // ouvindo o aviso da unidade antiga (ou nenhum, se saiu da única que tinha).
   if (typeof iniciarAvisoPreparo === 'function') iniciarAvisoPreparo();
+  // Idem: canal de devolução ao almoxarifado (pedido cancelado no EXP) também
+  // é por unidade.
+  if (typeof iniciarAvisoCanceladoAlm === 'function') iniciarAvisoCanceladoAlm();
 }
 

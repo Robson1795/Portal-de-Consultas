@@ -69,12 +69,21 @@ async function garantirPermissaoNotificacao() {
 // arpejo curto (Lá5-Ré6-Sol6, tipo "campainha" de notificação de celular)
 // chama mais atenção sem virar sirene. Cada nota é um AudioContext próprio
 // porque um contexto já usado uma vez e parado (`stop()`) não toca de novo.
-function tocarSomAviso() {
+//
+// `variante` distingue o aviso de ouvido sem precisar olhar a tela -- Robson,
+// 17/09/2026, sobre o aviso de devolução ao almoxarifado: "pode colocar um
+// sinal sonoro diferente pra esse esquema". 'devolucao' toca o MESMO trio ao
+// contrário (Sol6-Ré6-Lá5, descendo) -- continua chamativo, mas dá pra
+// diferenciar "chegou trabalho novo" (sobe) de "algo precisa voltar" (desce)
+// sem olhar o canto da tela.
+function tocarSomAviso(variante) {
   try {
     const Ctx = window.AudioContext || window.webkitAudioContext;
     if (!Ctx) return;
     const ctx = new Ctx();
-    const notas = [880, 1174.66, 1567.98]; // Lá5, Ré6, Sol6 -- soa "alerta", não "erro"
+    const notas = variante === 'devolucao'
+      ? [1567.98, 1174.66, 880]   // Sol6, Ré6, Lá5 -- descendo
+      : [880, 1174.66, 1567.98];  // Lá5, Ré6, Sol6 -- soa "alerta", não "erro"
     const duracaoNota = 0.22;
     const intervaloNota = 0.13; // sobreposição leve: soa "campainha", não staccato
     notas.forEach((freq, i) => {
@@ -121,7 +130,7 @@ function notificarSistema({ titulo, texto, chave }) {
   }
 }
 
-function mostrarNotificacao({ icone, titulo, texto, acaoRotulo, aoClicarAcao, chave }) {
+function mostrarNotificacao({ icone, titulo, texto, acaoRotulo, aoClicarAcao, chave, som }) {
   const caixa = caixaNotificacoes();
   if (!caixa) return null;
 
@@ -160,7 +169,7 @@ function mostrarNotificacao({ icone, titulo, texto, acaoRotulo, aoClicarAcao, ch
   caixa.prepend(cartao);
   while (caixa.children.length > MAX_NOTIFICACOES) caixa.lastElementChild.remove();
 
-  tocarSomAviso();
+  tocarSomAviso(som);
   notificarSistema({ titulo, texto, chave });
 
   return cartao;
@@ -369,6 +378,102 @@ async function iniciarAvisoPreparo() {
       // O Painel do Dia já estava aberto atrás? Atualiza o card, pra não
       // precisar lembrar de clicar em "Atualizar".
       if (typeof carregarPainel === 'function' && paginaAtual === 'painel') carregarPainel();
+    })
+    .subscribe();
+}
+
+// ---- Pedido cancelado no EXP: devolver material ao almoxarifado (17/09/2026)
+//
+// Mesmo desenho de cima, na direção OPOSTA: lá o encarregado da expedição
+// avisa o almoxarifado a separar; aqui o almoxarifado (aba ⏰ Parados) avisa
+// quem cuida do Controle EXP que um material físico precisa voltar. Robson:
+// "quando eu marcar como cancelado abre uma nova aba ou um aviso para gente
+// voltar material para o almoxarifado, dai a responsavel pelo exp acessorios
+// ja visualiza a notificação".
+//
+// Mesmo público de quem cuida do EXP -- é o mesmo time que vê o aviso de
+// Preparar, só que agora do lado de devolver em vez de separar.
+function podeVerAvisoCanceladoAlm() {
+  return perfilAtual === 'estoque_alm' || perfilAtual === 'admin';
+}
+
+function irParaCanceladoAlm() {
+  if (typeof mostrarPagina === 'function') mostrarPagina('expacessorios');
+  if (typeof trocarAbaExpAcessorios === 'function') trocarAbaExpAcessorios('canceladoalm');
+}
+
+function notificarPedidoCanceladoAlm({ pedido, itens, canceladoPor }) {
+  if (!pedido) return;
+  mostrarNotificacao({
+    icone: '↩️',
+    titulo: 'Pedido cancelado — devolver material',
+    texto: `<b>${escapeHtml(pedido)}</b> foi cancelado -- volte o material físico pro endereço do almoxarifado.`
+      + (itens ? `<br><span class="notif-detalhe">${itens} item(ns)</span>` : '')
+      + (canceladoPor ? `<br><span class="notif-detalhe">Cancelado por ${escapeHtml(canceladoPor)}</span>` : ''),
+    acaoRotulo: 'Abrir',
+    aoClicarAcao: irParaCanceladoAlm,
+    // Chave por pedido + instante: o mesmo pedido pode ser cancelado nesta
+    // aba mais de uma vez ao longo do tempo (upsert reabre pendente) -- cada
+    // cancelamento é aviso novo, não duplicata do anterior.
+    chave: 'canceladoalm:' + pedido + ':' + Date.now(),
+    som: 'devolucao'
+  });
+}
+
+// Quantos já estão esperando devolução AGORA -- mesma ideia de
+// contarAvisosPreparoPendentes(), pra quem entra no portal depois do aviso
+// ao vivo já ter passado.
+async function contarCanceladosAlmPendentes() {
+  if (!unidadeAtual) return 0;
+  const { count, error } = await sb.from('exp_pedido_cancelado_alm')
+    .select('id', { count: 'exact', head: true })
+    .eq('unidade', unidadeAtual).eq('status', 'pendente');
+  if (error) {
+    // Silencioso: aviso de cortesia, e a tabela é nova (fase61) -- se ainda
+    // não rodou no banco, isto não pode virar erro no meio do trabalho.
+    console.warn('Não foi possível contar os pedidos cancelados aguardando devolução:', error.message);
+    return 0;
+  }
+  return count || 0;
+}
+
+let canalAvisoCanceladoAlm = null;
+
+// Chamado nos mesmos lugares de iniciarAvisoPreparo() -- js/auth.js (depois
+// de montarMenu()) e js/estoque.js (trocarUnidade) -- pelo mesmo motivo:
+// canal por unidade, então trocar de fábrica sem reassinar deixaria a pessoa
+// ouvindo o aviso da unidade errada.
+async function iniciarAvisoCanceladoAlm() {
+  if (canalAvisoCanceladoAlm) { sb.removeChannel(canalAvisoCanceladoAlm); canalAvisoCanceladoAlm = null; }
+  if (!podeVerAvisoCanceladoAlm() || !unidadeAtual) return;
+
+  garantirPermissaoNotificacao();
+
+  const pendentes = await contarCanceladosAlmPendentes();
+  if (pendentes > 0) {
+    mostrarNotificacao({
+      icone: '↩️',
+      titulo: pendentes === 1 ? '1 pedido cancelado aguardando devolução'
+                              : `${pendentes} pedidos cancelados aguardando devolução`,
+      texto: 'Material físico precisa voltar pro endereço do almoxarifado.',
+      acaoRotulo: 'Abrir',
+      aoClicarAcao: irParaCanceladoAlm,
+      // Chave fixa (sem unidade): entrar de novo na mesma aba, ou trocar de
+      // unidade e voltar, não empilha um segundo resumo.
+      chave: 'canceladoalm-pendentes',
+      som: 'devolucao'
+    });
+  }
+
+  canalAvisoCanceladoAlm = sb.channel(`alertas-cancelado-alm-${unidadeAtual}`)
+    .on('broadcast', { event: 'pedido_cancelado_alm' }, (msg) => {
+      if (!podeVerAvisoCanceladoAlm()) return;
+      notificarPedidoCanceladoAlm(msg.payload || {});
+      // A aba já estava aberta atrás? Atualiza a lista, pra não precisar
+      // lembrar de clicar em "Atualizar".
+      if (typeof carregarCanceladosAlm === 'function' && paginaAtual === 'expacessorios' && progExpAbaAtual === 'canceladoalm') {
+        carregarCanceladosAlm().then(renderCanceladosAlm);
+      }
     })
     .subscribe();
 }

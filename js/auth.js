@@ -277,6 +277,8 @@ async function mostrarTelaCorreta(session) {
     // Mesmo motivo, e depois de montarMenu() também por causa de
     // `unidadeAtual` (definido lá) -- o canal de preparo é por unidade.
     iniciarAvisoPreparo();
+    // Idem, canal de devolução ao almoxarifado também por unidade.
+    if (typeof iniciarAvisoCanceladoAlm === 'function') iniciarAvisoCanceladoAlm();
   } else {
     authScreen.style.display = 'none';
     pendingScreen.style.display = 'block';

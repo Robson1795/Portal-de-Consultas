@@ -7107,3 +7107,57 @@ pedido selecionado que completou o último item na hora continuou visível e
 selecionado; e sumiu da lista só depois de simular o Concluir. Funções de
 propagação confirmadas ausentes do escopo global, página carrega sem erro.
 Sem erro no console.
+
+## 57. Pedido cancelado no EXP avisa quem cuida da devolução (17/09/2026)
+
+O Robson, olhando a aba ⏰ Parados: *"entre esses pedidos tem alguns que foram
+cancelados, quero que quando eu marcar como cancelado abre uma nova aba ou um
+aviso para gente voltar material para o almoxarifado, dai a responsavel pelo
+exp acessorios ja visualiza a notificação"*.
+
+O botão 🗑 de Parados já significava "cancelado, material voltou pro
+almoxarifado" (seção 34) — só que fazia isso calado, excluindo a linha de
+`exp_controle_itens` sem avisar ninguém. Mesmo desenho do aviso de Preparar
+(seção existente), na direção **oposta**: lá o encarregado da expedição avisa
+o almoxarifado a separar; aqui o almoxarifado avisa quem cuida do Controle EXP
+que um material físico precisa voltar.
+
+**Nova tabela `exp_pedido_cancelado_alm`** (`sql/fase61-exp-pedido-cancelado-
+alm.sql`), por unidade, com `itens_resumo` (jsonb) — uma FOTO de código,
+descrição, quantidade e localização tirada no instante do cancelamento. Sem
+essa foto a lista de devolução não teria como dizer o que precisa voltar nem
+de onde: as linhas de `exp_controle_itens` são excluídas no mesmo clique.
+
+**Ordem importa no clique do 🗑**: grava a foto em `exp_pedido_cancelado_alm`
+**antes** de excluir de `exp_controle_itens` — se a gravação falhar (fase61
+não rodou ainda), a exclusão nem começa, e o erro diz qual SQL falta. Perder
+o aviso de devolução seria pior que travar o clique.
+
+**Nova sub-aba "↩️ Voltar ao Almox."** dentro do Controle EXP Acessórios,
+listando pendentes com o botão "✓ Material devolvido" (reversível na
+gravação, mas sem "reabrir" pela tela — mesmo espírito de tabela auditável de
+sempre). Nome deliberadamente diferente de "Devolução" (a página de NF de
+devolução x conferência física, seção 15/16) — são conceitos sem nada a ver
+um com o outro, e o nome evita confundir os dois.
+
+**Notificação ao vivo**, mesmo desenho do aviso de Preparar: canal broadcast
+por unidade (`alertas-cancelado-alm-<unidade>`), contagem de pendentes pra
+quem entra depois do aviso já ter passado, mesmo público (`estoque_alm` +
+`admin`). Wired nos mesmos dois lugares de `iniciarAvisoPreparo()`:
+`js/auth.js` (login) e `js/estoque.js` (troca de unidade).
+
+**Som diferente pro aviso**, pedido na sequência: *"pode colocar um sinal
+sonoro diferente pra esse esquema"*. `tocarSomAviso()` ganhou um parâmetro de
+variante — o aviso padrão sobe (Lá5-Ré6-Sol6), o de devolução toca o MESMO
+trio ao contrário, descendo (Sol6-Ré6-Lá5). Continua chamativo, mas dá pra
+saber "chegou trabalho novo" de "algo precisa voltar" só de ouvido, sem olhar
+o canto da tela — e a direção do som (desce) combina com o sentido da
+palavra "voltar".
+
+Testado localmente o fluxo inteiro: clicar 🗑 gravou a foto certa em
+`exp_pedido_cancelado_alm`, excluiu o item certo de `exp_controle_itens`,
+limpou a observação, e disparou o broadcast com o payload certo — nessa
+ordem. A aba nova mostrou o item pela foto (não por consulta nova, já que a
+linha original não existe mais), e "✓ Material devolvido" zerou o pendente e
+o contador. O card de notificação saiu com título, itens e quem cancelou, e
+o som com a variante nova tocou sem erro. Sem erro no console.

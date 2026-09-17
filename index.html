@@ -946,6 +946,12 @@
                expedição (endereço ou doca) e não carregou ainda depois de
                vários dias, provável esquecido/parado no faturamento. -->
           <button class="btn" data-exp-aba="parados" title="Pedidos ainda não carregados há mais dias do que o esperado, parados na expedição ou na doca">⏰ Parados</button>
+          <!-- Robson, 17/09/2026, na própria aba Parados: "quando eu marcar
+               como cancelado abre uma nova aba ou um aviso para gente voltar
+               material para o almoxarifado, dai a responsavel pelo exp
+               acessorios ja visualiza a notificação" -- o 🗑 de Parados já
+               significava "cancelado" (fase56); agora também avisa aqui. -->
+          <button class="btn" data-exp-aba="canceladoalm" title="Pedidos cancelados aguardando o material físico voltar pro endereço do almoxarifado">↩️ Voltar ao Almox.<span id="canceladoAlmContador"></span></button>
           <!-- "Conferir" e "Saída / Conferência" são coisas diferentes, e os nomes se
                parecem: a Saída registra a retirada item por item; esta confronta o
                SISTEMA (Catálogo EXP) com o FÍSICO (o que está registrado na
@@ -1312,6 +1318,30 @@
         <div id="paradosBody" style="padding:0 16px 16px;"></div>
         <div class="empty-msg" id="paradosVazio" style="display:none;">
           Nenhum pedido parado há mais de 5 dias. 🎉
+        </div>
+      </div>
+
+      <!-- ---- Voltar ao Almoxarifado: pedido cancelado em Parados (🗑) entra
+           aqui até o material físico voltar pro endereço -- Robson,
+           17/09/2026: "quando eu marcar como cancelado abre uma nova aba ou
+           um aviso para gente voltar material para o almoxarifado, dai a
+           responsavel pelo exp acessorios ja visualiza a notificação". Mesmo
+           desenho do aviso de Preparar (🔔), invertido: lá o encarregado da
+           expedição avisa o almoxarifado a separar; aqui o almoxarifado avisa
+           quem cuida do EXP que um material precisa voltar. Ver
+           renderCanceladosAlm() em js/programacao.js. -->
+      <div id="expCanceladoAlmAba" class="prog-aba" style="display:none;">
+        <div class="modal-text" style="padding:0 16px 12px;">
+          Pedido marcado como cancelado na aba ⏰ Parados aparece aqui até alguém confirmar
+          que o material físico voltou pro endereço do almoxarifado.
+        </div>
+        <div class="cfg-barra">
+          <strong>Aguardando devolução</strong>
+          <span style="font-size:12px; color:var(--muted);" id="canceladoAlmContagem"></span>
+        </div>
+        <div id="canceladoAlmBody" style="padding:0 16px 16px;"></div>
+        <div class="empty-msg" id="canceladoAlmVazio" style="display:none;">
+          Nenhum pedido cancelado aguardando devolução. 🎉
         </div>
       </div>
 
