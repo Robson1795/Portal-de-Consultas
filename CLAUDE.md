@@ -6990,3 +6990,32 @@ Testado localmente: carregou os nomes ativos da tabela, "marcos" digitado
 minúsculo entrou como MARCOS via upsert com unidade e `criado_por`, e tirar
 JOEL gravou `ativo: false` mantendo a linha no banco. A lista da tela
 acompanhou as duas mudanças. Sem erro no console.
+
+## 53. A aba Pendências sai (17/09/2026)
+
+Um dia depois de ser criada (seção 49), o Robson tirou: *"ABA DE PENDENCIAS
+EXCLUI"*. Veio junto com a mudança de fluxo: *"ABA SEPARAÇÃO VOU JOGAR A
+PLANILHA CONFORME O PCP MONTA"* — e na planilha do PCP o "SEM SALDO" já vem
+escrito na coluna OBSERVAÇÃO, linha a linha, em vermelho.
+
+Ou seja: a informação que a aba existia pra guardar agora chega pronta da
+origem e aparece na própria lista, na coluna Observação. Tirar o item de cena
+pra uma aba separada deixou de resolver um problema e passou a esconder
+informação de quem separa.
+
+Removido: a sub-aba e sua tabela, o botão "Marcar sem estoque", o "↶ Voltar
+para Separação" e o filtro `!i.em_pendencia` que tirava esses itens da
+Separação e do Painel. Item que estava marcado **volta a aparecer** na lista,
+que é o efeito pretendido.
+
+As colunas do banco (`em_pendencia`, `pendencia_motivo`, `pendencia_em`,
+`pendencia_por`, fase 58) **ficam**. Não custam nada paradas, e derrubar
+coluna é irreversível — se a ideia voltar em outro formato, o dado de quem
+marcou o quê ainda está lá. `sql/fase58-pedido-itens-pendencia.sql` também
+fica no repositório: é o registro de que isso existiu e por quê.
+
+Testado localmente: sobraram três abas (Carregamento, Separação, Painel do
+Separador), o painel de Pendências não existe mais no HTML, o item que estava
+com `em_pendencia: true` voltou pra lista e pro contador do topo, o botão
+"Marcar sem estoque" sumiu da coluna Ação, e a troca entre as três abas
+continua funcionando. Sem erro no console.

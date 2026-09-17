@@ -9,14 +9,13 @@
 // fonte grande, alto contraste, botao grande, sem poluicao visual. "minha
 // ideia é fazer a programação desse modelo".
 //
-// Entra como QUARTA ABA da Programação de Separação (Robson, 17/09/2026:
+// Entra como TERCEIRA ABA da Programação de Separação (Robson, 17/09/2026:
 // "coloque o painel dentro da aba progrmação de separaçao"), ao lado de
-// Carregamento, Separação e Pendências -- nasceu como item proprio no menu
-// lateral e mudou de lugar no mesmo dia. A aba Separação continua sendo a
-// visao de quem coordena (filtros, busca, Pendências, marcar pedido inteiro,
-// saldo); esta e a de quem esta separando agora. As quatro leem
-// `progPedidos`/`progItens`, entao nao ha dado duplicado nem risco de uma
-// mostrar uma coisa e a outra mostrar outra.
+// Carregamento e Separação -- nasceu como item proprio no menu lateral e
+// mudou de lugar no mesmo dia. A aba Separação continua sendo a visao de
+// quem coordena (filtros, busca, marcar pedido inteiro, saldo); esta e a de
+// quem esta separando agora. As tres leem `progPedidos`/`progItens`, entao
+// nao ha dado duplicado nem risco de uma mostrar uma coisa e a outra outra.
 //
 // Os dados vem de `carregarProgramacao()` (js/programacao.js), que ja carrega
 // pedidos, itens e o saldo/endereco do almoxarifado.
@@ -182,12 +181,10 @@ function painelUrgencia(pedido) {
 }
 
 // ---- Dados da tela ----------------------------------------------------------
-// Pedido entra na fila enquanto tiver item pra separar. Item em pendencia
-// (fase 58) nao conta: nao tem em estoque, nao da pra separar.
+// Pedido entra na fila enquanto tiver item pra separar.
 function painelFila() {
   const porPedido = new Map();
   progItens.forEach(item => {
-    if (item.em_pendencia) return;
     if (!porPedido.has(item.pedido_id)) porPedido.set(item.pedido_id, []);
     porPedido.get(item.pedido_id).push(item);
   });
@@ -213,8 +210,8 @@ function renderPainelSeparacao() {
   const fila = painelFila();
   const pendentes = fila.filter(f => f.completos < f.total);
 
-  // Contador no proprio botao da aba, igual ao de Pendências: da pra ver que
-  // tem pedido esperando sem precisar entrar.
+  // Contador no proprio botao da aba: da pra ver que tem pedido esperando
+  // sem precisar entrar.
   document.getElementById('painelContaPendentes').textContent = pendentes.length ? ` (${pendentes.length})` : '';
 
   if (!fila.length) {

@@ -618,7 +618,6 @@
         <div id="progAbas" style="display:flex; gap:8px; flex-wrap:wrap;">
           <button class="btn" data-prog-aba="carregamento">Carregamento</button>
           <button class="btn btn-primary" data-prog-aba="separacao">Separação</button>
-          <button class="btn" data-prog-aba="pendencias">Pendências<span id="progPendenciasContador"></span></button>
           <button class="btn" data-prog-aba="painel">🧰 Painel do Separador<span id="painelContaPendentes"></span></button>
         </div>
         <button class="btn" id="progImportarBtn" style="margin-left:auto;">Importar planilhas</button>
@@ -691,29 +690,7 @@
         </div>
       </div>
 
-      <!-- ---- Aba 3: Pendências (item sem estoque, fora da lista de separar) ---- -->
-      <div id="progPendencias" class="prog-aba" style="display:none;">
-        <div class="cfg-barra">
-          <input type="text" id="progPendBusca" placeholder="Buscar pedido, item ou motivo..." style="flex:1; min-width:200px;">
-        </div>
-        <div class="scroll-area">
-          <table id="progTabelaPendencias">
-            <thead>
-              <tr>
-                <th>Pedido</th><th>Cliente</th><th>Embarque</th><th>Item</th>
-                <th>Descrição</th><th>UM</th><th>Qtd</th><th>OS/OP</th>
-                <th>Motivo</th><th>Em pendência desde</th><th>Ação</th>
-              </tr>
-            </thead>
-            <tbody id="progPendenciasBody"></tbody>
-          </table>
-        </div>
-        <div class="empty-msg" id="progPendenciasVazio" style="display:none;">
-          Nenhum item em pendência. Use "Sem estoque" na aba Separação para mandar um item pra cá.
-        </div>
-      </div>
-
-      <!-- ---- Aba 4: Painel do Separador (tela do auxiliar, tablet/monitor) ---- -->
+      <!-- ---- Aba 3: Painel do Separador (tela do auxiliar, tablet/monitor) ---- -->
       <!-- Mesmos pedidos e itens das outras abas, outra leitura: aqui é quem
            separa, de pé, com botão grande e confirmação em pop-up. Ver
            js/painelseparacao.js. -->
