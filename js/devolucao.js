@@ -800,17 +800,13 @@ async function imprimirEtiquetasDevolucao(linhas) {
 // enganaria quem confere no físico.
 function montarHtmlConferenciaMetragemDevolucao(linhas) {
   const impressoEm = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
-  // Absoluta, não relativa: a folha abre numa aba em branco (about:blank)
-  // até o document.write() de baixo -- endereço relativo não tem certeza
-  // nenhuma de resolver pro mesmo lugar que o resto do portal.
-  const logoUrl = `${window.location.origin}/logo.png`;
 
   const folhas = linhas.map(item => {
     const calculo = metragemDevolucao(item);
     if (!calculo || !calculo.cat) return '';
     return `
     <section class="folha-conf">
-      <img class="conf-logo" src="${escapeHtml(logoUrl)}" alt="Kingspan Isoeste">
+      <img class="conf-logo" src="${LOGO_KINGSPAN_DATAURI}" alt="Kingspan Isoeste">
       <div class="conf-item">ITEM ${escapeHtml(item.cod_produto || '—')}</div>
       <div class="conf-desc">${escapeHtml(item.descricao_produto || '')}</div>
       <div class="conf-qtd">QTD: ${escapeHtml(numeroBR(item.qtd_pecas))} PÇS DE ${escapeHtml(numeroBR(item.metragem_peca))} M</div>
@@ -819,32 +815,7 @@ function montarHtmlConferenciaMetragemDevolucao(linhas) {
     </section>`;
   }).filter(Boolean).join('');
 
-  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
-<title>Conferência por Metragem — ${new Date().toLocaleDateString('pt-BR')}</title>
-<style>
-  @page { size: A4 landscape; margin: 12mm; }
-  :root { color-scheme: light; }
-  body { font-family: Arial, sans-serif; margin: 0; background: #fff; color: #000; }
-  .folha-conf {
-    box-sizing: border-box; padding: 10mm; text-align: center;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    min-height: 100vh;
-    page-break-after: always; break-after: page;
-  }
-  .folha-conf:last-child { page-break-after: auto; break-after: auto; }
-  .conf-logo { height: 16mm; margin-bottom: 8mm; }
-  .conf-item { font-size: 20mm; font-weight: 900; line-height: 1.1; overflow-wrap: anywhere; margin-bottom: 6mm; }
-  .conf-desc { font-size: 11mm; font-weight: 700; line-height: 1.2; margin-bottom: 8mm; max-width: 220mm; }
-  .conf-qtd { font-size: 13mm; font-weight: 700; margin-bottom: 4mm; }
-  .conf-total {
-    font-size: 16mm; font-weight: 900; padding: 4mm 10mm;
-    border-top: 1mm solid #000; border-bottom: 1mm solid #000;
-  }
-  .conf-rodape { font-size: 5mm; color: #333; margin-top: 8mm; }
-</style></head><body>
-${folhas}
-${'<script>window.onload = () => window.print();<' + '/script>'}
-</body></html>`;
+  return montarHtmlFolhaConferenciaMetragem(folhas, 'Conferência por Metragem');
 }
 
 async function imprimirConfMetragemDevolucao(linhas) {

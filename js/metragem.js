@@ -165,39 +165,47 @@ document.getElementById('metragemAdicionarLinhaBtn').addEventListener('click', (
 
 // ---- Imprimir -- reaproveita montarHtmlTabelaGenerica() (js/programacao.js),
 // a mesma função usada pra exportar Entrada/Auditoria em HTML. Sem folha
-// gigante nem etiqueta -- é uma lista de conferência, cabe numa tabela só.
+// gigante nem etiqueta -- é uma folha de conferência, uma por item.
+//
+// Robson, 17/09/2026: "essa folha sera colada nos fardos no patio" (letra
+// grande, negrito) -- depois, comparando com a folha equivalente da
+// Devolução (seção 67): "QUERO NESSA SEQUANCIA A QUANTIDADE PODE AUMENTAR
+// O TAMANHO E COLOQUE O LOGO DA KINGSPAN". Mesma folha das duas telas --
+// ver montarHtmlFolhaConferenciaMetragem() em js/programacao.js -- só o
+// miolo muda: aqui vem de `metragemLinhas` (código/descrição/qtd/metragem
+// digitados na hora), lá vem do item já cadastrado na Devolução.
+//
+// Só vira folha item com categoria reconhecida (mesma regra da Devolução):
+// sem fator não tem "TOTAL: X m²" nenhum pra escrever.
 document.getElementById('metragemImprimirBtn').addEventListener('click', () => {
   const validas = metragemLinhas.filter(l => !linhaVaziaMetragem(l));
   if (!validas.length) { alert('Nada pra imprimir -- preencha ao menos uma linha.'); return; }
+
+  const impressoEm = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+  const folhas = validas.map(l => {
+    const { cat, qtd, metragem, m2 } = calcularLinhaMetragem(l);
+    if (!cat) return '';
+    return `
+    <section class="folha-conf">
+      <img class="conf-logo" src="${LOGO_KINGSPAN_DATAURI}" alt="Kingspan Isoeste">
+      <div class="conf-item">ITEM ${escapeHtml(l.codigo || '—')}</div>
+      <div class="conf-desc">${escapeHtml(l.descricao || '')}</div>
+      <div class="conf-qtd">QTD: ${escapeHtml(numeroBR(qtd))} PÇS DE ${escapeHtml(numeroBR(metragem))} M</div>
+      <div class="conf-total">TOTAL: ${formatarM2(m2)} M²</div>
+      <div class="conf-rodape">${escapeHtml(impressoEm)}</div>
+    </section>`;
+  }).filter(Boolean).join('');
+
+  if (!folhas) {
+    alert('Nenhuma linha com categoria reconhecida (Painel Frigorífico/EVO-Fachada/Telha) -- confira a descrição.');
+    return;
+  }
 
   // Aba aberta ANTES de montar o HTML -- mesma regra de toda folha deste
   // portal (ativação transitória do clique).
   const aba = window.open('', '_blank');
   if (!aba) { alert('O navegador bloqueou a nova aba. Libere pop-ups pra este site e tente de novo.'); return; }
-
-  let totalGeral = 0;
-  const linhasTabela = validas.map(l => {
-    const { cat, qtd, metragem, m2 } = calcularLinhaMetragem(l);
-    if (m2 !== null) totalGeral += m2;
-    return [
-      l.codigo, l.descricao, cat ? cat.rotulo : 'Não reconhecida', qtd, metragem,
-      cat ? cat.fator.toLocaleString('pt-BR') : '—',
-      m2 !== null ? formatarM2(m2) : '—'
-    ];
-  });
-
-  const html = montarHtmlTabelaGenerica({
-    titulo: `Contagem por Metragem — ${new Date().toLocaleDateString('pt-BR')}`,
-    cabecalho: ['Código', 'Descrição', 'Categoria', 'Qtd Peças', 'Metragem (m)', 'Fator', 'm²'],
-    linhas: linhasTabela,
-    subtitulo: ` — Total: ${formatarM2(totalGeral)} m²`,
-    imprimir: true,
-    // Robson, 17/09/2026: "essa folha sera colada nos fardos no patio" --
-    // letra grande e em negrito, porque isso vira etiqueta de fardo, não
-    // relatório de mesa.
-    grande: true
-  });
-  aba.document.write(html);
+  aba.document.write(montarHtmlFolhaConferenciaMetragem(folhas, 'Contagem por Metragem'));
   aba.document.close();
 });
 

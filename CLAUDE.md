@@ -7507,3 +7507,38 @@ Quantidade, sobrescrever manualmente pra "999" se manteve mesmo trocando
 a descrição pra um item sem categoria, e o registro gravou `qtd_pecas`,
 `metragem_peca` e `qtd_nf`/`qtd_fisico` = 55560 juntos, já conferido. Sem
 erro no console.
+
+## 69. Uma folha só para as duas telas de metragem, logo embutido, letra bem maior (17/09/2026)
+
+O Robson mandou duas telas lado a lado: a tabela compacta da Contagem por
+Metragem avulsa, e o mockup original da folha por item (seção 67) —
+*"QUERO NESSA SEQUANCIA A QUANTIDADE PODE AUMENTAR O TAMANHO E COLOQUE O
+LOGO DA KINGSPAN"*, depois *"E A ESCRITA EM TODA A FOLHA"*.
+
+**O logo não aparecia.** A folha da seção 67 referenciava
+`window.location.origin + '/logo.png'` — um `<img>` de rede, dentro de uma
+aba popup aberta via `document.write()`. Trocado por **data URI embutido**
+(`LOGO_KINGSPAN_DATAURI`, em js/programacao.js): o logo vai dentro do
+próprio HTML, sem depender de nenhuma rede terminar de carregar a tempo do
+`window.print()` — não tem como "não carregar".
+
+**Uma função só pras duas telas.** `montarHtmlFolhaConferenciaMetragem
+(folhasHtml, titulo)`, em js/programacao.js, virou o "molde" da folha
+(logo, `@page` A4 paisagem, todas as classes `.conf-*`) — tanto
+`montarHtmlConferenciaMetragemDevolucao()` (js/devolucao.js) quanto o botão
+🖨️ Imprimir da Contagem por Metragem avulsa (js/metragem.js, que **até
+aqui usava a tabela compacta `montarHtmlTabelaGenerica`** — trocado pela
+mesma folha por item) montam só o miolo com os próprios dados e chamam essa
+função. Uma folha, um lugar pra ajustar o visual dos dois — só sai folha
+pra linha com categoria reconhecida, mesma regra das duas telas.
+
+**Letra bem maior, "em toda a folha"** — não só a quantidade: logo 24mm,
+ITEM 32mm, descrição 18mm, QTD 22mm, TOTAL 28mm, rodapé 7mm (antes: 16/20/
+11/13/16/5mm) — quase o dobro em cada linha.
+
+Testado localmente: as duas telas (Devolução e Metragem avulsa) produziram
+a mesma folha, logo como data URI (`data:image/png;base64,...`, não mais
+URL de rede) nas duas, ITEM/descrição/QTD/TOTAL com os tamanhos novos
+(32mm/28mm confirmados), e a Metragem avulsa gerando a folha a partir dos
+próprios campos (código/descrição/qtd/metragem digitados na hora) em vez
+da tabela compacta de antes. Sem erro no console.
