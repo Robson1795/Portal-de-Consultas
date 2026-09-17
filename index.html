@@ -619,6 +619,7 @@
           <button class="btn" data-prog-aba="carregamento">Carregamento</button>
           <button class="btn btn-primary" data-prog-aba="separacao">Separação</button>
           <button class="btn" data-prog-aba="pendencias">Pendências<span id="progPendenciasContador"></span></button>
+          <button class="btn" data-prog-aba="painel">🧰 Painel do Separador<span id="painelContaPendentes"></span></button>
         </div>
         <button class="btn" id="progImportarBtn" style="margin-left:auto;">Importar planilhas</button>
         <button class="btn" id="progAtualizarBtn">Atualizar</button>
@@ -709,6 +710,24 @@
         </div>
         <div class="empty-msg" id="progPendenciasVazio" style="display:none;">
           Nenhum item em pendência. Use "Sem estoque" na aba Separação para mandar um item pra cá.
+        </div>
+      </div>
+
+      <!-- ---- Aba 4: Painel do Separador (tela do auxiliar, tablet/monitor) ---- -->
+      <!-- Mesmos pedidos e itens das outras abas, outra leitura: aqui é quem
+           separa, de pé, com botão grande e confirmação em pop-up. Ver
+           js/painelseparacao.js. -->
+      <div id="progPainelSeparador" class="prog-aba" style="display:none;">
+        <div class="status-msg" id="painelMsg" style="padding:8px 16px 0;"></div>
+        <div class="painel-colunas">
+          <div class="painel-coluna-fila">
+            <div class="painel-coluna-titulo">Pedidos pendentes</div>
+            <div id="painelFila"></div>
+          </div>
+          <div class="painel-coluna-atual">
+            <div class="painel-coluna-titulo">Pedido atual</div>
+            <div id="painelAtual"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -855,37 +874,9 @@
   </div>
   <!-- ================= FIM DEVOLUÇÃO ================= -->
 
-  <!-- ================= PAINEL DE SEPARAÇÃO ================= -->
-  <!-- Tela do AUXILIAR, pra monitor grande/tablet no almoxarifado: card por
-       pedido na ordem do carregamento, botão grande, confirmação em pop-up
-       com o nome de quem fez. Lê os mesmos pedidos/itens da Programação de
-       Separação (ver js/painelseparacao.js) -- a aba de lá continua sendo a
-       visão do líder. -->
-  <div id="painelSeparacaoContent" style="display:none;">
-    <div class="panel">
-      <div class="cfg-barra">
-        <h2 style="margin:0;">🧰 Painel de Separação</h2>
-        <span class="cfg-status st-pendente" style="margin-left:8px;">
-          <span id="painelContaPendentes">0</span> pedido(s) a separar
-        </span>
-        <button class="btn" id="painelAtualizarBtn" style="margin-left:auto;">Atualizar</button>
-      </div>
-      <div class="status-msg" id="painelMsg" style="padding:0 16px;"></div>
-
-      <div class="painel-colunas">
-        <div class="painel-coluna-fila">
-          <div class="painel-coluna-titulo">Pedidos pendentes</div>
-          <div id="painelFila"></div>
-        </div>
-        <div class="painel-coluna-atual">
-          <div class="painel-coluna-titulo">Pedido atual</div>
-          <div id="painelAtual"></div>
-        </div>
-      </div>
-    </div>
-  </div>
+  <!-- Pop-up do Painel de Separação. Fica FORA da página de propósito: é
+       overlay de tela cheia (position:fixed), não conteúdo de aba. -->
   <div class="painel-popup-overlay" id="painelPopup" style="display:none;"></div>
-  <!-- ================= FIM PAINEL DE SEPARAÇÃO ================= -->
 
   <!-- ================= CONTAGEM POR METRAGEM ================= -->
   <!-- Calculadora avulsa: pçs x metragem x fator, com o fator escolhido

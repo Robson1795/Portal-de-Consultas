@@ -212,6 +212,7 @@ function trocarAbaProgramacao(aba) {
   document.getElementById('progSeparacao').style.display = aba === 'separacao' ? 'block' : 'none';
   document.getElementById('progCarregamento').style.display = aba === 'carregamento' ? 'block' : 'none';
   document.getElementById('progPendencias').style.display = aba === 'pendencias' ? 'block' : 'none';
+  document.getElementById('progPainelSeparador').style.display = aba === 'painel' ? 'block' : 'none';
   // Campo de observacao so consegue se medir com a aba aberta (ver
   // ajustarAlturaObs): ao voltar pra Separacao, remede o que ficou de fora.
   if (aba === 'separacao') ajustarTodasAlturasObs();

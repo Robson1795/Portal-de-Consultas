@@ -20,9 +20,9 @@
 // da Requisicao (que e so pedir). Quem faz esse fluxo e o ALM da unidade.
 const PERFIS = {
   consultor:   { rotulo: 'Consultor',   paginas: ['painel', 'estoque'] },
-  estoque_alm: { rotulo: 'Estoque ALM', paginas: ['painel', 'estoque', 'sesmt', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'debitodireto', 'devolucao', 'metragem', 'painelseparacao', 'analise', 'mfg'] },
+  estoque_alm: { rotulo: 'Estoque ALM', paginas: ['painel', 'estoque', 'sesmt', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'debitodireto', 'devolucao', 'metragem', 'analise', 'mfg'] },
   estoque_aco: { rotulo: 'Estoque Aço', paginas: ['painel', 'bobinas', 'requisicao'] },
-  admin:       { rotulo: 'Admin',       paginas: ['painel', 'estoque', 'sesmt', 'bobinas', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'debitodireto', 'devolucao', 'metragem', 'painelseparacao', 'analise', 'mfg', 'config'] }
+  admin:       { rotulo: 'Admin',       paginas: ['painel', 'estoque', 'sesmt', 'bobinas', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'debitodireto', 'devolucao', 'metragem', 'analise', 'mfg', 'config'] }
 };
 
 const PAGINAS = {
@@ -81,12 +81,6 @@ const PAGINAS = {
   // avulsa -- não lê nem grava em tabela nenhuma, é conta de cabeça feita
   // pelo portal em vez de na mão (ver js/metragem.js).
   metragem: { rotulo: 'Contagem por Metragem', icone: '📏', elemento: 'metragemContent' },
-  // Tela do AUXILIAR separando, pra monitor grande/tablet no almoxarifado:
-  // card por pedido na ordem do carregamento, botão grande, confirmação em
-  // pop-up com o nome de quem fez. Lê os mesmos pedidos/itens da Programação
-  // de Separação -- a aba de lá continua sendo a visão de quem coordena
-  // (filtros, busca, Pendências). Ver js/painelseparacao.js.
-  painelseparacao: { rotulo: 'Painel de Separação', icone: '🧰', elemento: 'painelSeparacaoContent' },
   // Demanda dos pedidos x saldo do almoxarifado: o que falta comprar.
   // Só lê o estoque -- não mexe em saldo nenhum (ver js/analise.js).
   analise: { rotulo: 'Análise de Compras', icone: '📊', elemento: 'analiseComprasContent' },
@@ -228,7 +222,6 @@ function mostrarPagina(id) {
   }
   if (id === 'debitodireto') { carregarDebitoDireto(); }
   if (id === 'devolucao') { carregarDevolucao(); }
-  if (id === 'painelseparacao') { carregarPainelSeparacao(); }
   if (id === 'analise') { carregarAnalise(); }
   // ⚠️ `carregarAcessos()` vai DEPOIS de `carregarUsuarios()`, encadeado e não
   // solto: ele cruza o log de login com a lista de aprovados, e disparando os

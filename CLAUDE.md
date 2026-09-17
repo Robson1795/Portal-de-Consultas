@@ -6948,3 +6948,12 @@ console.
 (rolos/barras). As duas dependem de um cadastro por item que o PCP-FOR-001 não
 traz — `categoriaVolume`, `comprimentoBarra`, `comprimentoUnidade` — e por
 isso ficaram para depois do núcleo operacional.
+
+**Mudou de lugar no mesmo dia:** nasceu como item próprio no menu lateral e o
+Robson pediu *"COLOQUE O PAINEL DENTRO DA ABA PROGRMAÇÃO DE SEPARAÇAO"*. Virou
+a **quarta sub-aba** da Programação, ao lado de Carregamento, Separação e
+Pendências, com o contador de pedidos a separar no próprio botão da aba (mesmo
+padrão de Pendências). Faz sentido: as quatro são a mesma operação vista de
+ângulos diferentes, e agora trocar entre a visão de quem coordena e a de quem
+separa é um clique, sem passar pelo menu. O pop-up continua fora da página, no
+fim do `index.html` — é overlay de tela cheia, não conteúdo de aba.

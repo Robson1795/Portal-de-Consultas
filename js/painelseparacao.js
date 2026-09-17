@@ -9,11 +9,14 @@
 // fonte grande, alto contraste, botao grande, sem poluicao visual. "minha
 // ideia é fazer a programação desse modelo".
 //
-// Decidido com ele que entra como TELA NOVA, mantendo a aba Separação: a de
-// la e a visao de quem coordena (filtros, busca, Pendências, marcar pedido
-// inteiro, saldo do almoxarifado); esta e a de quem esta separando agora. As
-// duas leem `progPedidos`/`progItens`, entao nao ha dado duplicado nem risco
-// de uma mostrar uma coisa e a outra mostrar outra.
+// Entra como QUARTA ABA da Programação de Separação (Robson, 17/09/2026:
+// "coloque o painel dentro da aba progrmação de separaçao"), ao lado de
+// Carregamento, Separação e Pendências -- nasceu como item proprio no menu
+// lateral e mudou de lugar no mesmo dia. A aba Separação continua sendo a
+// visao de quem coordena (filtros, busca, Pendências, marcar pedido inteiro,
+// saldo); esta e a de quem esta separando agora. As quatro leem
+// `progPedidos`/`progItens`, entao nao ha dado duplicado nem risco de uma
+// mostrar uma coisa e a outra mostrar outra.
 //
 // Os dados vem de `carregarProgramacao()` (js/programacao.js), que ja carrega
 // pedidos, itens e o saldo/endereco do almoxarifado.
@@ -191,7 +194,9 @@ function renderPainelSeparacao() {
   const fila = painelFila();
   const pendentes = fila.filter(f => f.completos < f.total);
 
-  document.getElementById('painelContaPendentes').textContent = pendentes.length;
+  // Contador no proprio botao da aba, igual ao de Pendências: da pra ver que
+  // tem pedido esperando sem precisar entrar.
+  document.getElementById('painelContaPendentes').textContent = pendentes.length ? ` (${pendentes.length})` : '';
 
   if (!fila.length) {
     colFila.innerHTML = '<div class="empty-msg">Nenhum pedido para separar. Importe as planilhas na Programação de Separação.</div>';
@@ -538,9 +543,3 @@ document.getElementById('painelPopup').addEventListener('click', async (e) => {
     await carregarProgramacao();
   }
 });
-
-async function carregarPainelSeparacao() {
-  // Mesma carga da Programação de Separação: os dois leem pedidos e itens da
-  // unidade. Reaproveitar evita as duas telas divergirem.
-  await carregarProgramacao();
-}
