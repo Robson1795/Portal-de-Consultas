@@ -21,10 +21,29 @@
 // Os dados vem de `carregarProgramacao()` (js/programacao.js), que ja carrega
 // pedidos, itens e o saldo/endereco do almoxarifado.
 
-// Quem separa no almoxarifado. Ficam aqui, e nao numa tabela, porque a lista
-// muda de ano em ano, nao de semana em semana -- tabela exigiria tela de
-// cadastro pra um dado que quase nunca muda. Se virar rotatividade, promove.
-const PAINEL_NOMES = ['JOEL', 'NILSON', 'ANGEL', 'ANGELO', 'MAIKO'];
+// Quem separa no almoxarifado, da tabela `separadores` (fase 60), por unidade.
+// Nasceu como lista fixa no codigo, apostando que mudaria de ano em ano -- o
+// Robson corrigiu no mesmo dia ("AQUI QUERO PODER OS NOMES"): e rotatividade
+// de almoxarifado, e ele nao vai pedir mudanca de codigo a cada pessoa que
+// entra ou sai. Enquanto o SQL da fase 60 nao roda, cai nos nomes originais,
+// pra tela nao abrir com o pop-up vazio.
+const PAINEL_NOMES_PADRAO = ['JOEL', 'NILSON', 'ANGEL', 'ANGELO', 'MAIKO'];
+let painelNomes = [...PAINEL_NOMES_PADRAO];
+
+async function carregarSeparadores() {
+  const { data, error } = await sb.from('separadores')
+    .select('nome, ativo')
+    .eq('unidade', unidadeAtual)
+    .eq('ativo', true)
+    .order('nome', { ascending: true });
+  if (error) {
+    console.warn('Não foi possível carregar os separadores (fase 60 rodou?):', error.message);
+    return;
+  }
+  // Lista vazia de propósito (todo mundo inativado) é uma escolha, não erro --
+  // mas nunca deixa cair no padrão do código depois que a tabela existe.
+  painelNomes = (data || []).map(r => r.nome);
+}
 
 // RAL Classic -> HEX, pra mostrar a cor do material como quadrado no card.
 // O auxiliar reconhece a cor de relance em vez de ler "RAL9003" no meio da
@@ -358,7 +377,7 @@ function renderPainelPopup() {
   // SEPARADO: item de CDB (com OP) pede dois nomes, porque a propria equipe do
   // CDB separa e confere cada peca na hora. Item sem OP pede so quem separou --
   // a conferencia desses e a do pedido inteiro, no fim, na bancada.
-  const listaNomes = (campo) => PAINEL_NOMES.map(nome => `
+  const listaNomes = (campo) => painelNomes.map(nome => `
     <button class="btn painel-nome${painelPopup[campo] === nome ? ' painel-nome-ativo' : ''}"
             data-campo="${campo}" data-nome="${escapeHtml(nome)}">${escapeHtml(nome)}</button>`).join('');
 
@@ -384,6 +403,82 @@ function renderPainelPopup() {
     </div>`;
 }
 
+// ---- Cadastro de quem separa -------------------------------------------------
+// Robson, 17/09/2026, no pop-up de Concluir Pedido: "AQUI QUERO PODER OS
+// NOMES". Cadastro fica aqui, colado no lugar onde os nomes aparecem, e nao em
+// Configurações: quem mexe nessa lista e o lider do almoxarifado, na hora que
+// alguem entra ou sai da equipe -- nao o admin do portal, noutra tela.
+//
+// Tirar um nome INATIVA (ativo = false), nao apaga: item ja separado guarda o
+// nome em `separado_por_nome`, e apagar a pessoa do cadastro nao pode reescrever
+// a historia de quem separou o que.
+function painelAbrirPopupNomes() {
+  painelPopup = { tipo: 'nomes', erro: null };
+  renderPainelPopupNomes();
+}
+
+function renderPainelPopupNomes() {
+  const overlay = document.getElementById('painelPopup');
+  overlay.style.display = 'flex';
+  overlay.innerHTML = `
+    <div class="painel-popup-caixa">
+      <div class="painel-popup-titulo">Quem separa na unidade ${escapeHtml(unidadeAtual)}</div>
+      <div class="painel-popup-sub">Os nomes aqui são os que aparecem ao marcar item e ao concluir pedido.</div>
+      ${painelPopup.erro ? `<div class="status-msg status-err" style="margin-bottom:10px;">${escapeHtml(painelPopup.erro)}</div>` : ''}
+      <div class="painel-nomes painel-nomes-cadastro">
+        ${painelNomes.length
+          ? painelNomes.map(nome => `
+            <span class="painel-nome-chip">
+              ${escapeHtml(nome)}
+              <button class="painel-nome-remover" data-nome="${escapeHtml(nome)}" title="Tirar da lista">✕</button>
+            </span>`).join('')
+          : '<span class="painel-popup-sub">Nenhum nome cadastrado.</span>'}
+      </div>
+      <div class="painel-popup-campo" style="margin-top:14px;">
+        <div class="painel-popup-rotulo">Adicionar nome</div>
+        <div style="display:flex; gap:8px;">
+          <input type="text" id="painelNomeNovo" placeholder="Ex.: MARCOS" style="flex:1;" maxlength="40">
+          <button class="btn btn-primary" id="painelNomeAdicionar">Adicionar</button>
+        </div>
+      </div>
+      <div class="painel-popup-acoes">
+        <button class="btn" id="painelPopupCancelar">Fechar</button>
+      </div>
+    </div>`;
+}
+
+async function painelAdicionarNome() {
+  const campo = document.getElementById('painelNomeNovo');
+  const nome = campo.value.trim().toUpperCase();
+  if (!nome) return;
+  // Reativa em vez de inserir de novo: a chave e (unidade, nome), entao quem
+  // ja saiu e voltou tem linha na tabela com ativo = false.
+  const { error } = await sb.from('separadores')
+    .upsert({ unidade: unidadeAtual, nome, ativo: true, criado_por: nomeUsuarioAtual },
+            { onConflict: 'unidade,nome' });
+  if (error) {
+    painelPopup.erro = /separadores/.test(error.message)
+      ? 'Falta rodar sql/fase60-separadores.sql no Supabase.'
+      : error.message;
+    renderPainelPopupNomes();
+    return;
+  }
+  painelPopup.erro = null;
+  await carregarSeparadores();
+  renderPainelPopupNomes();
+}
+
+async function painelRemoverNome(nome) {
+  const { error } = await sb.from('separadores')
+    .update({ ativo: false })
+    .eq('unidade', unidadeAtual)
+    .eq('nome', nome);
+  if (error) { painelPopup.erro = error.message; renderPainelPopupNomes(); return; }
+  painelPopup.erro = null;
+  await carregarSeparadores();
+  renderPainelPopupNomes();
+}
+
 function painelAbrirPopupConcluir(pedidoId) {
   painelPopup = { tipo: 'concluir', pedidoId, separador: null, conferente: null };
   renderPainelPopupConcluir();
@@ -395,7 +490,7 @@ function renderPainelPopupConcluir() {
   if (!pedido) { painelPopup = null; overlay.style.display = 'none'; return; }
   overlay.style.display = 'flex';
 
-  const lista = (campo) => PAINEL_NOMES.map(nome => `
+  const lista = (campo) => painelNomes.map(nome => `
     <button class="btn painel-nome painel-nome-${campo}${painelPopup[campo] === nome ? ' painel-nome-ativo' : ''}"
             data-campo="${campo}" data-nome="${escapeHtml(nome)}">${escapeHtml(nome)}</button>`).join('');
 
@@ -519,8 +614,18 @@ document.getElementById('painelAtual').addEventListener('click', (e) => {
   if (concluir && !concluir.disabled) painelAbrirPopupConcluir(concluir.dataset.pedidoId);
 });
 
+document.getElementById('painelNomesBtn').addEventListener('click', painelAbrirPopupNomes);
+
 document.getElementById('painelPopup').addEventListener('click', async (e) => {
   if (e.target.id === 'painelPopup') { painelPopup = null; renderPainelPopup(); return; }
+
+  if (painelPopup && painelPopup.tipo === 'nomes') {
+    const remover = e.target.closest('.painel-nome-remover');
+    if (remover) { await painelRemoverNome(remover.dataset.nome); return; }
+    if (e.target.id === 'painelNomeAdicionar') { await painelAdicionarNome(); return; }
+    if (e.target.id === 'painelPopupCancelar') { painelPopup = null; renderPainelPopup(); }
+    return;
+  }
 
   const nome = e.target.closest('.painel-nome');
   if (nome) {

@@ -1747,6 +1747,27 @@ td.col-acoes { white-space: nowrap; text-align: center; }
 .painel-nome { font-size: 15px; font-weight: 700; padding: 10px 16px; }
 .painel-nome-ativo { background: var(--blue); color: #fff; border-color: var(--blue); }
 .painel-nome-conferente.painel-nome-ativo { background: var(--ok-acao); border-color: var(--ok-acao); }
+.painel-nomes-cadastro { gap: 8px; }
+.painel-nome-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--row-alt);
+  border: 1px solid var(--border-forte);
+  border-radius: 999px;
+  padding: 6px 8px 6px 14px;
+  font-weight: 700;
+  font-size: 14px;
+}
+.painel-nome-remover {
+  border: none;
+  background: transparent;
+  color: var(--erro-texto);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0 4px;
+}
 .painel-popup-acoes { display: flex; gap: 10px; justify-content: flex-end; margin-top: 8px; }
 .painel-popup-acoes .btn { font-size: 15px; padding: 10px 20px; }
 

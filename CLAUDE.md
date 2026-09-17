@@ -6957,3 +6957,36 @@ padrão de Pendências). Faz sentido: as quatro são a mesma operação vista de
 ângulos diferentes, e agora trocar entre a visão de quem coordena e a de quem
 separa é um clique, sem passar pelo menu. O pop-up continua fora da página, no
 fim do `index.html` — é overlay de tela cheia, não conteúdo de aba.
+
+## 52. Quem separa vira cadastro (17/09/2026)
+
+A lista de nomes do Painel (fase 51) nasceu fixa no código — JOEL, NILSON,
+ANGEL, ANGELO, MAIKO — com a aposta, escrita no comentário, de que mudaria "de
+ano em ano, não de semana em semana". O Robson corrigiu no mesmo dia, olhando
+o pop-up de Concluir Pedido: *"AQUI QUERO PODER OS NOMES"*. Aposta errada:
+nome de quem separa é rotatividade de almoxarifado, e ele não vai pedir
+mudança de código a cada pessoa que entra ou sai da equipe.
+
+Tabela `separadores` (`sql/fase60-separadores.sql`), **por unidade** — quem
+separa em Araquari não é quem separa em Anápolis, e uma lista única encheria o
+pop-up de gente de outra fábrica. O SQL já insere os cinco nomes que estavam
+no código para a 106, pra ninguém abrir o Painel e encontrar a lista vazia.
+
+O cadastro fica no botão **👥 Quem separa**, dentro da própria aba do Painel, e
+não em Configurações: quem mexe nessa lista é o líder do almoxarifado, na hora
+que alguém entra ou sai — não o admin do portal, em outra tela.
+
+**Tirar um nome inativa, não apaga.** Item já separado guarda o nome em
+`separado_por_nome`; apagar a pessoa do cadastro não pode reescrever a
+história de quem separou o quê. E adicionar é `upsert` na chave
+`(unidade, nome)`, então quem saiu e voltou reativa a linha que já existia em
+vez de dar erro de duplicado.
+
+Enquanto o SQL não roda, a tela cai nos cinco nomes originais em vez de abrir
+o pop-up vazio — mas nunca volta pra eles depois que a tabela existe: lista
+vazia aí é escolha (todo mundo inativado), não falha.
+
+Testado localmente: carregou os nomes ativos da tabela, "marcos" digitado
+minúsculo entrou como MARCOS via upsert com unidade e `criado_por`, e tirar
+JOEL gravou `ativo: false` mantendo a linha no banco. A lista da tela
+acompanhou as duas mudanças. Sem erro no console.

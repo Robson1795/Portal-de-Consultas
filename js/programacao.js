@@ -155,6 +155,7 @@ async function carregarProgramacao() {
   );
 
   progEstoqueMap = await buscarSaldoAlmoxarifado(progItens.map(i => i.codigo_item));
+  await carregarSeparadores(); // nomes do Painel do Separador (js/painelseparacao.js)
 
   // Retoma de onde a digitação parou: o último pedido gravado (por
   // criado_em) volta a ser "o pedido atual" pra detecção de troca continuar
