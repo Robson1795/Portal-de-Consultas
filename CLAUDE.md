@@ -7542,3 +7542,50 @@ URL de rede) nas duas, ITEM/descrição/QTD/TOTAL com os tamanhos novos
 (32mm/28mm confirmados), e a Metragem avulsa gerando a folha a partir dos
 próprios campos (código/descrição/qtd/metragem digitados na hora) em vez
 da tabela compacta de antes. Sem erro no console.
+
+## 70. Borda na folha de conferência + Metragem/Peça volta a ser em mm, agora convertendo de verdade (17/09/2026)
+
+**Borda.** O Robson mandou um print de exemplo com uma borda preta
+retangular contornando a folha inteira e pediu *"coloque uma borda como a
+imagem"*. Adicionado `border: 3mm solid #000` em `.folha-conf`
+(js/programacao.js, `montarHtmlFolhaConferenciaMetragem()`) -- afeta as duas
+telas (Devolução e Metragem avulsa) de uma vez, mesma função compartilhada
+da seção 69. Testado renderizando a folha (item 354452) fora do popup de
+impressão -- moldura preta em volta de logo/ITEM/descrição/QTD/TOTAL/rodapé,
+igual ao print.
+
+**Metragem/Peça: de volta a "MM", mas com conversão de verdade agora.** Na
+seção 67 (fase63), o mockup original do Robson escrevia "4.630 MM", mas eu
+rotulei o campo como "M" (metros) -- porque na época a conta não convertia
+nada (`qtd × metragem × fator` direto), e se o número digitado fosse
+tratado como milímetro sem conversão, 12 × 4630 × 1 dava 55.560 m² (folha
+de painel virando 5,5 hectares -- óbvio que errado). Rotular "MM" ali teria
+sido mentira mesma hora que o valor esperado era em metros.
+
+Hoje, vendo a folha impressa: *"qtd de pçs pode colocar 4630 MM mude na
+calculadora tambem em MM"* -- ou seja, digitar a medida como ela sai da
+especificação física do painel (em mm, ex.: 4630), sem converter de cabeça
+pra metro antes de digitar. Dessa vez a correção é na CONTA, não só no
+rótulo: `calcularLinhaMetragem()` (js/metragem.js, reaproveitada por
+`metragemDevolucao()` em js/devolucao.js) agora divide a metragem por 1000
+antes de multiplicar -- `m2 = qtd × (metragem_mm / 1000) × fator`. Com isso
+"MM" no rótulo passa a ser verdade: 12 pçs × 4630 mm (TELHA, fator 1) =
+55,56 m² -- bate com o mockup original ("4.630 MM" / "TOTAL: 55,560 M²",
+a mesma conta, só que agora com a conversão por trás em vez de pedir pra
+digitar já em metro).
+
+Rótulos trocados de "(m)" pra "(mm)" em três lugares (index.html): coluna
+"Metragem/Peça" e input do Registrar Manual (Devolução), coluna "Metragem"
+da Contagem por Metragem avulsa -- junto com os `title` explicativos
+("em milímetros" no lugar de "em metros"). Texto da folha ("PÇS DE ... M")
+também virou "MM" nas duas telas.
+
+**Sem SQL nova** -- `devolucao_itens.metragem_peca` continua `numeric`
+(fase63); só muda o que o número representa e como é rotulado, não o tipo
+da coluna.
+
+Testado localmente: `calcularLinhaMetragem({ qtd:'12', metragem:'4630' })`
+com descrição de telha → `{ m2: 55.56 }`; texto da folha confirmado como
+"QTD: 12 PÇS DE 4.630 MM · TOTAL: 55,56 M²"; os três rótulos "(mm)"
+conferidos no DOM (th da Contagem por Metragem, th da Devolução,
+placeholder/title do Registrar Manual). Sem erro no console.

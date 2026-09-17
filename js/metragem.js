@@ -43,11 +43,17 @@ function categoriaMetragem(descricao) {
   return CATEGORIAS_METRAGEM.find(c => c.bate(t)) || null;
 }
 
+// `linha.metragem` é o comprimento de 1 peça em MILÍMETROS (é assim que a
+// medida sai da planilha/etiqueta, ex.: "4630mm" -- ninguém mede painel em
+// metro com casa decimal de cabeça). O m² precisa do valor em metros, daí a
+// conversão (/1000) só na hora de calcular -- `metragem` continua voltando
+// em mm pra exibir exatamente como foi digitado (ver js/devolucao.js:
+// metragemDevolucao(), mesma função reaproveitada lá).
 function calcularLinhaMetragem(linha) {
   const cat = categoriaMetragem(linha.descricao);
   const qtd = parseQtd(linha.qtd || '') || 0;
   const metragem = parseQtd(linha.metragem || '') || 0;
-  const m2 = cat ? qtd * metragem * cat.fator : null;
+  const m2 = cat ? qtd * (metragem / 1000) * cat.fator : null;
   return { cat, qtd, metragem, m2 };
 }
 
@@ -190,7 +196,7 @@ document.getElementById('metragemImprimirBtn').addEventListener('click', () => {
       <img class="conf-logo" src="${LOGO_KINGSPAN_DATAURI}" alt="Kingspan Isoeste">
       <div class="conf-item">ITEM ${escapeHtml(l.codigo || '—')}</div>
       <div class="conf-desc">${escapeHtml(l.descricao || '')}</div>
-      <div class="conf-qtd">QTD: ${escapeHtml(numeroBR(qtd))} PÇS DE ${escapeHtml(numeroBR(metragem))} M</div>
+      <div class="conf-qtd">QTD: ${escapeHtml(numeroBR(qtd))} PÇS DE ${escapeHtml(numeroBR(metragem))} MM</div>
       <div class="conf-total">TOTAL: ${formatarM2(m2)} M²</div>
       <div class="conf-rodape">${escapeHtml(impressoEm)}</div>
     </section>`;

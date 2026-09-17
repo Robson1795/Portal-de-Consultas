@@ -3609,6 +3609,7 @@ function montarHtmlFolhaConferenciaMetragem(folhasHtml, titulo) {
     box-sizing: border-box; padding: 10mm; text-align: center;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     min-height: 100vh;
+    border: 3mm solid #000;
     page-break-after: always; break-after: page;
   }
   .folha-conf:last-child { page-break-after: auto; break-after: auto; }

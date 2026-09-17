@@ -794,10 +794,12 @@ async function imprimirEtiquetasDevolucao(linhas) {
 // completo (categoria reconhecida pela descrição); os outros não têm
 // "conferência por metragem" nenhuma pra fazer.
 //
-// O mockup escreveu "4.630 MM" -- mas a conta só bate com 55.560 m² se
-// aqueles 4630 forem METROS (12 × 4630 × 1 = 55.560), não milímetros.
-// Mostrado como "M" aqui de propósito: rotular "MM" com o número em metros
-// enganaria quem confere no físico.
+// Robson, 17/09/2026 (depois de ver a folha impressa): "qtd de pçs pode
+// colocar 4630 MM mude na calculadora tambem em MM" -- volta ao "MM" do
+// mockup original, mas agora de verdade: calcularLinhaMetragem() converte
+// pra metro (/1000) antes de multiplicar (js/metragem.js), então o número
+// mostrado aqui é o mm digitado ao vivo (ex.: "4.630"), sem precisar
+// converter de cabeça antes de digitar.
 function montarHtmlConferenciaMetragemDevolucao(linhas) {
   const impressoEm = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 
@@ -809,7 +811,7 @@ function montarHtmlConferenciaMetragemDevolucao(linhas) {
       <img class="conf-logo" src="${LOGO_KINGSPAN_DATAURI}" alt="Kingspan Isoeste">
       <div class="conf-item">ITEM ${escapeHtml(item.cod_produto || '—')}</div>
       <div class="conf-desc">${escapeHtml(item.descricao_produto || '')}</div>
-      <div class="conf-qtd">QTD: ${escapeHtml(numeroBR(item.qtd_pecas))} PÇS DE ${escapeHtml(numeroBR(item.metragem_peca))} M</div>
+      <div class="conf-qtd">QTD: ${escapeHtml(numeroBR(item.qtd_pecas))} PÇS DE ${escapeHtml(numeroBR(item.metragem_peca))} MM</div>
       <div class="conf-total">TOTAL: ${formatarM2(calculo.m2)} M²</div>
       <div class="conf-rodape">${escapeHtml(impressoEm)}</div>
     </section>`;
