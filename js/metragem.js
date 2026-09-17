@@ -181,7 +181,11 @@ document.getElementById('metragemImprimirBtn').addEventListener('click', () => {
     cabecalho: ['Descrição', 'Categoria', 'Qtd Peças', 'Metragem (m)', 'Fator', 'm²'],
     linhas: linhasTabela,
     subtitulo: ` — Total: ${formatarM2(totalGeral)} m²`,
-    imprimir: true
+    imprimir: true,
+    // Robson, 17/09/2026: "essa folha sera colada nos fardos no patio" --
+    // letra grande e em negrito, porque isso vira etiqueta de fardo, não
+    // relatório de mesa.
+    grande: true
   });
   aba.document.write(html);
   aba.document.close();

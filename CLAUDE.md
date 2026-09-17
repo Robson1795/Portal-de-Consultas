@@ -7364,3 +7364,23 @@ localização): o completo saiu com "144,5 M" na linha de metragem e "NF
 123456 · Protocolo PROT-88 · Pedido KV900111" na linha seguinte; o
 incompleto saiu sem a linha de metragem e sem a linha de NF/protocolo/
 pedido, sem quebrar o layout. Sem erro no console.
+
+## 65. Folha da Contagem por Metragem fica grande e em negrito (17/09/2026)
+
+O Robson, vendo a folha impressa da Contagem por Metragem (letra pequena,
+estilo relatório de mesa): *"pode aumentar as letras e coloque em NEGRITO,
+essa folha sera colada nos fardos no patio"*. Não é papel de mesa — é
+etiqueta que vai grudada num fardo lá fora, precisa ler de mais longe.
+
+`montarHtmlTabelaGenerica()` (js/programacao.js) — a função compartilhada
+por várias exportações/impressões deste portal (Entrada, Controle EXP,
+Auditoria) — ganhou um parâmetro opcional `grande` (default `false`, então
+todo mundo que já usava continua exatamente igual: aquelas viram
+arquivo/relatório, não etiqueta). Só a impressão da Metragem passa
+`grande: true`: corpo 20px em negrito (era 12px normal), título 26px (era
+15px), células com padding maior e borda mais grossa.
+
+Testado localmente: `grande:true` produz `font-size:20px; font-weight:700`
+no corpo; sem o parâmetro, sai `font-size:12px; font-weight:400` — os
+outros usos da função (nenhum deles passa `grande`) ficam do jeito que
+sempre foram. Sem erro no console.

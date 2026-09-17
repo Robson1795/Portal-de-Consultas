@@ -3577,7 +3577,14 @@ ${scriptAutoImprimir ? '<script>window.onload = () => window.print();<' + '/scri
 // e `subtitulo` já chegam prontos pra ir direto no HTML (o subtítulo em
 // especial já vem com o que precisar de escapeHtml feito por quem chamou,
 // porque mistura texto fixo com `—` e afins).
-function montarHtmlTabelaGenerica({ titulo, cabecalho, linhas, subtitulo, imprimir }) {
+// `grande`: Robson, 17/09/2026, sobre a folha da Contagem por Metragem:
+// "pode aumentar as letras e coloque em NEGRITO, essa folha sera colada nos
+// fardos no patio" -- essa folha não fica numa mesa, fica GRUDADA num fardo
+// lá fora, e precisa ler de mais longe que uma planilha de conferência.
+// Opt-in (default false) de propósito: os outros usos deste HTML
+// (exportar Entrada, Controle EXP, Auditoria) continuam compactos -- viram
+// arquivo/relatório, não etiqueta.
+function montarHtmlTabelaGenerica({ titulo, cabecalho, linhas, subtitulo, imprimir, grande }) {
   const impressoEm = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
   const linhasHtml = linhas.map(linha => `<tr>${
     linha.map(v => `<td>${escapeHtml(v != null && v !== '' ? v : '—')}</td>`).join('')
@@ -3586,11 +3593,12 @@ function montarHtmlTabelaGenerica({ titulo, cabecalho, linhas, subtitulo, imprim
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
 <title>${escapeHtml(titulo)}</title>
 <style>
-  body { font-family: Arial, sans-serif; margin: 0; padding: 14px; color: #111; font-size: 12px; }
-  h2 { font-size: 15px; margin: 0 0 2px; }
-  .impresso-por { font-size: 11px; color: #444; margin: 0 0 10px; }
+  body { font-family: Arial, sans-serif; margin: 0; padding: 14px; color: #111;
+         font-size: ${grande ? '20px' : '12px'}; font-weight: ${grande ? '700' : '400'}; }
+  h2 { font-size: ${grande ? '26px' : '15px'}; margin: 0 0 2px; }
+  .impresso-por { font-size: ${grande ? '14px' : '11px'}; color: #444; margin: 0 0 10px; font-weight: ${grande ? '700' : '400'}; }
   table { border-collapse: collapse; width: 100%; }
-  th, td { border: 1px solid #ccc; padding: 3px 7px; text-align: left; white-space: nowrap; }
+  th, td { border: ${grande ? '2px' : '1px'} solid #ccc; padding: ${grande ? '10px 14px' : '3px 7px'}; text-align: left; white-space: nowrap; }
   th { background: #eef2f6; font-weight: 700; }
   tr:nth-child(even) td { background: #f7f9fb; }
   @media print { @page { size: A4 landscape; margin: 10mm; } thead { display: table-header-group; } }
