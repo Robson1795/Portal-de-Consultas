@@ -402,14 +402,18 @@ function irParaCanceladoAlm() {
   if (typeof trocarAbaExpAcessorios === 'function') trocarAbaExpAcessorios('canceladoalm');
 }
 
-function notificarPedidoCanceladoAlm({ pedido, itens, canceladoPor }) {
+function notificarPedidoCanceladoAlm({ pedido, itens, canceladoPor, observacao }) {
   if (!pedido) return;
   mostrarNotificacao({
     icone: '↩️',
     titulo: 'Pedido cancelado — devolver material',
     texto: `<b>${escapeHtml(pedido)}</b> foi cancelado -- volte o material físico pro endereço do almoxarifado.`
       + (itens ? `<br><span class="notif-detalhe">${itens} item(ns)</span>` : '')
-      + (canceladoPor ? `<br><span class="notif-detalhe">Cancelado por ${escapeHtml(canceladoPor)}</span>` : ''),
+      + (canceladoPor ? `<br><span class="notif-detalhe">Cancelado por ${escapeHtml(canceladoPor)}</span>` : '')
+      // O que a pessoa escreveu na observação de Parados é o recado mais
+      // direto que existe (ex.: "já estornado, localização ALM B-01-02") --
+      // vai sem cortar, pro auxiliar não ter que abrir a aba só pra ler isso.
+      + (observacao ? `<br><span class="notif-detalhe">${escapeHtml(observacao)}</span>` : ''),
     acaoRotulo: 'Abrir',
     aoClicarAcao: irParaCanceladoAlm,
     // Chave por pedido + instante: o mesmo pedido pode ser cancelado nesta

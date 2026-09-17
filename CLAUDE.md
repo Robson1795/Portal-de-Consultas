@@ -7161,3 +7161,40 @@ ordem. A aba nova mostrou o item pela foto (não por consulta nova, já que a
 linha original não existe mais), e "✓ Material devolvido" zerou o pendente e
 o contador. O card de notificação saiu com título, itens e quem cancelou, e
 o som com a variante nova tocou sem erro. Sem erro no console.
+
+## 58. Botão "Enviar notificação" em Parados, sem precisar excluir (17/09/2026)
+
+Continuação direta da 57. O Robson mostrou um pedido em Parados onde ele já
+tinha escrito, na própria observação, tudo que quem cuida do EXP precisa
+saber: *"PEDIDO CANCELADO, VOLTAR PARA O ALMOXARIFADO JA ESTORNADO
+LOCALIZAÇAO ALM B-01-02"*. Pediu: *"coloque um botao, enviar notificação"* —
+e depois, confirmando que o texto deveria ir inteiro: *"deixe liberado para
+ir o que eu escrever na observação"*.
+
+Até aqui, a única forma de disparar o aviso era o 🗑, que TAMBÉM exclui o
+pedido de Parados — os dois efeitos vinham juntos, sem separar "avise a
+equipe" de "sumir com o registro". Agora são dois botões:
+
+- **📣 Enviar notificação** — grava a tarefa em `exp_pedido_cancelado_alm` e
+  dispara o aviso ao vivo, exatamente como o 🗑 fazia, mas **não exclui nada**
+  — o pedido continua em Parados. Dá feedback inline (vira "✓ Notificado" por
+  alguns segundos) em vez de precisar abrir a aba nova pra confirmar que
+  funcionou.
+- **🗑** continua excluindo, e continua avisando também (nada mudou nesse
+  fluxo) — os dois caminhos levam à mesma função `avisarDevolucaoAlm()`,
+  extraída pra não duplicar a lógica de foto+upsert+broadcast.
+
+**Nova coluna `observacao`** em `exp_pedido_cancelado_alm`
+(`sql/fase62-exp-pedido-cancelado-alm-observacao.sql`) — separada de
+`itens_resumo` porque a nota é do PEDIDO (`paradosObsMap`), não do item. Vai
+**sem filtro nem validação de formato**, por pedido explícito do Robson: é o
+recado mais direto que existe, e a tela reescrever isso só atrapalharia.
+Aparece na aba "↩️ Voltar ao Almox." e também no próprio card de notificação
+ao vivo, pra quem recebe o aviso não precisar abrir a aba só pra ler o que
+foi escrito.
+
+Testado localmente: clicar "📣 Enviar notificação" gravou a foto dos itens +
+a observação exata (sem cortar nem alterar), disparou o broadcast com o
+mesmo texto no payload, e o pedido continuou em Parados (🗑 ainda lá) — o
+botão virou "✓ Notificado" e desabilitou. A observação apareceu certinha na
+aba nova e no card de notificação. Sem erro no console.

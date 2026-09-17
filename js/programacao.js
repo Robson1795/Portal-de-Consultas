@@ -4383,6 +4383,9 @@ function renderParadosExp() {
         <span class="loc-chip">${chave === '(sem pedido)' ? 'Sem nº de pedido' : 'Pedido ' + escapeHtml(chave)}</span>
         <span style="font-weight:700; color:var(--erro-texto);">⏰ ${diasMax} dia(s) parado</span>
         <span style="font-size:12px; color:var(--muted); margin-left:auto;">${itens.length} item(ns)</span>
+        ${chave !== '(sem pedido)' ? `
+        <button class="btn parado-notificar" data-pedido="${escapeHtml(chave)}" data-ids="${escapeHtml(itens.map(l => l.id).join(','))}"
+                title="Avisa quem cuida do EXP pra devolver o material -- não exclui daqui, o pedido continua em Parados">📣 Enviar notificação</button>` : ''}
         <button class="acao-btn parado-excluir" data-pedido="${escapeHtml(chave)}" data-ids="${escapeHtml(itens.map(l => l.id).join(','))}"
                 title="Pedido cancelado, material voltou pro almoxarifado -- exclui daqui">🗑</button>
       </div>
@@ -4416,6 +4419,45 @@ function renderParadosExp() {
   }).join('');
 }
 
+// FOTO dos itens (código, descrição, quantidade, localização) pra gravar em
+// exp_pedido_cancelado_alm -- reaproveitada pelo 🗑 (que exclui em seguida,
+// então tem que tirar a foto ANTES) e pelo "📣 Enviar notificação" (que não
+// exclui nada, mas quer a mesma foto de agora).
+function fotoItensParaDevolucao(ids) {
+  const idsSet = new Set(ids);
+  return progExpControle.filter(l => idsSet.has(String(l.id))).map(l => ({
+    codigo_item: l.codigo_item,
+    descricao: (expCtrlDescMap.get(normalizaCodigoItem(l.codigo_item)) || {}).descricao || null,
+    quantidade: l.quantidade,
+    localizacao: l.localizacao || null
+  }));
+}
+
+// Grava/reabre a tarefa de devolução e avisa quem cuida do EXP -- comum ao
+// 🗑 e ao "📣 Enviar notificação". `observacao` vai como o Robson escreveu na
+// aba Parados, sem filtro nenhum ("deixe liberado para ir o que eu escrever
+// na observação", 17/09/2026): é o recado mais direto de todos ("já
+// estornado, localização ALM B-01-02"), não faz sentido a tela reescrever.
+async function avisarDevolucaoAlm(pedido, ids) {
+  const itensResumo = fotoItensParaDevolucao(ids);
+  const observacao = (paradosObsMap.get(pedido) || {}).observacao || null;
+
+  const { error } = await sb.from('exp_pedido_cancelado_alm').upsert({
+    unidade: unidadeAtual, numero_pedido: pedido, itens_resumo: itensResumo, observacao,
+    status: 'pendente', cancelado_por: nomeUsuarioAtual, cancelado_em: new Date().toISOString(),
+    devolvido_por: null, devolvido_em: null
+  }, { onConflict: 'unidade,numero_pedido' });
+
+  if (error) {
+    alert(/exp_pedido_cancelado_alm/.test(error.message)
+      ? 'Não foi possível avisar: falta rodar sql/fase61-exp-pedido-cancelado-alm.sql e sql/fase62-exp-pedido-cancelado-alm-observacao.sql no Supabase.'
+      : 'Não foi possível avisar sobre a devolução: ' + error.message);
+    return false;
+  }
+  dispararAlertaCanceladoAlm({ pedido, itens: itensResumo.length, canceladoPor: nomeUsuarioAtual, observacao });
+  return true;
+}
+
 // 🗑 -- "alguns pedisos sao cancelados e eu volto para o almoxarifado":
 // exclui de vez os itens deste pedido em exp_controle_itens (o material já
 // não está mais na expedição de verdade) e a observação que tinha sido
@@ -4429,6 +4471,22 @@ function renderParadosExp() {
 // (exp_pedido_cancelado_alm, fase61) ANTES de excluir, porque depois de
 // excluído não sobra de onde tirar item/localização pra essa foto.
 document.getElementById('paradosBody').addEventListener('click', async (e) => {
+  const btnNotificar = e.target.closest('.parado-notificar');
+  if (btnNotificar) {
+    const pedido = btnNotificar.dataset.pedido;
+    const ids = btnNotificar.dataset.ids.split(',').filter(Boolean);
+    const rotuloOriginal = btnNotificar.textContent;
+    btnNotificar.disabled = true;
+    const ok = await avisarDevolucaoAlm(pedido, ids);
+    if (ok) {
+      btnNotificar.textContent = '✓ Notificado';
+      setTimeout(() => { btnNotificar.textContent = rotuloOriginal; btnNotificar.disabled = false; }, 2500);
+    } else {
+      btnNotificar.disabled = false;
+    }
+    return;
+  }
+
   const btn = e.target.closest('.parado-excluir');
   if (!btn) return;
   const pedido = btn.dataset.pedido;
@@ -4443,29 +4501,8 @@ document.getElementById('paradosBody').addEventListener('click', async (e) => {
   // volta pra onde. Só grava a tarefa quando dá pra dizer QUAL pedido (sem nº
   // de pedido não tem como avisar quem cuida do EXP do que precisa voltar).
   if (pedido !== '(sem pedido)') {
-    const idsSet = new Set(ids);
-    const itensParaFoto = progExpControle.filter(l => idsSet.has(String(l.id)));
-    const itensResumo = itensParaFoto.map(l => ({
-      codigo_item: l.codigo_item,
-      descricao: (expCtrlDescMap.get(normalizaCodigoItem(l.codigo_item)) || {}).descricao || null,
-      quantidade: l.quantidade,
-      localizacao: l.localizacao || null
-    }));
-
-    const { error: erroAviso } = await sb.from('exp_pedido_cancelado_alm').upsert({
-      unidade: unidadeAtual, numero_pedido: pedido, itens_resumo: itensResumo,
-      status: 'pendente', cancelado_por: nomeUsuarioAtual, cancelado_em: new Date().toISOString(),
-      devolvido_por: null, devolvido_em: null
-    }, { onConflict: 'unidade,numero_pedido' });
-
-    if (erroAviso) {
-      alert(/exp_pedido_cancelado_alm/.test(erroAviso.message)
-        ? 'Não foi possível avisar: falta rodar sql/fase61-exp-pedido-cancelado-alm.sql no Supabase.'
-        : 'Não foi possível avisar sobre a devolução: ' + erroAviso.message);
-      btn.disabled = false;
-      return;
-    }
-    dispararAlertaCanceladoAlm({ pedido, itens: itensResumo.length, canceladoPor: nomeUsuarioAtual });
+    const ok = await avisarDevolucaoAlm(pedido, ids);
+    if (!ok) { btn.disabled = false; return; }
   }
 
   const { error } = await sb.from('exp_controle_itens').delete().in('id', ids);
@@ -4997,6 +5034,7 @@ function renderCanceladosAlm() {
         </span>
         <button class="btn btn-primary canceladoalm-devolvido" data-pedido="${escapeHtml(r.numero_pedido)}" style="margin-left:auto;">✓ Material devolvido</button>
       </div>
+      ${r.observacao ? `<div style="padding:8px 16px; background:var(--row-alt); border-bottom:1px solid var(--border); font-size:12.5px;">${escapeHtml(r.observacao)}</div>` : ''}
       <div class="scroll-area">
         <table>
           <thead><tr><th>Item</th><th>Descrição</th><th>Qtd</th><th>Localização</th></tr></thead>
@@ -5039,11 +5077,12 @@ document.getElementById('canceladoAlmBody').addEventListener('click', async (e) 
 // iniciarAvisoCanceladoAlm) -- mesmo desenho de dispararAlertaPreparo(): canal
 // POR UNIDADE, broadcast, não trava o cancelamento se falhar (a tarefa já
 // está gravada em exp_pedido_cancelado_alm; só o popup ao vivo se perderia).
-function dispararAlertaCanceladoAlm({ pedido, itens, canceladoPor }) {
+function dispararAlertaCanceladoAlm({ pedido, itens, canceladoPor, observacao }) {
   try {
     sb.channel(`alertas-cancelado-alm-${unidadeAtual}`).send({
       type: 'broadcast', event: 'pedido_cancelado_alm',
-      payload: { pedido, itens: itens || 0, unidade: unidadeAtual, canceladoPor: canceladoPor || null, quando: new Date().toISOString() }
+      payload: { pedido, itens: itens || 0, unidade: unidadeAtual, canceladoPor: canceladoPor || null,
+                 observacao: observacao || null, quando: new Date().toISOString() }
     });
   } catch (e) {
     console.warn('Não foi possível avisar sobre a devolução ao almoxarifado:', e.message);
