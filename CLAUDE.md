@@ -7019,3 +7019,30 @@ Separador), o painel de Pendências não existe mais no HTML, o item que estava
 com `em_pendencia: true` voltou pra lista e pro contador do topo, o botão
 "Marcar sem estoque" sumiu da coluna Ação, e a troca entre as três abas
 continua funcionando. Sem erro no console.
+
+## 54. Porteiro do importador: planilha na aba errada não grava (17/09/2026)
+
+*"JOGUEI A PLANILHA NAO ATUALIZOU O PAINEL"*. Reproduzido o fluxo inteiro em
+teste — importar → `carregarProgramacao()` → `renderPainelSeparacao()` — e ele
+funciona, inclusive com a fase 60 ainda não rodada. Então a suspeita não é o
+código de atualização, é **onde a planilha entrou**.
+
+As duas planilhas usam o MESMO modal, em sub-abas, e ele lembra a última
+escolhida. Colar a de separação com "Grade de carregamento" marcada **não dá
+erro nenhum**: a grade lê a 3ª coluna como número do pedido, e a coluna SEQ da
+planilha do PCP cai bem ali. O portal grava pedidos chamados "10" e "20" na
+grade, não encosta em `pedido_itens`, e a Separação e o Painel ficam
+exatamente como estavam. Da cadeira de quem colou, "não atualizou" — na
+verdade foi pro lugar errado, em silêncio, e ainda sujou a grade.
+
+`planilhaNaoCombinaComAba()` barra antes de gravar: a grade sempre traz
+"PEDIDOS PROGRAMADOS dd/mm" no topo, e a de separação traz número de pedido na
+PRIMEIRA coluna, linha após linha. Conteúdo contradizendo a aba escolhida vira
+recado dizendo qual é qual e o que fazer — nada é gravado.
+
+O reconhecimento é por evidência, não por contagem de colunas: as duas têm
+largura parecida, e coluna vazia no fim do copiar/colar tornaria a contagem
+frágil.
+
+Testado localmente com as duas planilhas reais, nas quatro combinações: cada
+uma passa na sua aba e é barrada com a mensagem certa na aba trocada.

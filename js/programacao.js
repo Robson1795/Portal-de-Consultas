@@ -1205,6 +1205,33 @@ function dataDoTituloPlanilhaB(texto, dataRef) {
   return `${ano}-${mes}-${dia}`;
 }
 
+// As duas planilhas entram pelo MESMO modal, em sub-abas, e ele lembra a
+// última escolhida. Colar a de separação com "Grade de carregamento" marcada
+// não dá erro nenhum: a grade lê a 3ª coluna como número do pedido, e a coluna
+// SEQ da planilha do PCP cai bem ali -- o portal grava pedidos chamados "10" e
+// "20" na grade e não encosta em `pedido_itens`, então a Separação e o Painel
+// ficam exatamente como estavam. Parece que "não atualizou", mas na verdade
+// foi pro lugar errado, em silêncio.
+//
+// Daí este porteiro: a grade sempre traz "PEDIDOS PROGRAMADOS dd/mm" no topo,
+// e a de separação traz número de pedido na PRIMEIRA coluna, linha após linha.
+// Quando o conteúdo contradiz a aba escolhida, avisa e não grava nada.
+function planilhaNaoCombinaComAba(aba, texto) {
+  const temTituloGrade = /pedidos\s+programados/i.test(texto);
+  const pedidoNaPrimeiraColuna = lerColadoProg(texto)
+    .filter(col => /^[A-Z]{0,2}\d{5,}$/i.test(String(col[0] || '').trim())).length;
+
+  if (aba === 'A' && temTituloGrade) {
+    return 'Isto parece a GRADE DE CARREGAMENTO ("PEDIDOS PROGRAMADOS" no topo), mas a aba '
+         + 'escolhida é "Itens para separar". Troque a aba aí em cima e confirme de novo.';
+  }
+  if (aba === 'B' && !temTituloGrade && pedidoNaPrimeiraColuna >= 3) {
+    return 'Isto parece a planilha de ITENS PARA SEPARAR (número de pedido na primeira coluna), '
+         + 'mas a aba escolhida é "Grade de carregamento". Troque a aba aí em cima e confirme de novo.';
+  }
+  return null;
+}
+
 document.getElementById('progImportConfirmBtn').addEventListener('click', async () => {
   const texto = document.getElementById('progImportTexto').value;
   const dataRef = document.getElementById('progImportData').value;
@@ -1215,6 +1242,14 @@ document.getElementById('progImportConfirmBtn').addEventListener('click', async 
     msg.className = 'status-msg status-err';
     return;
   }
+
+  const trocou = planilhaNaoCombinaComAba(progImportAba, texto);
+  if (trocou) {
+    msg.textContent = trocou;
+    msg.className = 'status-msg status-err';
+    return;
+  }
+
   // A grade traz o dia no proprio titulo; quando traz, ele manda -- inclusive
   // por cima da data digitada, que e justamente a que costuma vir errada
   // (colar a grade de amanha com a data de hoje ainda no campo).
