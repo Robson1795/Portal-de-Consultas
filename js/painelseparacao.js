@@ -228,21 +228,30 @@ function renderPainelSeparacao() {
 
   const primeiroPendenteId = pendentes.length ? pendentes[0].pedido.id : null;
 
-  colFila.innerHTML = fila.map(f => {
-    const urg = painelUrgencia(f.pedido);
-    const pronto = f.completos >= f.total;
-    const agora = f.pedido.id === primeiroPendenteId;
-    return `
-      <button class="painel-card-pedido${f.pedido.id === painelPedidoId ? ' painel-card-ativo' : ''}${pronto ? ' painel-card-pronto' : ''}"
-              data-pedido-id="${escapeHtml(f.pedido.id)}">
-        ${agora ? '<span class="painel-separar-agora">SEPARAR AGORA</span>' : ''}
-        <div class="painel-card-numero">${escapeHtml(f.pedido.numero_pedido)}</div>
-        ${f.osDoPedido ? `<span class="painel-doc painel-doc-os">OS ${escapeHtml(f.osDoPedido)}</span>` : ''}
-        <div class="painel-card-cliente">${escapeHtml(f.pedido.cliente || '—')}</div>
-        <div class="painel-selo ${urg.classe}">${escapeHtml(urg.rotulo)}</div>
-        <div class="painel-card-progresso">${f.completos} de ${f.total} itens</div>
-      </button>`;
-  }).join('');
+  // A coluna e rotulada "Pedidos pendentes" -- pedido 100% separado nao
+  // pertence mais aqui. Fica só o aberto agora na direita, mesmo se ele acabou
+  // de completar: senao a tela trocaria de pedido sozinha bem na hora que o
+  // auxiliar ia clicar "Concluir Pedido". Some da lista assim que ele conclui
+  // (o clique zera `painelPedidoId`) ou escolhe outro card.
+  const naLista = fila.filter(f => f.completos < f.total || f.pedido.id === painelPedidoId);
+
+  colFila.innerHTML = naLista.length
+    ? naLista.map(f => {
+        const urg = painelUrgencia(f.pedido);
+        const pronto = f.completos >= f.total;
+        const agora = f.pedido.id === primeiroPendenteId;
+        return `
+          <button class="painel-card-pedido${f.pedido.id === painelPedidoId ? ' painel-card-ativo' : ''}${pronto ? ' painel-card-pronto' : ''}"
+                  data-pedido-id="${escapeHtml(f.pedido.id)}">
+            ${agora ? '<span class="painel-separar-agora">SEPARAR AGORA</span>' : ''}
+            <div class="painel-card-numero">${escapeHtml(f.pedido.numero_pedido)}</div>
+            ${f.osDoPedido ? `<span class="painel-doc painel-doc-os">OS ${escapeHtml(f.osDoPedido)}</span>` : ''}
+            <div class="painel-card-cliente">${escapeHtml(f.pedido.cliente || '—')}</div>
+            <div class="painel-selo ${urg.classe}">${escapeHtml(urg.rotulo)}</div>
+            <div class="painel-card-progresso">${f.completos} de ${f.total} itens</div>
+          </button>`;
+      }).join('')
+    : '<div class="empty-msg">Tudo separado por aqui.</div>';
 
   renderPainelAtual(fila.find(f => f.pedido.id === painelPedidoId));
 }

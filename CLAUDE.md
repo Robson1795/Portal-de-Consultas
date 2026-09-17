@@ -7077,3 +7077,33 @@ Separador), `#progSeparacao` não existe mais no DOM, Carregamento abre visível
 por padrão, e trocar pro Painel mostra a fila e os itens normalmente — mesmos
 dados de `carregarProgramacao()`, sem nenhuma chamada a função removida. Sem
 erro no console ligado à remoção.
+
+## 56. Corta a comunicação Análise de Compras → Separação (17/09/2026)
+
+*"agora os pedidos só puxe do que eu alimentar a planilha, nao precisa masi
+puxar das analise de compra"*. Removidas `propagarObservacaoParaSeparacao()` e
+`propagarStatusParaSeparacao()` (js/analise.js) — as duas funções construídas
+nas seções 12/13 desta mesma leva de trabalho, que liam `analise_demanda` e
+escreviam sozinhas em `pedido_itens` (observação e `status_separacao`,
+respectivamente) toda vez que a Análise de Compras carregava ou uma
+observação era salva.
+
+Eram client-side puro (sem função no banco), então não sobrou nada pra
+reverter em SQL — só as três chamadas (fim de `carregarAnalise()` e depois de
+salvar observação) e as duas funções.
+
+De quebra, mais um problema achado no mesmo print: a coluna "PEDIDOS
+PENDENTES" do Painel mostrava pedido **já 100% separado** (dimmed, mas
+presente) — "KV827905 · 5 de 5 itens" no topo de uma lista que deveria só ter
+o que falta. É provavelmente o que fazia o contador de 162 parecer inflado.
+Corrigido: a lista da esquerda passa a listar só quem tem `completos < total`,
+**exceto** o pedido aberto agora à direita — mesmo que ele acabe de completar
+o último item, continua visível até o auxiliar clicar "Concluir Pedido" (senão
+a tela trocaria de pedido sozinha bem na hora que ele ia confirmar). Ele some
+da lista assim que a conclusão zera `painelPedidoId`.
+
+Testado localmente: pedido histórico 100% feito nunca apareceu na lista;
+pedido selecionado que completou o último item na hora continuou visível e
+selecionado; e sumiu da lista só depois de simular o Concluir. Funções de
+propagação confirmadas ausentes do escopo global, página carrega sem erro.
+Sem erro no console.
