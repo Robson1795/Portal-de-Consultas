@@ -135,6 +135,25 @@ function atualizarBotaoEtiquetasDevolucao() {
   btn.disabled = devolucaoSelecionados.size === 0;
 }
 
+// O botão conta só quem TEM o cálculo (qtd_pecas + metragem_peca +
+// categoria reconhecida) -- marcar 5 itens e só 2 serem painel/telha não
+// pode fazer a folha sair "3 em branco" ou dar erro; o número já avisa
+// quantas folhas realmente vão sair.
+let devolucaoConfirmarConfMetragem = false;
+function itensComMetragemSelecionados() {
+  return devolucaoItens
+    .filter(i => devolucaoSelecionados.has(String(i.id)))
+    .filter(i => { const c = metragemDevolucao(i); return c && c.cat; });
+}
+function atualizarBotaoConfMetragemDevolucao() {
+  const btn = document.getElementById('devolucaoConfMetragemBtn');
+  if (!btn) return;
+  devolucaoConfirmarConfMetragem = false;
+  const n = itensComMetragemSelecionados().length;
+  btn.textContent = `📐 Conferência Metragem (${n})`;
+  btn.disabled = n === 0;
+}
+
 function renderDevolucao() {
   const linhas = linhasFiltradasDevolucao();
   const corpo = document.getElementById('devolucaoBody');
@@ -142,6 +161,7 @@ function renderDevolucao() {
   document.getElementById('devolucaoTabela').style.display = linhas.length ? 'table' : 'none';
   vazio.style.display = linhas.length ? 'none' : 'block';
   atualizarBotaoEtiquetasDevolucao();
+  atualizarBotaoConfMetragemDevolucao();
 
   if (!linhas.length) {
     vazio.textContent = devolucaoItens.length
@@ -212,6 +232,7 @@ document.getElementById('devolucaoBody').addEventListener('change', (e) => {
   if (check.checked) devolucaoSelecionados.add(check.dataset.id);
   else devolucaoSelecionados.delete(check.dataset.id);
   atualizarBotaoEtiquetasDevolucao();
+  atualizarBotaoConfMetragemDevolucao();
   const todos = document.getElementById('devolucaoTodos');
   const filtradas = linhasFiltradasDevolucao();
   todos.checked = filtradas.length > 0 && filtradas.every(i => devolucaoSelecionados.has(String(i.id)));
@@ -728,6 +749,83 @@ async function imprimirEtiquetasDevolucao(linhas) {
   aba.document.close();
 }
 
+// ===========================================================================
+// Conferência por Metragem -- folha própria, pro momento em que a devolução
+// CHEGA. Robson, 17/09/2026, com um mockup: "CHEGANDO DEVOLUÇÃO QUERO
+// COLOCAR ESSES DADOS, A IDEIA É QUANDO CHEGAR EU CONFERIR A QUANTIDADE QUE
+// VEIO DE PEÇAS A METRAGEM DE CADA PEÇA, USO ESSA CONTAGEM POR METRAGEM,
+// DAI MONTE UMA FOLHA BEM PROFISSIONAL COM AS DESCRIÇOES QUE PRECISO, COM
+// DATA, HORARIO" -- depois: "COLOQUE O BOTAO DE IMPRIMIR" e "pode colocar o
+// logo da kingspan tambem".
+//
+// Momento diferente da etiqueta geral (logo acima): não é cadastro nem
+// endereçamento, é a CONFERÊNCIA FÍSICA de peças × metragem no instante em
+// que o material chega -- por isso o layout é mais limpo, só o que importa
+// conferir (sem NF/protocolo/localização). Só entra item com o cálculo
+// completo (categoria reconhecida pela descrição); os outros não têm
+// "conferência por metragem" nenhuma pra fazer.
+//
+// O mockup escreveu "4.630 MM" -- mas a conta só bate com 55.560 m² se
+// aqueles 4630 forem METROS (12 × 4630 × 1 = 55.560), não milímetros.
+// Mostrado como "M" aqui de propósito: rotular "MM" com o número em metros
+// enganaria quem confere no físico.
+function montarHtmlConferenciaMetragemDevolucao(linhas) {
+  const impressoEm = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+  // Absoluta, não relativa: a folha abre numa aba em branco (about:blank)
+  // até o document.write() de baixo -- endereço relativo não tem certeza
+  // nenhuma de resolver pro mesmo lugar que o resto do portal.
+  const logoUrl = `${window.location.origin}/logo.png`;
+
+  const folhas = linhas.map(item => {
+    const calculo = metragemDevolucao(item);
+    if (!calculo || !calculo.cat) return '';
+    return `
+    <section class="folha-conf">
+      <img class="conf-logo" src="${escapeHtml(logoUrl)}" alt="Kingspan Isoeste">
+      <div class="conf-item">ITEM ${escapeHtml(item.cod_produto || '—')}</div>
+      <div class="conf-desc">${escapeHtml(item.descricao_produto || '')}</div>
+      <div class="conf-qtd">QTD: ${escapeHtml(numeroBR(item.qtd_pecas))} PÇS DE ${escapeHtml(numeroBR(item.metragem_peca))} M</div>
+      <div class="conf-total">TOTAL: ${formatarM2(calculo.m2)} M²</div>
+      <div class="conf-rodape">${escapeHtml(impressoEm)}</div>
+    </section>`;
+  }).filter(Boolean).join('');
+
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+<title>Conferência por Metragem — ${new Date().toLocaleDateString('pt-BR')}</title>
+<style>
+  @page { size: A4 landscape; margin: 12mm; }
+  :root { color-scheme: light; }
+  body { font-family: Arial, sans-serif; margin: 0; background: #fff; color: #000; }
+  .folha-conf {
+    box-sizing: border-box; padding: 10mm; text-align: center;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 100vh;
+    page-break-after: always; break-after: page;
+  }
+  .folha-conf:last-child { page-break-after: auto; break-after: auto; }
+  .conf-logo { height: 16mm; margin-bottom: 8mm; }
+  .conf-item { font-size: 20mm; font-weight: 900; line-height: 1.1; overflow-wrap: anywhere; margin-bottom: 6mm; }
+  .conf-desc { font-size: 11mm; font-weight: 700; line-height: 1.2; margin-bottom: 8mm; max-width: 220mm; }
+  .conf-qtd { font-size: 13mm; font-weight: 700; margin-bottom: 4mm; }
+  .conf-total {
+    font-size: 16mm; font-weight: 900; padding: 4mm 10mm;
+    border-top: 1mm solid #000; border-bottom: 1mm solid #000;
+  }
+  .conf-rodape { font-size: 5mm; color: #333; margin-top: 8mm; }
+</style></head><body>
+${folhas}
+${'<script>window.onload = () => window.print();<' + '/script>'}
+</body></html>`;
+}
+
+async function imprimirConfMetragemDevolucao(linhas) {
+  if (!linhas.length) return;
+  const aba = window.open('', '_blank');
+  if (!aba) { alert('O navegador bloqueou a nova aba. Libere pop-ups pra este site e tente de novo.'); return; }
+  aba.document.write(montarHtmlConferenciaMetragemDevolucao(linhas));
+  aba.document.close();
+}
+
 document.getElementById('devolucaoEtiquetasBtn').addEventListener('click', () => {
   const linhas = devolucaoItens.filter(i => devolucaoSelecionados.has(String(i.id)));
   if (!linhas.length) return;
@@ -740,4 +838,18 @@ document.getElementById('devolucaoEtiquetasBtn').addEventListener('click', () =>
   }
   devolucaoConfirmarImpressao = false;
   imprimirEtiquetasDevolucao(linhas);
+});
+
+document.getElementById('devolucaoConfMetragemBtn').addEventListener('click', () => {
+  const linhas = itensComMetragemSelecionados();
+  if (!linhas.length) return;
+
+  if (linhas.length > LIMITE_FOLHAS_IMPRESSAO && !devolucaoConfirmarConfMetragem) {
+    devolucaoConfirmarConfMetragem = true;
+    const botao = document.getElementById('devolucaoConfMetragemBtn');
+    botao.textContent = `Imprimir ${linhas.length} folhas mesmo assim?`;
+    return;
+  }
+  devolucaoConfirmarConfMetragem = false;
+  imprimirConfMetragemDevolucao(linhas);
 });

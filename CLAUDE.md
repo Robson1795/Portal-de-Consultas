@@ -7425,3 +7425,45 @@ Robson — e um parafuso sem essas colunas): a tabela mostrou "55.560,00" e
 "—" respectivamente; editar Qtd Peças do parafuso gravou só aquele campo;
 e a etiqueta saiu "55.560,00 m²" pra telha e "50 Pç" (fallback) pro
 parafuso. Sem erro no console.
+
+## 67. Folha de Conferência por Metragem, pro momento em que a devolução chega (17/09/2026)
+
+O Robson, com um mockup desenhado à mão: *"CHEGANDO DEVOLUÇÃO QUERO COLOCAR
+ESSES DADOS, A IDEIA É QUANDO CHEGAR EU CONFERIR A QUANTIDADE QUE VEIO DE
+PEÇAS A METRAGEM DE CADA PEÇA, USO ESSA CONTAGEM POR METRAGEM, DAI MONTE
+UMA FOLHA BEM PROFISSIONAL COM AS DESCRIÇOES QUE PRECISO, COM DATA,
+HORARIO"* — depois: *"COLOQUE O BOTAO DE IMPRIMIR"* e *"pode colocar o logo
+da kingspan tambem"*.
+
+Momento diferente da etiqueta geral (seção 64/66), que serve pro
+cadastro/endereçamento: aqui é a **conferência física** de peças × metragem
+no instante em que o material chega — por isso o layout é mais limpo, sem
+NF/protocolo/localização, só o que precisa ser conferido: código (título
+grande), descrição, "QTD: N PÇS DE X M" e "TOTAL: Y M²", com o logo
+Kingspan e data/hora do que foi impresso.
+
+Nova função `montarHtmlConferenciaMetragemDevolucao()`, um botão próprio
+("📐 Conferência Metragem") ao lado do de Etiquetas, reaproveitando a mesma
+seleção por checkbox — mas o contador só conta quem **tem o cálculo
+completo** (categoria reconhecida pela descrição): item sem
+`qtd_pecas`/`metragem_peca` não tem conferência por metragem nenhuma pra
+fazer, e marcar 5 itens sendo só 2 painel/telha não pode virar "3 folhas em
+branco" nem erro — o número no botão já avisa quantas folhas realmente
+saem.
+
+**Correção silenciosa no mockup**: ele escreveu "4.630 MM", mas a conta só
+bate com 55.560 m² se aqueles 4630 forem METROS (12 × 4630 × 1 = 55.560),
+não milímetros — rotular "MM" com o número em metros enganaria quem confere
+no físico. Mostrado como "M".
+
+Logo via URL absoluta (`location.origin + '/logo.png'`), não relativa: a
+folha abre numa aba em branco (about:blank) até o `document.write()`
+acontecer, e um caminho relativo não tem garantia nenhuma de resolver pro
+mesmo lugar que o resto do portal.
+
+Testado localmente com 2 itens marcados (1 telha completa, 1 parafuso sem
+metragem): o botão contou certo ("Conferência Metragem (1)"), só a telha
+virou folha, e saiu "ITEM 354452" / descrição / "QTD: 12 PÇS DE 4.630 M" /
+"TOTAL: 55.560,00 M²" / data e hora — igual ao mockup, com a unidade
+corrigida. Logo resolvendo pra URL absoluta e servindo 200. Sem erro no
+console.
