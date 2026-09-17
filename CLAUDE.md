@@ -7467,3 +7467,43 @@ virou folha, e saiu "ITEM 354452" / descrição / "QTD: 12 PÇS DE 4.630 M" /
 "TOTAL: 55.560,00 M²" / data e hora — igual ao mockup, com a unidade
 corrigida. Logo resolvendo pra URL absoluta e servindo 200. Sem erro no
 console.
+
+## 68. Registrar manual usa a metragem pra preencher Qtd Total sozinho (17/09/2026)
+
+O Robson: *"no registar manual quero esses dados: ITEM - DESCRIÇÃO- QTD
+TOTAL QUE PREENCHE DEPOIS QUE EU USE A FERRAMENTA DE CONTAGEM POR METRO"*.
+
+Dois campos novos no formulário (Qtd Peças, Metragem/Peça), gravando
+direto em `qtd_pecas`/`metragem_peca` (fase63) -- mesmos dois campos que já
+existem na Conferência e alimentam a Conferência por Metragem (seção 67).
+E o campo **Quantidade** passa a se preencher sozinho: toda vez que
+Descrição, Qtd Peças ou Metragem/Peça mudam, `atualizarQtdManualDevolucao
+PelaMetragem()` recalcula (mesma `calcularLinhaMetragem()` de sempre) e
+escreve o m² ali — só quando a categoria é reconhecida E os dois números
+são maiores que zero, senão o campo ficaria piscando pra vazio atrás de
+quem ainda nem terminou de digitar. Continua editável depois: é
+preenchimento de conveniência ("dá pra sobrescrever", já dito no `title`
+do campo), não campo travado — trocar a descrição pra algo sem categoria
+reconhecida não apaga o que já estava lá.
+
+**No mesmo instante, dois ajustes que ele pediu numa tela paralela (a
+Contagem por Metragem avulsa, sidebar):**
+
+- **Coluna Código** — *"AQUI QUERO COLOCAR O CODIGO DO ITEM TAMBEM"*. Campo
+  livre igual aos outros (a ferramenta continua calculadora avulsa, não
+  lê nem grava em tabela nenhuma) — só ajuda a reconhecer o item na hora
+  de imprimir. Entra também na impressão, como primeira coluna.
+- **Letra do PDF/impressão em 45px** — *"LEMBRANDO QUERO LETRA TAMANHO
+  45"*, reafirmando o pedido da seção 65 (letra grande pra colar em
+  fardo) com o tamanho exato. `montarHtmlTabelaGenerica({grande:true})`
+  ajustado de 20px pra 45px (corpo/células) e 26px pra 56px (título) —
+  só afeta quem passa `grande:true` (hoje, só a Metragem avulsa).
+
+Testado localmente: a coluna Código apareceu na tabela avulsa e na
+impressão, com o valor digitado preservado; `grande:true` confirmado em
+45px; e no Registrar Manual — preencher Peças sem Metragem ainda não
+calculava nada, completar os dois preencheu "55560,00" sozinho no campo
+Quantidade, sobrescrever manualmente pra "999" se manteve mesmo trocando
+a descrição pra um item sem categoria, e o registro gravou `qtd_pecas`,
+`metragem_peca` e `qtd_nf`/`qtd_fisico` = 55560 juntos, já conferido. Sem
+erro no console.

@@ -52,11 +52,17 @@ function calcularLinhaMetragem(linha) {
 }
 
 function linhaVaziaMetragem(linha) {
-  return !linha.descricao.trim() && !linha.qtd.trim() && !linha.metragem.trim();
+  return !linha.codigo.trim() && !linha.descricao.trim() && !linha.qtd.trim() && !linha.metragem.trim();
 }
 
 let metragemProximoId = 1;
-let metragemLinhas = [{ id: metragemProximoId++, descricao: '', qtd: '', metragem: '' }];
+// Robson, 17/09/2026, na tela avulsa: "AQUI QUERO COLOCAR O CODIGO DO ITEM
+// TAMBEM" -- campo livre, igual descrição/qtd/metragem: a ferramenta
+// continua calculadora avulsa (não lê nem grava em tabela nenhuma, ver
+// comentário no topo do arquivo), então não busca a descrição a partir do
+// código em catálogo nenhum -- é só mais um campo de texto que acompanha a
+// linha, útil pra reconhecer o item na hora de imprimir/conferir.
+let metragemLinhas = [{ id: metragemProximoId++, codigo: '', descricao: '', qtd: '', metragem: '' }];
 
 function formatarM2(v) {
   return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -83,6 +89,9 @@ function renderLinhasMetragem() {
   const corpo = document.getElementById('metragemBody');
   corpo.innerHTML = metragemLinhas.map(linha => `
     <tr data-linha="${linha.id}">
+      <td><input type="text" class="metragem-codigo" data-id="${linha.id}"
+                 value="${escapeHtml(linha.codigo)}" placeholder="Ex.: 148013"
+                 style="width:90px;"></td>
       <td><input type="text" class="metragem-descricao" data-id="${linha.id}"
                  value="${escapeHtml(linha.descricao)}" placeholder="Ex.: Painel Frigorífico 50mm"
                  style="width:220px;"></td>
@@ -127,7 +136,8 @@ document.getElementById('metragemBody').addEventListener('input', (e) => {
   const linha = metragemLinhas.find(l => l.id === id);
   if (!linha) return;
 
-  if (campo.classList.contains('metragem-descricao')) linha.descricao = campo.value;
+  if (campo.classList.contains('metragem-codigo')) linha.codigo = campo.value;
+  else if (campo.classList.contains('metragem-descricao')) linha.descricao = campo.value;
   else if (campo.classList.contains('metragem-qtd')) linha.qtd = campo.value;
   else if (campo.classList.contains('metragem-metragem')) linha.metragem = campo.value;
   else return;
@@ -142,13 +152,13 @@ document.getElementById('metragemBody').addEventListener('click', (e) => {
   const id = Number(btn.dataset.id);
   metragemLinhas = metragemLinhas.filter(l => l.id !== id);
   // Nunca fica sem nenhuma linha -- uma tabela vazia pareceria quebrada.
-  if (!metragemLinhas.length) metragemLinhas.push({ id: metragemProximoId++, descricao: '', qtd: '', metragem: '' });
+  if (!metragemLinhas.length) metragemLinhas.push({ id: metragemProximoId++, codigo: '', descricao: '', qtd: '', metragem: '' });
   renderLinhasMetragem();
   atualizarTotaisMetragem();
 });
 
 document.getElementById('metragemAdicionarLinhaBtn').addEventListener('click', () => {
-  metragemLinhas.push({ id: metragemProximoId++, descricao: '', qtd: '', metragem: '' });
+  metragemLinhas.push({ id: metragemProximoId++, codigo: '', descricao: '', qtd: '', metragem: '' });
   renderLinhasMetragem();
   document.querySelector(`#metragemBody tr[data-linha="${metragemLinhas[metragemLinhas.length - 1].id}"] .metragem-descricao`).focus();
 });
@@ -170,7 +180,7 @@ document.getElementById('metragemImprimirBtn').addEventListener('click', () => {
     const { cat, qtd, metragem, m2 } = calcularLinhaMetragem(l);
     if (m2 !== null) totalGeral += m2;
     return [
-      l.descricao, cat ? cat.rotulo : 'Não reconhecida', qtd, metragem,
+      l.codigo, l.descricao, cat ? cat.rotulo : 'Não reconhecida', qtd, metragem,
       cat ? cat.fator.toLocaleString('pt-BR') : '—',
       m2 !== null ? formatarM2(m2) : '—'
     ];
@@ -178,7 +188,7 @@ document.getElementById('metragemImprimirBtn').addEventListener('click', () => {
 
   const html = montarHtmlTabelaGenerica({
     titulo: `Contagem por Metragem — ${new Date().toLocaleDateString('pt-BR')}`,
-    cabecalho: ['Descrição', 'Categoria', 'Qtd Peças', 'Metragem (m)', 'Fator', 'm²'],
+    cabecalho: ['Código', 'Descrição', 'Categoria', 'Qtd Peças', 'Metragem (m)', 'Fator', 'm²'],
     linhas: linhasTabela,
     subtitulo: ` — Total: ${formatarM2(totalGeral)} m²`,
     imprimir: true,

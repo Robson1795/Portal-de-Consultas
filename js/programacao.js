@@ -3594,11 +3594,11 @@ function montarHtmlTabelaGenerica({ titulo, cabecalho, linhas, subtitulo, imprim
 <title>${escapeHtml(titulo)}</title>
 <style>
   body { font-family: Arial, sans-serif; margin: 0; padding: 14px; color: #111;
-         font-size: ${grande ? '20px' : '12px'}; font-weight: ${grande ? '700' : '400'}; }
-  h2 { font-size: ${grande ? '26px' : '15px'}; margin: 0 0 2px; }
-  .impresso-por { font-size: ${grande ? '14px' : '11px'}; color: #444; margin: 0 0 10px; font-weight: ${grande ? '700' : '400'}; }
+         font-size: ${grande ? '45px' : '12px'}; font-weight: ${grande ? '700' : '400'}; }
+  h2 { font-size: ${grande ? '56px' : '15px'}; margin: 0 0 2px; }
+  .impresso-por { font-size: ${grande ? '24px' : '11px'}; color: #444; margin: 0 0 10px; font-weight: ${grande ? '700' : '400'}; }
   table { border-collapse: collapse; width: 100%; }
-  th, td { border: ${grande ? '2px' : '1px'} solid #ccc; padding: ${grande ? '10px 14px' : '3px 7px'}; text-align: left; white-space: nowrap; }
+  th, td { border: ${grande ? '3px' : '1px'} solid #ccc; padding: ${grande ? '16px 20px' : '3px 7px'}; text-align: left; white-space: nowrap; }
   th { background: #eef2f6; font-weight: 700; }
   tr:nth-child(even) td { background: #f7f9fb; }
   @media print { @page { size: A4 landscape; margin: 10mm; } thead { display: table-header-group; } }

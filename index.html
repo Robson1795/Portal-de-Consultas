@@ -784,6 +784,12 @@
                  style="width:100px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
           <input type="text" id="devolucaoManualDescricao" placeholder="Descrição"
                  style="width:170px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <input type="text" inputmode="decimal" id="devolucaoManualPecas" placeholder="Qtd Peças"
+                 title="Opcional -- só painel/telha. Junto com Metragem/Peça preenche a Quantidade sozinho."
+                 style="width:80px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+          <input type="text" inputmode="decimal" id="devolucaoManualMetragemPeca" placeholder="Metragem/Peça (m)"
+                 title="Comprimento de 1 peça, em metros. Opcional -- só painel/telha."
+                 style="width:130px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
           <input type="text" id="devolucaoManualUm" placeholder="UM"
                  style="width:60px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
           <input type="text" id="devolucaoManualDeposito" placeholder="Depósito"
@@ -793,6 +799,7 @@
           <input type="text" id="devolucaoManualLote" placeholder="Lote"
                  style="width:90px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
           <input type="text" id="devolucaoManualQtd" placeholder="Quantidade"
+                 title="Preenche sozinho com Qtd Peças × Metragem/Peça × fator, se os dois estiverem preenchidos -- dá pra sobrescrever."
                  style="width:100px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
           <button class="btn btn-primary" id="devolucaoManualRegistrarBtn">Registrar</button>
         </div>
@@ -823,6 +830,7 @@
         <table id="metragemTabela">
           <thead>
             <tr>
+              <th>Código</th>
               <th>Descrição do item</th>
               <th>Categoria</th>
               <th>Qtd Peças</th>

@@ -588,12 +588,16 @@ document.getElementById('devolucaoManualRegistrarBtn').addEventListener('click',
   const campoReferencia = document.getElementById('devolucaoManualReferencia');
   const campoLote = document.getElementById('devolucaoManualLote');
   const campoQtd = document.getElementById('devolucaoManualQtd');
+  const campoPecas = document.getElementById('devolucaoManualPecas');
+  const campoMetragemPeca = document.getElementById('devolucaoManualMetragemPeca');
   const btn = document.getElementById('devolucaoManualRegistrarBtn');
 
   const idDevolucao = campoId.value.trim() || null;
   const pedido = campoPedido.value.trim() || null;
   const produto = campoProduto.value.trim() || null;
   const qtdTexto = campoQtd.value.trim();
+  const qtdPecas = campoPecas.value.trim() ? parseQtd(campoPecas.value.trim()) : null;
+  const metragemPeca = campoMetragemPeca.value.trim() ? parseQtd(campoMetragemPeca.value.trim()) : null;
 
   if (!idDevolucao && !pedido && !produto && !qtdTexto) {
     msg.textContent = 'Preencha ao menos um campo.';
@@ -619,6 +623,7 @@ document.getElementById('devolucaoManualRegistrarBtn').addEventListener('click',
     deposito: campoDeposito.value.trim() || null,
     referencia: campoReferencia.value.trim() || null,
     lote: campoLote.value.trim() || null,
+    qtd_pecas: qtdPecas, metragem_peca: metragemPeca,
     qtd_nf: qtd, qtd_fisico: qtd,
     conferido_por: qtd === null ? null : nomeUsuarioAtual,
     conferido_em: qtd === null ? null : agora,
@@ -643,10 +648,33 @@ document.getElementById('devolucaoManualRegistrarBtn').addEventListener('click',
   campoReferencia.value = '';
   campoLote.value = '';
   campoQtd.value = '';
+  campoPecas.value = '';
+  campoMetragemPeca.value = '';
   campoProduto.focus();
   msg.textContent = qtd === null ? 'Item registrado (sem quantidade, fica pendente de conferência).' : 'Item registrado e já conferido.';
   msg.className = 'status-msg status-ok';
   await carregarDevolucao();
+});
+
+// "QTD TOTAL QUE PREENCHE DEPOIS QUE EU USE A FERRAMENTA DE CONTAGEM POR
+// METRO" (17/09/2026) -- Qtd Peças × Metragem/Peça × fator da descrição
+// (mesma conta de metragemDevolucao()/calcularLinhaMetragem()) escreve
+// sozinho no campo Quantidade toda vez que um dos três muda. Só quando a
+// categoria é reconhecida -- sem isso o campo ficaria mudando pra vazio ou
+// zero atrás de quem ainda nem terminou de digitar a descrição. Continua
+// editável depois: é preenchimento de conveniência, não campo travado.
+function atualizarQtdManualDevolucaoPelaMetragem() {
+  const calculo = calcularLinhaMetragem({
+    descricao: document.getElementById('devolucaoManualDescricao').value,
+    qtd: document.getElementById('devolucaoManualPecas').value,
+    metragem: document.getElementById('devolucaoManualMetragemPeca').value
+  });
+  if (calculo.cat && calculo.qtd > 0 && calculo.metragem > 0) {
+    document.getElementById('devolucaoManualQtd').value = calculo.m2.toFixed(2).replace('.', ',');
+  }
+}
+['devolucaoManualDescricao', 'devolucaoManualPecas', 'devolucaoManualMetragemPeca'].forEach(id => {
+  document.getElementById(id).addEventListener('input', atualizarQtdManualDevolucaoPelaMetragem);
 });
 
 document.getElementById('devolucaoManualId').addEventListener('keydown', (e) => {
@@ -654,6 +682,7 @@ document.getElementById('devolucaoManualId').addEventListener('keydown', (e) => 
 });
 [
   'devolucaoManualPedido', 'devolucaoManualCliente', 'devolucaoManualProduto', 'devolucaoManualDescricao',
+  'devolucaoManualPecas', 'devolucaoManualMetragemPeca',
   'devolucaoManualUm', 'devolucaoManualDeposito', 'devolucaoManualReferencia', 'devolucaoManualLote', 'devolucaoManualQtd'
 ].forEach(id => {
   document.getElementById(id).addEventListener('keydown', (e) => {
