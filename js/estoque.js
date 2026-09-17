@@ -1132,7 +1132,12 @@ async function salvarSemPadrao(checkbox) {
   const itemCode = checkbox.dataset.item;
   const marcado = checkbox.checked;
   const msg = document.getElementById('embalagemMsg');
-  const inputs = fichaModalBox.querySelectorAll('.embalagem-input');
+  // `.closest('.modal-box')` em vez do antigo `fichaModalBox` fixo: este
+  // checkbox também aparece dentro do popup de Padrão de Caixas
+  // (mostrarPadraoCaixas), não só na Ficha Técnica -- os dois têm essa
+  // classe (ver index.html).
+  const container = checkbox.closest('.modal-box');
+  const inputs = container ? container.querySelectorAll('.embalagem-input') : [];
   try {
     const patch = { sem_padrao_caixa: marcado };
     if (marcado) { patch.qtd_caixa_master = null; patch.qtd_caixa_fracionada = null; }
@@ -1199,6 +1204,36 @@ async function salvarEmbalagem(input) {
   }
 }
 
+// Liga os campos de `campoEmbalagem()` (inputs .embalagem-input + checkbox
+// .sem-padrao-check) depois de inseridos no DOM -- reaproveitado pela Ficha
+// Técnica (👁, openFichaModal) e pelo popup rápido de Padrão de Caixas (📦,
+// mostrarPadraoCaixas): hoje são os dois únicos lugares onde dá pra editar
+// qtd_caixa_master/qtd_caixa_fracionada/sem_padrao_caixa.
+//
+// O upsert com só `item` antes de cada gravação garante que a linha existe
+// -- idempotente (não sobrescreve o que já tem quando a linha já existia),
+// então não precisa saber de antemão se é cadastro novo ou edição.
+//
+// `aposSalvar`, opcional: roda depois de CADA gravação bem-sucedida -- o
+// popup de Padrão de Caixas usa pra atualizar o resumo calculado ali mesmo,
+// sem precisar fechar e abrir de novo.
+function ligarCamposEmbalagem(container, itemCode, aposSalvar) {
+  container.querySelectorAll('.embalagem-input').forEach(inp => {
+    inp.addEventListener('change', async () => {
+      await sb.from('fichas_tecnicas').upsert({ item: itemCode }, { onConflict: 'item' });
+      await salvarEmbalagem(inp);
+      if (aposSalvar) aposSalvar();
+    });
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); });
+  });
+  const chk = container.querySelector('.sem-padrao-check');
+  if (chk) chk.addEventListener('change', async () => {
+    await sb.from('fichas_tecnicas').upsert({ item: itemCode }, { onConflict: 'item' });
+    await salvarSemPadrao(chk);
+    if (aposSalvar) aposSalvar();
+  });
+}
+
 async function openFichaModal(itemCode) {
   fichaModalBox.innerHTML = `
     <button class="modal-close" id="fichaCloseBtn">✕</button>
@@ -1217,22 +1252,7 @@ async function openFichaModal(itemCode) {
       ${podeEditarEmbalagem() ? campoEmbalagem({}, itemCode) : ''}
     `;
     document.getElementById('fichaCloseBtn2').addEventListener('click', closeFichaModal);
-    if (podeEditarEmbalagem()) {
-      fichaModalBox.querySelectorAll('.embalagem-input').forEach(inp => {
-        inp.addEventListener('change', async () => {
-          // Ainda não existe linha na ficha pra esse item - cria uma antes de salvar
-          await sb.from('fichas_tecnicas').upsert({ item: itemCode }, { onConflict: 'item' });
-          await salvarEmbalagem(inp);
-        });
-        // Enter salva na hora, sem precisar clicar fora ou dar Tab.
-        inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); });
-      });
-      const chk = fichaModalBox.querySelector('.sem-padrao-check');
-      if (chk) chk.addEventListener('change', async () => {
-        await sb.from('fichas_tecnicas').upsert({ item: itemCode }, { onConflict: 'item' });
-        await salvarSemPadrao(chk);
-      });
-    }
+    if (podeEditarEmbalagem()) ligarCamposEmbalagem(fichaModalBox, itemCode);
     return;
   }
 
@@ -1247,12 +1267,7 @@ async function openFichaModal(itemCode) {
     ${campoEmbalagem(data, itemCode)}
   `;
   document.getElementById('fichaCloseBtn3').addEventListener('click', closeFichaModal);
-  fichaModalBox.querySelectorAll('.embalagem-input').forEach(inp => {
-    inp.addEventListener('change', () => salvarEmbalagem(inp));
-    inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); });
-  });
-  const chk3 = fichaModalBox.querySelector('.sem-padrao-check');
-  if (chk3) chk3.addEventListener('change', () => salvarSemPadrao(chk3));
+  if (podeEditarEmbalagem()) ligarCamposEmbalagem(fichaModalBox, itemCode);
 }
 
 document.getElementById('tableBody').addEventListener('click', (e) => {
@@ -1379,17 +1394,53 @@ document.querySelector('#dataTable thead').addEventListener('change', (e) => {
 });
 
 const padraoModal = document.getElementById('padraoModal');
-function mostrarPadraoCaixas(btn) {
-  const info = fichaBoxMap.get(btn.dataset.item);
-  const um = umDoItem(btn.dataset.item);
+
+// Resumo calculado (o que já existia): quantas caixas cabem na quantidade
+// DESTA linha, com o padrão de caixa vigente pro item. Separado da função
+// principal pra dar pra chamar de novo depois de salvar uma edição (ver
+// ligarCamposEmbalagem mais abaixo), sem fechar e reabrir o popup.
+function atualizarResumoPadraoCaixas(itemCode, qtdReferencia) {
+  const info = fichaBoxMap.get(itemCode);
+  const um = umDoItem(itemCode);
   const texto = info && info.semPadrao
     ? 'Este item não tem padrão de caixa — vem avulso.'
-    : formatarCaixas(btn.dataset.qtd, btn.dataset.item) || 'Sem padrão de caixa suficiente pra calcular.';
-  document.getElementById('padraoCodigo').textContent = 'Item ' + btn.dataset.item;
+    : formatarCaixas(qtdReferencia, itemCode) || 'Sem padrão de caixa suficiente pra calcular.';
   document.getElementById('padraoTexto').textContent = texto.replace(/^= /, '');
   document.getElementById('padraoReferencia').textContent = (info && !info.semPadrao)
     ? `Caixa master: ${info.master} ${um}${info.fracionada ? ` · Caixa fracionada: ${info.fracionada} ${um}` : ''}`
     : '';
+}
+
+// Robson, 17/09/2026, sobre este popup: "deixe editavel a quantidade que
+// vem por caixas do itens do almoxarifado" -- até aqui só mostrava o
+// número (ou "vem avulso"), pra editar precisava abrir a Ficha Técnica
+// (👁) à parte. Reaproveita o mesmo bloco de campos da Ficha (campoEmbalagem
+// + ligarCamposEmbalagem) -- mesma regra de permissão (podeEditarEmbalagem),
+// mesma tabela (fichas_tecnicas), só um jeito mais rápido de chegar nela
+// direto da lista do Almoxarifado.
+function mostrarPadraoCaixas(btn) {
+  const itemCode = btn.dataset.item;
+  const qtdReferencia = btn.dataset.qtd;
+  document.getElementById('padraoCodigo').textContent = 'Item ' + itemCode;
+  atualizarResumoPadraoCaixas(itemCode, qtdReferencia);
+
+  const alvo = document.getElementById('padraoEditar');
+  if (podeEditarEmbalagem()) {
+    const info = fichaBoxMap.get(itemCode);
+    const dataShim = {
+      sem_padrao_caixa: !!(info && info.semPadrao),
+      qtd_caixa_master: info ? info.master : null,
+      qtd_caixa_fracionada: info ? info.fracionada : null
+    };
+    alvo.innerHTML = campoEmbalagem(dataShim, itemCode);
+    ligarCamposEmbalagem(alvo, itemCode, () => {
+      atualizarResumoPadraoCaixas(itemCode, qtdReferencia);
+      applyFilterAndSort(); // a coluna de caixas na lista de trás também depende do padrão
+    });
+  } else {
+    alvo.innerHTML = '';
+  }
+
   padraoModal.classList.add('open');
 }
 document.getElementById('padraoCloseBtn').addEventListener('click', () => padraoModal.classList.remove('open'));

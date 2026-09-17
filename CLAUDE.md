@@ -7643,3 +7643,39 @@ da empresa (EXP) pra esse mesmo tipo de quantidade -- não é preferência
 estética, é consistência entre as duas telas que ele compara lado a lado.
 
 Testado: `formatarM2(55.56)` → `"55,5600"` (bate com o print do EXP).
+
+## 74. Padrão de caixas editável direto no popup rápido (📦) do Almoxarifado (17/09/2026)
+
+O Robson, com print do popup "Padrão de caixas" (o 📦 da lista de itens,
+`mostrarPadraoCaixas`, js/estoque.js): *"deixe editavel a quantidade que
+vem por caixas do itens do almoxarifado"*. Até aqui esse popup só
+mostrava o número (ou "vem avulso") -- pra editar `qtd_caixa_master`/
+`qtd_caixa_fracionada`/`sem_padrao_caixa` só dava na Ficha Técnica (👁),
+uma tela à parte com foto e descrição.
+
+Em vez de duplicar a lógica de edição, os mesmos campos de lá
+(`campoEmbalagem()`, que já respeita `podeEditarEmbalagem()` -- só admin ou
+`j.lisboa@kingspanisoeste.com.br`) passaram a entrar também neste popup,
+num container novo (`#padraoEditar`, index.html). Pra isso, extraída
+`ligarCamposEmbalagem(container, itemCode, aposSalvar)` -- a fiação dos
+inputs/checkbox que antes vivia duas vezes dentro de `openFichaModal()`
+(cadastro novo e edição) virou uma função só, reaproveitada nos três
+lugares. `salvarSemPadrao()` também deixou de depender de `fichaModalBox`
+fixo -- agora acha os inputs irmãos via `checkbox.closest('.modal-box')`,
+já que o checkbox mora em dois modais diferentes agora.
+
+`aposSalvar` (novo, opcional): roda depois de cada gravação -- o popup
+rápido usa pra atualizar o resumo calculado ali mesmo (quantas caixas cabem
+na quantidade desta linha) e a lista de trás (`applyFilterAndSort()`), sem
+precisar fechar/reabrir. Quem não tem `podeEditarEmbalagem()` continua
+vendo só o texto, exatamente como antes -- `#padraoEditar` fica vazio.
+
+Sem SQL nova -- mesma tabela `fichas_tecnicas` e mesmas colunas de sempre.
+
+Testado localmente: popup com item marcado "vem avulso", desmarcando o
+checkbox e preenchendo master=2000/fracionada=200 -- gravou nas duas
+colunas certas (upsert de garantia + update, um por campo), `fichaBoxMap`
+atualizado, e o resumo no próprio popup mudou de "vem avulso" pra "40 cx
+master" sem fechar a tela. Sem permissão, popup continua só leitura. Ficha
+Técnica (👁) testada nos dois casos (item com dado e sem nenhum) depois do
+refactor -- comportamento idêntico ao de antes. Sem erro no console.
