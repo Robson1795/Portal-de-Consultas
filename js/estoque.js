@@ -1101,19 +1101,27 @@ function campoEmbalagem(data, itemCode) {
       : '';
   }
   const semPadrao = !!data.sem_padrao_caixa;
+  // Os campos numéricos NUNCA ficam desabilitados (Robson, 17/09/2026: "ao
+  // apertar na caixa quero editar" -- com o item marcado "vem avulso", os
+  // dois campos ficavam `disabled` e cliclar neles não fazia nada, sem
+  // avisar que era preciso desmarcar o checkbox antes). Agora dá pra clicar
+  // e digitar direto, e o próprio ato de digitar um número desmarca "vem
+  // avulso" sozinho (ver salvarEmbalagem()) -- os dois estados continuam
+  // não convivendo, só que o caminho de sair de um pro outro ficou nos dois
+  // sentidos, não só apagando o checkbox manualmente primeiro.
   return `
     <div class="modal-label">Embalagem (editável)</div>
     <div style="display:flex; gap:8px; margin-top:4px;">
       <div style="flex:1;">
         <label style="font-size:11px; color:var(--muted);">Caixa master (${um})</label>
         <input type="text" inputmode="numeric" class="embalagem-input" data-item="${escapeHtml(itemCode)}" data-campo="qtd_caixa_master"
-               value="${data.qtd_caixa_master || ''}" placeholder="Ex: 2000" ${semPadrao ? 'disabled' : ''}
+               value="${data.qtd_caixa_master || ''}" placeholder="Ex: 2000"
                style="width:100%; padding:7px 8px; border:1px solid var(--border); border-radius:6px; font-size:13px;">
       </div>
       <div style="flex:1;">
         <label style="font-size:11px; color:var(--muted);">Caixa fracionada (${um})</label>
         <input type="text" inputmode="numeric" class="embalagem-input" data-item="${escapeHtml(itemCode)}" data-campo="qtd_caixa_fracionada"
-               value="${data.qtd_caixa_fracionada || ''}" placeholder="Ex: 200" ${semPadrao ? 'disabled' : ''}
+               value="${data.qtd_caixa_fracionada || ''}" placeholder="Ex: 200"
                style="width:100%; padding:7px 8px; border:1px solid var(--border); border-radius:6px; font-size:13px;">
       </div>
     </div>
@@ -1184,12 +1192,24 @@ async function salvarEmbalagem(input) {
   const campo = input.dataset.campo;
   const valor = input.value.trim() === '' ? null : input.value.trim();
   const msg = document.getElementById('embalagemMsg');
+  // Digitou um número com "vem avulso" marcado -- os dois estados não
+  // convivem (mesmo motivo de sempre), então o próprio ato de preencher
+  // desmarca sozinho, tanto no banco (patch de duas colunas na mesma
+  // gravação) quanto no checkbox na tela -- sem isso, a hora de reabrir o
+  // popup ainda mostraria o item como "vem avulso" mesmo já tendo os dois
+  // números preenchidos.
+  const container = input.closest('.modal-box');
+  const checkbox = container ? container.querySelector('.sem-padrao-check') : null;
+  const desmarcarAvulso = !!(valor && checkbox && checkbox.checked);
+  const patch = { [campo]: valor };
+  if (desmarcarAvulso) patch.sem_padrao_caixa = false;
   try {
     const { error } = await sb.from('fichas_tecnicas')
-      .update({ [campo]: valor })
+      .update(patch)
       .eq('item', itemCode);
     if (error) throw error;
     if (msg) { msg.textContent = 'Salvo!'; msg.className = 'status-msg status-ok'; setTimeout(() => { if (msg) msg.textContent = ''; }, 2000); }
+    if (desmarcarAvulso) checkbox.checked = false;
     if (fichaBoxMap.has(itemCode) || valor) {
       const atual = fichaBoxMap.get(itemCode) || { master: null, fracionada: null, semPadrao: false };
       if (campo === 'qtd_caixa_master') atual.master = valor ? parseFloat(valor) : null;

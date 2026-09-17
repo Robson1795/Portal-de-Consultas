@@ -136,13 +136,34 @@ function atualizarTotaisMetragem() {
     + (semCategoria ? ` &nbsp;·&nbsp; <span style="color:var(--aviso-texto);">${semCategoria} linha(s) sem categoria reconhecida, fora do total</span>` : '');
 }
 
+// Robson, 17/09/2026: "ao digitar codigo do item se tiver no catalago da
+// expedição pode puxar a descrição automaticamente" -- reaproveita
+// catalogoExpItens (js/programacao.js, carregado ao entrar nesta tela: ver
+// js/navegacao.js) em vez de duplicar consulta ao Supabase. Só entra se a
+// Descrição ainda estiver vazia -- nunca sobrescreve o que a pessoa já
+// digitou na mão (item fora do Catálogo EXP, ou descrição customizada).
+function preencherDescricaoDoCatalogoExp(linha, id) {
+  if (linha.descricao.trim()) return;
+  if (typeof catalogoExpItens === 'undefined' || !catalogoExpItens.length) return;
+  const chave = normalizaCodigoItem(linha.codigo);
+  if (!chave) return;
+  const doCatalogo = catalogoExpItens.find(l => normalizaCodigoItem(l.codigo_item) === chave && l.descricao);
+  if (!doCatalogo) return;
+  linha.descricao = doCatalogo.descricao;
+  const inputDescricao = document.querySelector(`#metragemBody tr[data-linha="${id}"] .metragem-descricao`);
+  if (inputDescricao) inputDescricao.value = doCatalogo.descricao;
+}
+
 document.getElementById('metragemBody').addEventListener('input', (e) => {
   const campo = e.target;
   const id = Number(campo.dataset.id);
   const linha = metragemLinhas.find(l => l.id === id);
   if (!linha) return;
 
-  if (campo.classList.contains('metragem-codigo')) linha.codigo = campo.value;
+  if (campo.classList.contains('metragem-codigo')) {
+    linha.codigo = campo.value;
+    preencherDescricaoDoCatalogoExp(linha, id);
+  }
   else if (campo.classList.contains('metragem-descricao')) linha.descricao = campo.value;
   else if (campo.classList.contains('metragem-qtd')) linha.qtd = campo.value;
   else if (campo.classList.contains('metragem-metragem')) linha.metragem = campo.value;

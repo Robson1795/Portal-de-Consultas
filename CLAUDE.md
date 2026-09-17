@@ -7679,3 +7679,56 @@ atualizado, e o resumo no próprio popup mudou de "vem avulso" pra "40 cx
 master" sem fechar a tela. Sem permissão, popup continua só leitura. Ficha
 Técnica (👁) testada nos dois casos (item com dado e sem nenhum) depois do
 refactor -- comportamento idêntico ao de antes. Sem erro no console.
+
+## 75. Etiqueta Pátio puxa a descrição sozinha do Catálogo EXP (17/09/2026)
+
+O Robson, com print do Catálogo EXP (Controle EXP Acessórios) e uma seta
+apontando pra Etiqueta Pátio na sidebar: *"etiqueta do patio ao digitar
+codigo do item se tiver no catalago da expedição pode puxar a descrição
+automaticamante"*.
+
+Reaproveita `catalogoExpItens` (o array em memória que a aba Catálogo do
+Controle EXP já carrega -- Item/Descrição/UM/Depósito/Referência/Lote/
+Quantidade, colado do sistema) em vez de duplicar consulta ao Supabase:
+mesmo catálogo, mesma normalização de código (`normalizaCodigoItem`) já
+usada em cascata parecida na Programação. Ao digitar o Código numa linha
+da Etiqueta Pátio, se bater com um item do Catálogo EXP desta unidade e a
+Descrição ainda estiver vazia, ela é preenchida sozinha (e o cálculo de
+categoria/fator/m² recalcula na hora, já que dependem da descrição). Nunca
+sobrescreve descrição já digitada na mão.
+
+**Detalhe que quase passou batido**: `catalogoExpItens` só é carregado "ao
+entrar na página" do Controle EXP (comentário original em
+`carregarCatalogoExp()`) -- quem for direto pra Etiqueta Pátio sem nunca ter
+aberto o Controle EXP nesta sessão acharia a lista vazia. Adicionado
+`carregarCatalogoExp()` também ao entrar na Etiqueta Pátio (js/navegacao.js),
+mesmo padrão já usado pro Controle EXP.
+
+Sem SQL nova -- só lê `catalogo_exp_itens`, tabela que já existe.
+
+## 76. Caixa master/fracionada editável mesmo com "vem avulso" marcado (17/09/2026)
+
+O Robson, com print do popup de embalagem (Caixa master/fracionada
+cinzas, "Este item não tem padrão de caixa" marcado): *"ao apertar na
+caixa quero editar"*. Os dois campos numéricos (`campoEmbalagem()`,
+js/estoque.js) ficavam `disabled` sempre que "vem avulso" estava marcado
+-- clicar neles não fazia nada, sem avisar que era preciso desmarcar o
+checkbox primeiro. Ambíguo pra quem só quer digitar o número que tem na mão.
+
+Removido o `disabled` dos dois campos -- sempre clicáveis. Em troca,
+`salvarEmbalagem()` passou a desmarcar "vem avulso" sozinho quando um
+número é digitado (checkbox estava marcado + veio valor): grava as duas
+colunas juntas na mesma chamada (`qtd_caixa_master`/`fracionada` +
+`sem_padrao_caixa: false`), e desmarca o checkbox na tela na hora -- sem
+isso o popup reaberto ainda mostraria "vem avulso" mesmo já com os dois
+números preenchidos. Os dois estados continuam não convivendo (mesma regra
+de sempre), só que agora dá pra sair de um pro outro digitando direto, nos
+dois sentidos -- marcar o checkbox ainda limpa os campos, como já era.
+
+Sem SQL nova.
+
+Testado localmente: item marcado "vem avulso", campo Caixa master SEM
+desabilitado, digitado "2000" sem tocar no checkbox -- uma única
+gravação com `{qtd_caixa_master: "2000", sem_padrao_caixa: false}`,
+checkbox desmarcado sozinho na tela, resumo do popup (seção 74) atualizado
+pra "40 cx master". Sem erro no console.

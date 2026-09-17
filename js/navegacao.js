@@ -192,6 +192,14 @@ function mostrarPagina(id) {
   if (id === 'requisicao') { carregarRequisicao(); }
   if (id === 'mfg') { carregarMfg(); }
   if (id === 'programacao') { carregarProgramacao(); }
+  // Robson, 17/09/2026: "ao digitar codigo do item se tiver no catalago da
+  // expedição pode puxar a descrição automaticamente" -- a Etiqueta Pátio
+  // (js/metragem.js) reaproveita catalogoExpItens (js/programacao.js) pra
+  // isso, mas essa lista só carrega "ao entrar na página" do Controle EXP
+  // (ver comentário em carregarCatalogoExp()). Sem esta linha, quem for
+  // direto pra Etiqueta Pátio sem passar pelo Controle EXP acharia a lista
+  // vazia e a descrição nunca puxaria sozinha.
+  if (id === 'metragem') { carregarCatalogoExp(); }
   // Catálogo EXP primeiro, DEPOIS a Programação -- buscarDescricoesItens()
   // olha catalogoExpItens em memória (não busca de novo), então se essa
   // promise ainda não tivesse terminado (o catálogo tem centenas de linhas,
