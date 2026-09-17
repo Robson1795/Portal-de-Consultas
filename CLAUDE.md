@@ -7629,3 +7629,17 @@ pra 3 -- um lugar só, muda em todo canto de uma vez, sem risco de ficar
 "55,56" numa tela e "55,560" em outra pro mesmo número.
 
 Testado: `formatarM2(55.56)` → `"55,560"`.
+
+## 73. m² vai pra 4 casas decimais -- bate com o EXP (17/09/2026)
+
+Minutos depois da seção 72, o Robson mandou print de uma linha do sistema
+EXP (movimentação de saída, mesmo tipo de quantidade): "55,5600" -- 4 casas,
+não 3. Confirmado: *"NO SISTEMA FICA COM 4 NUMEROS DEPOIS DA VIRGULA"*.
+
+Mesmo lugar da correção anterior -- só `formatarM2()` (js/metragem.js),
+`minimumFractionDigits`/`maximumFractionDigits` de 3 pra 4. Motivo de ser
+4 e não 3 (nem 2): bater com o formato que o Robson já vê no sistema oficial
+da empresa (EXP) pra esse mesmo tipo de quantidade -- não é preferência
+estética, é consistência entre as duas telas que ele compara lado a lado.
+
+Testado: `formatarM2(55.56)` → `"55,5600"` (bate com o print do EXP).

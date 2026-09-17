@@ -71,7 +71,7 @@ let metragemProximoId = 1;
 let metragemLinhas = [{ id: metragemProximoId++, codigo: '', descricao: '', qtd: '', metragem: '' }];
 
 function formatarM2(v) {
-  return v.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  return v.toLocaleString('pt-BR', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
 }
 
 // Só as células CALCULADAS são reescritas a cada tecla -- os `<input>` nunca
