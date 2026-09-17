@@ -7227,3 +7227,26 @@ Testado localmente os dois cenários: (1) item ainda em `exp_controle_itens`
 item certo do Controle EXP e limpou a observação; (2) item já removido antes
 (cancelado pelo 🗑) — confirmar só gravou o "devolvido", sem tentar excluir
 nada. Sem erro no console.
+
+## 60. Card "Pedidos cancelados aguardando devolução" no Painel do Dia (17/09/2026)
+
+O Robson, olhando o Painel do Dia: *"colocar no painel essa notificação"* —
+sobre o aviso de devolução ao almoxarifado (seção 57). Perguntado se era
+notificação de canto ou card no Painel do Dia, ele redirecionou pra
+confirmar que era o card mesmo: *"os pedidos que é para voltar para o
+almoxarifado os cancelados, o que voce acha?"* — recomendado e aceito.
+
+Nono card em `AVISOS_PAINEL` (js/painel.js), logo depois do "Pedidos
+avisados pra preparar" — é literalmente a mesma pergunta ao contrário: lá é
+"o que falta separar", aqui é "o que falta devolver". Mesma contagem que já
+alimenta a notificação de canto (`exp_pedido_cancelado_alm`, status
+pendente), reaproveitada como card em vez de escrita de novo — o painel
+"não calcula nada, só pergunta pro lugar de origem" (comentário no topo do
+arquivo, princípio que já regia os outros oito).
+
+Testado localmente três cenários: com pendente, o card acende
+`.painel-card-alerta` e o botão "Abrir Voltar ao Almox." navega pra
+`expacessorios` + aba `canceladoalm`; zerado, sem alerta; e com a fase61
+ainda não rodada (tabela inexistente), o card mostra "—" com a mensagem de
+erro, sem derrubar os outros oito cards do painel. Sem erro no console
+(fora um 404 de favicon do servidor de teste local, sem relação).

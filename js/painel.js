@@ -196,6 +196,28 @@ const AVISOS_PAINEL = [
       .eq('unidade', unidadeAtual).eq('status', 'pendente'))
   },
   {
+    // Robson, 17/09/2026, olhando este mesmo painel: "colocar no painel essa
+    // notificação" -- sobre o aviso de devolução ao almoxarifado (seção 57).
+    // Espelha o card 'avisoprep' de propósito: é a mesma pergunta ao
+    // contrário -- lá é "o que falta separar", aqui é "o que falta devolver".
+    id: 'canceladoalm',
+    icone: '↩️',
+    titulo: 'Pedidos cancelados aguardando devolução',
+    nota: 'Cancelado no EXP -- confirme que o material físico já voltou pro endereço do almoxarifado.',
+    perfis: ['estoque_alm', 'admin'],
+    acaoRotulo: 'Abrir Voltar ao Almox.',
+    acao: () => {
+      mostrarPagina('expacessorios');
+      if (typeof trocarAbaExpAcessorios === 'function') trocarAbaExpAcessorios('canceladoalm');
+    },
+    // Tabela nasce em sql/fase61-exp-pedido-cancelado-alm.sql -- se ainda não
+    // rodou, contarPainel() joga o erro pra cima e só este card desenha "—",
+    // mesmo cuidado do 'avisoprep' logo acima.
+    contar: () => contarPainel(() => sb.from('exp_pedido_cancelado_alm')
+      .select('id', { count: 'exact', head: true })
+      .eq('unidade', unidadeAtual).eq('status', 'pendente'))
+  },
+  {
     id: 'doca',
     icone: '📦',
     titulo: 'Itens parados na doca',
