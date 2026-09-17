@@ -7250,3 +7250,39 @@ Testado localmente três cenários: com pendente, o card acende
 ainda não rodada (tabela inexistente), o card mostra "—" com a mensagem de
 erro, sem derrubar os outros oito cards do painel. Sem erro no console
 (fora um 404 de favicon do servidor de teste local, sem relação).
+
+## 61. Busca zerada na Consulta de Itens já diz quem tem em outra unidade (17/09/2026)
+
+O Robson, sobre o METALON 20 X 20 X 0,90MM (Cód. 147059): *"vi por exemplo
+que esse so tem em cambui, quero que mesmo eu digitando em araquari apareça
+que tem em cambui, o mesmo para os outros itens e unidades"*.
+
+A busca da Consulta de Itens só filtra `currentData`, carregado do banco já
+recortado por unidade+depósito (`loadData()`). Item que não existe na
+unidade aberta simplesmente não aparecia — sem pista nenhuma de que existe
+em outro lugar, só descobria trocando de unidade manualmente e buscando de
+novo. Mesma pergunta que `avisarEstoqueBaixoSeNecessario()` já respondia
+pro item com saldo baixo ("tem em Cambuí: X"); faltava responder pro item
+que a busca nem encontrou aqui.
+
+`checarOutrasUnidadesNaBuscaVazia()`, disparada só quando a lista filtrada
+fica **vazia** (não em toda busca — a maioria não precisa disso): consulta
+`estoque` nas outras unidades (mesmo depósito), por código OU descrição,
+com **debounce próprio de 400ms** — a busca em si é só filtro em memória,
+sem ida ao banco; esta consulta vai, e sem espera seria uma chamada por
+tecla digitada. Duas conferências contra resposta atrasada: se a pessoa
+já digitou outra coisa, ou a lista já deixou de estar vazia, o resultado
+antigo não escreve por cima.
+
+Mostra até 3 itens (mesmo corte de 3 do aviso de estoque baixo), cada um
+com botão pro código que abre o comparativo entre unidades já existente
+(`openCompareModal`) — não duplica a tabela de unidades, só aponta pra ela.
+"e mais N item(ns)" quando passa de 3.
+
+Testado localmente: busca "147059" com a unidade sem esse item (mock
+simulando resposta de outra unidade) mostrou "Nenhum item encontrado em
+[unidade] pra '147059' -- mas: 147059 — METALON... — tem em [outra
+unidade]: 47", clicar no código chamou `openCompareModal('147059')`; digitar
+rápido três vezes seguidas gerou uma única consulta ao banco (debounce); e
+assim que a busca achou resultado local, o aviso sumiu sozinho. Sem erro no
+console.

@@ -158,9 +158,11 @@ function render(rows, intervalo) {
     tbody.innerHTML = '';
     emptyMsg.style.display = 'block';
     renderPaginacao(0);
+    checarOutrasUnidadesNaBuscaVazia();
     return;
   }
   emptyMsg.style.display = 'none';
+  document.getElementById('emptyMsgOutrasUnidades').style.display = 'none';
 
   // Ao imprimir, sai tudo; na tela, so a pagina atual.
   const paginas = Math.max(1, Math.ceil(total / porPagina));
@@ -254,6 +256,96 @@ function render(rows, intervalo) {
   `;
   }).join('');
 }
+
+let timerOutrasUnidadesBusca = null;
+
+// Robson, 17/09/2026, na Consulta de Itens: "vi por exemplo que esse so tem
+// em cambui, quero que mesmo eu digitando em araquari apareça que tem em
+// cambui, o mesmo para os outros itens e unidades". A busca só filtra
+// `currentData`, carregado desta unidade+depósito -- item inexistente aqui
+// simplesmente não aparecia, sem pista nenhuma de que existe em outro lugar.
+// Mesma ideia de avisarEstoqueBaixoSeNecessario() (que já indica outra
+// unidade pro que está baixo); aqui é pro que nem existe nesta.
+//
+// Debounce próprio: a busca em si não vai ao banco (filtra o que já está em
+// memória, na hora); esta consulta vai, e sem espera seria uma chamada por
+// tecla digitada.
+function checarOutrasUnidadesNaBuscaVazia() {
+  clearTimeout(timerOutrasUnidadesBusca);
+  const alvo = document.getElementById('emptyMsgOutrasUnidades');
+  const termo = document.getElementById('searchBox').value.trim();
+
+  // Sem termo (lista vazia por outro filtro, tipo "zerado", ou unidade sem
+  // nada) ou um intervalo de corredor (não é busca de item) -- nenhum dos
+  // dois é pergunta que outra unidade saiba responder.
+  if (!termo || tentarIntervaloCorredor(termo)) { alvo.style.display = 'none'; return; }
+
+  timerOutrasUnidadesBusca = setTimeout(async () => {
+    let outras = [];
+    try {
+      const { data, error } = await sb.from('estoque')
+        .select('item, descricao, unidade, quantidade')
+        .eq('deposito', depositoAtual)
+        .neq('unidade', unidadeAtual)
+        .or(`item.ilike.%${escapeIlike(termo)}%,descricao.ilike.%${escapeIlike(termo)}%`)
+        .limit(200);
+      if (error) throw error;
+      outras = data || [];
+    } catch (e) {
+      console.warn('Não foi possível checar outras unidades pra esta busca:', e.message);
+      alvo.style.display = 'none';
+      return;
+    }
+
+    // A pessoa pode ter digitado mais, ou a lista pode ter deixado de estar
+    // vazia enquanto a resposta viajava -- sem isso, uma resposta atrasada
+    // escreveria por cima de uma busca já diferente.
+    if (document.getElementById('searchBox').value.trim() !== termo) return;
+    if (linhasFiltradasAtual.length) return;
+    if (!outras.length) { alvo.style.display = 'none'; return; }
+
+    // Agrupa por item e depois por unidade, mesmo padrão de openCompareModal:
+    // um item pode ter várias localizações na mesma unidade, e aqui importa
+    // o total por unidade, não a localização.
+    const porItem = new Map();
+    outras.forEach(r => {
+      if (!porItem.has(r.item)) porItem.set(r.item, { descricao: r.descricao, porUnidade: new Map() });
+      const grupo = porItem.get(r.item);
+      grupo.porUnidade.set(r.unidade, (grupo.porUnidade.get(r.unidade) || 0) + parseQtd(r.quantidade));
+    });
+
+    const itens = [...porItem.entries()]
+      .map(([item, info]) => ({
+        item, descricao: info.descricao,
+        // "tem no estoque" -- unidade com saldo zerado não ajuda quem tá procurando.
+        unidadesComSaldo: [...info.porUnidade.entries()].filter(([, qtd]) => qtd > 0).sort((a, b) => b[1] - a[1])
+      }))
+      .filter(i => i.unidadesComSaldo.length);
+
+    if (!itens.length) { alvo.style.display = 'none'; return; }
+
+    const exemplos = itens.slice(0, 3);
+    const resto = itens.length > 3 ? itens.length - 3 : 0;
+
+    const linhas = exemplos.map(i => {
+      const [primeiraUnidade, primeiraQtd] = i.unidadesComSaldo[0];
+      const maisUnidades = i.unidadesComSaldo.length > 1
+        ? ` (+${i.unidadesComSaldo.length - 1} unidade${i.unidadesComSaldo.length > 2 ? 's' : ''})`
+        : '';
+      return `<button type="button" class="aviso-item-btn" data-item="${escapeHtml(i.item)}" title="Ver comparativo entre unidades">${escapeHtml(i.item)}</button>`
+        + ` — ${escapeHtml(i.descricao || '')} — tem em ${escapeHtml(rotuloUnidade(primeiraUnidade))}: ${primeiraQtd.toLocaleString('pt-BR')}${maisUnidades}`;
+    }).join('<br>');
+
+    alvo.innerHTML = `Nenhum item encontrado em ${escapeHtml(rotuloUnidade(unidadeAtual))} pra "${escapeHtml(termo)}" -- mas:<br>${linhas}`
+      + (resto ? `<br>e mais ${resto} item(ns) só em outras unidades.` : '');
+    alvo.style.display = 'block';
+  }, 400);
+}
+
+document.getElementById('emptyMsgOutrasUnidades').addEventListener('click', (e) => {
+  const btn = e.target.closest('.aviso-item-btn');
+  if (btn) openCompareModal(btn.dataset.item);
+});
 
 // Monta a barra de paginacao. Mostra no maximo sete botoes, com reticencias
 // no meio -- com 53 paginas, listar todas seria pior que nao ter barra.
