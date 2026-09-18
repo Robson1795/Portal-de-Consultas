@@ -1152,18 +1152,32 @@ document.getElementById('cfgAcessosPeriodo').addEventListener('change', carregar
 // **não vai no backup, em silêncio**. Conferida contra o banco em 14/09/2026
 // (as 38 responderam). Ao criar tabela nova num script de fase, acrescente-a
 // aqui no mesmo commit.
+// ⚠️ ESTA LISTA E MANTIDA A MAO, e tabela que nao entrar nela fica de fora do
+// backup EM SILENCIO -- o arquivo baixa, parece completo, e nao esta. Em
+// 18/09/2026 uma varredura de `create table` em sql/ contra esta lista achou
+// DOZE tabelas fora: as do chat (fase64), da devolucao (fase52), do debito
+// direto (fase51), das refeicoes (fase66/67) e mais sete. Todas entraram aqui.
+// Ao criar tabela num script de fase novo, acrescente o nome AQUI no mesmo
+// commit -- a conferencia e um comando so:
+//   grep -rhoiP "create table if not exists \K[a-z_]+" sql/*.sql | sort -u
 const TABELAS_BACKUP = [
   'acessos', 'analise_compras_acesso', 'analise_demanda', 'analise_item_notas',
   'atribuicoes_corredor', 'bobinas_aco', 'catalogo_exp_itens', 'centros_custo',
+  'chat_mensagens', 'chat_presenca',
   'conferir_exp_notas', 'config_unidade', 'contagem_bobinas', 'contagem_bobinas_ocr',
-  'contagem_fisica', 'doca_carregamento_pedidos', 'doca_carregamentos', 'doca_eventos',
+  'contagem_fisica', 'debito_direto_acesso', 'devolucao_itens',
+  'doca_carregamento_pedidos', 'doca_carregamentos', 'doca_eventos',
   'docas', 'editores_bobinas', 'estoque', 'estoque_localizacao_historico',
   'exp_acessorios', 'exp_conferencia_fisica', 'exp_controle_itens',
+  'exp_item_descricao_avulsa', 'exp_pedido_aviso_preparo',
+  'exp_pedido_cancelado_alm', 'exp_pedido_parado_obs',
   'exp_pedido_faturamento_confirmado', 'exp_pedido_status', 'fichas_tecnicas', 'fotos',
-  'gerentes_unidade', 'inventario_itens', 'inventarios', 'itens_requisicao',
+  'gerentes_unidade', 'inventario_itens', 'inventarios', 'itens_debito_direto',
+  'itens_requisicao',
   'log_movimentacao', 'mfg_analises', 'mfg_ops', 'pedido_itens', 'pedidos',
+  'portaria_visitas', 'refeicoes_acesso', 'refeicoes_fds',
   'registro_saida', 'requisicoes_alm', 'requisicoes_alm_itens', 'reservas_aco',
-  'sugestoes_melhoria', 'usuarios_permitidos'
+  'separadores', 'sugestoes_melhoria', 'usuarios_permitidos'
 ];
 
 async function baixarBackupCompleto() {

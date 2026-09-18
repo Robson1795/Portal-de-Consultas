@@ -3,7 +3,7 @@
 Contexto do projeto para qualquer agente de IA ou pessoa que for mexer neste repositório.
 Sempre em **português do Brasil**.
 
-**Atualizado:** 18/09/2026 (Chat: botão no cabeçalho, agenda completa, sem mural)
+**Atualizado:** 18/09/2026 (Portaria: visita agendada e formalizada na chegada)
 **Mantenedores:** Robson (dono do projeto e admin geral) · Victor Dobner (colaborador)
 
 > Este arquivo é lido automaticamente pelo Claude Code ao abrir a pasta do projeto.
@@ -7987,3 +7987,145 @@ as duas datas, os dois blocos, observações e rodapé; aba some do menu quando
 nos quatro casos (sexta de manhã / sexta à tarde com texto e som diferentes /
 quinta não avisa / relação fechada não cobra), sem empilhar na releitura de
 10 minutos. Sem erro no console.
+
+## 80. Portaria: visita agendada, formalizada na chegada (18/09/2026) — sql/fase68
+
+Da caixa de sugestões, trazida pelo Victor: *"funcionários que vão receber
+visita, cadastrar as informações das pessoas que virão, com nome, dcto,
+empresa, horario. Portaria recebe as informações e quando o visitante chega só
+formaliza e informa o funcionário"*.
+
+Vive em **`js/portaria.js`**. Script: `sql/fase68-portaria-visitas.sql`.
+
+### A peça que parecia difícil já existia
+
+"informa o funcionário" é o empilhador de notificação que o portal tem desde
+11/09/2026 — popup de canto, som e notificação do sistema. Esta tela não
+inventou canal nenhum: dispara um broadcast e `mostrarNotificacao()` desenha o
+cartão, igual ao aviso de preparo e ao de devolução.
+
+### ⚠️ Mas o canal aqui é por PESSOA, não por unidade
+
+`alertas-visita-<id do anfitrião>`: cada um assina o próprio, e a portaria
+manda para o canal de quem recebe a visita.
+
+Os outros dois avisos são recados de **setor** — quem os recebe é uma equipe
+inteira, e filtrar no cliente não esconde nada de ninguém que já não pudesse
+ver. Aqui não: um canal por unidade entregaria **nome e empresa do visitante a
+todo mundo com o portal aberto naquela fábrica**, e só a tela é que decidiria
+não desenhar o cartão — com o dado já tendo chegado na máquina de quem não é o
+anfitrião. Canal por pessoa custa o mesmo e não vaza. De quebra, não precisa
+ser reassinado ao trocar de unidade.
+
+O payload leva **nome, empresa e quem registrou — não leva o documento.** O
+documento está na tela para quem tem direito de ler a linha; não precisa
+trafegar num aviso.
+
+### ⚠️ Perfil novo pede TRÊS mudanças no banco, não uma
+
+Esta é a mesma armadilha já registrada quando `status` ganhou o valor
+`concluida` (seção 15, fase24/fase25: *"status novo pede DOIS scripts, e eu
+esqueci o segundo na primeira vez"*). Com `perfil` são **três**:
+
+| Onde | Sem mexer |
+|---|---|
+| `usuarios_permitidos_perfil_valido` (CHECK da coluna) | o `update` falha |
+| `definir_acesso()` | o admin não consegue conceder o perfil pela tela |
+| `forca_cadastro_neutro()` | **quem se cadastra escolhendo "Portaria" vira "Consultor" em silêncio** |
+
+O terceiro é o pior: não dá erro nenhum, a conta simplesmente nasce com outro
+perfil e ninguém entende por quê. O `fase68` mexe nos três e termina com uma
+consulta que confere os três de uma vez — se algum não citar `portaria`, o
+script não rodou inteiro.
+
+`Admin` continua fora da lista do `forca_cadastro_neutro()`, de propósito:
+ninguém se cadastra administrador.
+
+### A tela: uma página, dois públicos
+
+| Aba | Quem vê |
+|---|---|
+| **Minhas visitas** | todo perfil — agenda quem vem, acompanha e cancela |
+| **Recepção** | só `portaria` e `admin` — formaliza chegada e saída |
+| **Histórico** | o que já encerrou (e quem não é portaria só vê o próprio) |
+
+A página `portaria` entra na lista de **todos** os perfis, porque todo
+funcionário recebe visita; o que separa os dois públicos é a aba Recepção,
+travada por `podeVerRecepcao()`. O perfil `portaria` vê só duas telas —
+`portaria` e `chat` (é como ele chama o anfitrião quando o visitante chega e a
+pessoa não aparece). **Não vê o Painel do Dia**: os cards de lá são de estoque,
+e ele abriria numa tela vazia.
+
+⚠️ O perfil e a página se chamam os dois `portaria`. São dicionários
+diferentes (`PERFIS` × `PAGINAS`), não há colisão.
+
+### Decisões
+
+- ⚠️ **A saída não estava no pedido e entrou de propósito.** Sem ela a tela
+  responde "quem era esperado hoje", mas não **"quem está dentro da fábrica
+  agora"** — a única lista que importa numa emergência. Custou uma coluna de
+  data, não um módulo.
+- ⚠️ **Duas consultas na carga, e a segunda não é redundância.** A primeira traz
+  o período recente; a segunda traz **todas** as que estão com visitante
+  dentro, sem corte de data. Sem ela, um visitante que entrou e ninguém deu
+  baixa sairia da lista ao envelhecer além do limite — e "quem está dentro"
+  passaria a mentir justamente sobre o caso que mais importa, o visitante
+  esquecido lá dentro.
+- **Só nome e horário são obrigatórios.** Exigir documento de antemão faria o
+  funcionário deixar de cadastrar, e aí a portaria volta a descobrir a visita
+  quando ela chega — que é o que esta tela existe para acabar. Meia informação
+  na hora certa vale mais que nenhuma.
+- **Crachá e placa gravam ao sair do campo, fora do clique de "Chegou".** O
+  visitante está na frente do porteiro: o que não pode travar é o registro da
+  chegada. Quem precisa anotar o crachá anota depois.
+- ⚠️ **Chegada e saída levam `.eq('status', ...)` além do id.** Dois porteiros
+  clicando quase junto não carimbam duas vezes: o segundo recebe o aviso em vez
+  de sobrescrever a hora do primeiro. Testado.
+- **Cancelar é segundo clique no próprio botão**, não `confirm()` — com
+  "impedir que esta página crie novos diálogos" marcado o Chrome devolve
+  `false` e o clique vira botão quebrado (seção 7).
+- **`anfitriao_nome` é retrato**, como `localizacao_na_reserva` no fase38: a
+  portaria lê a lista sem join, e o histórico continua legível se a pessoa sair
+  da empresa.
+- **Sem política de DELETE**: "não vem mais" é o status `cancelada`. Livro de
+  portaria que se apaga não serve de livro de portaria.
+
+### ⚠️ Dado pessoal de terceiro — o RLS aqui é mais fechado que o padrão
+
+Documento e empresa de visitante não são dado da operação: são de uma pessoa
+que não trabalha aqui e não tem conta no portal. Por isso a leitura **não**
+usa o `esta_aprovado() + unidade` de sempre — exige ser o **anfitrião daquela
+visita**, a **portaria daquela unidade**, ou admin. Um consultor de outra
+fábrica não lê nada disto.
+
+**PENDÊNCIA em aberto, a decidir com o Robson:** por quanto tempo esse
+histórico fica guardado. Hoje fica para sempre. Não criei função de expurgo
+porque função destrutiva sobrando no banco é pior que código morto (ver o
+histórico do fase26/fase27) — que seja decisão tomada, com prazo definido.
+
+### De quebra: DOZE tabelas estavam fora do backup
+
+Ao acrescentar `portaria_visitas` em `TABELAS_BACKUP` (js/configuracoes.js),
+uma varredura de `create table` em `sql/` contra a lista achou **doze** tabelas
+que nunca tinham entrado: as do chat (fase64), da devolução (fase52), do débito
+direto (fase51), das refeições (fase66/67) e mais sete. É exatamente a omissão
+silenciosa que a seção 24 avisa que acontece — **o arquivo baixa, parece
+completo, e não está**. Todas entraram, e o comentário da lista agora traz o
+comando de conferência (um `grep` de `create table if not exists` em `sql/`
+comparado com a lista).
+
+Conferido no navegador com o banco mockado: a Recepção lista as visitas com a
+presente no topo e o atraso sinalizado, e "Minhas visitas" traz só as do
+anfitrião logado; a chegada grava `status`+`chegada_em`+`chegada_por` com o
+filtro de corrida e dispara o broadcast **no canal do anfitrião certo**
+(testado com visitante de outra pessoa — não foi para o meu); a corrida de dois
+porteiros afeta zero linhas, preserva quem registrou primeiro e avisa em vez de
+sobrescrever; agendar sem nome e sem horário é recusado **sem chamar o banco**;
+a placa grava em maiúscula e o campo sem mudança não gera requisição; cancelar
+pede o segundo clique; a saída zera o contador de "na fábrica"; o consultor não
+vê a aba Recepção e forçá-la pelo inspetor cai em "Minhas visitas"; o menu do
+perfil `portaria` tem só duas telas; as 18 páginas do admin abrem sem erro; e
+uma mensagem com HTML no nome do visitante vira texto, sem executar.
+**Zero texto abaixo de 4,5:1 nos dois temas**, inclusive na linha atrasada e no
+botão de confirmação; no celular nada estoura os 375px nas três abas. Zero erro
+de console.

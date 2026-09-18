@@ -18,11 +18,29 @@
 // Programacao de Separacao NAO aparece para consultor nem para estoque_aco:
 // ela move separacao, enderecamento e saida de material de verdade, diferente
 // da Requisicao (que e so pedir). Quem faz esse fluxo e o ALM da unidade.
+//
+// ⚠️ PERFIL `portaria` (18/09/2026) -- o porteiro tem login proprio e NAO ve
+// material nenhum: so a tela de visitas e o chat (que e como ele fala com o
+// anfitriao quando o visitante chega e a pessoa nao aparece). Ele e o primeiro
+// da lista de proposito: `ORDEM_PERFIS` em js/configuracoes.js e a ordem
+// DESTE objeto, "do menos para o mais privilegiado".
+//
+// ⚠️ E o perfil `portaria` NAO e so esta linha. O valor e validado em TRES
+// lugares no banco -- o CHECK da coluna, `definir_acesso()` e
+// `forca_cadastro_neutro()` -- e sem o terceiro quem se cadastra escolhendo
+// "Portaria" vira "Consultor" EM SILENCIO. Ver sql/fase68-portaria-visitas.sql.
+//
+// ⚠️ A pagina 'portaria' entra em TODO perfil, e o perfil `portaria` tambem se
+// chama 'portaria' -- sao dicionarios diferentes (PAGINAS x PERFIS), nao ha
+// colisao. A pagina e de todos porque todo funcionario recebe visita; o que
+// separa os dois publicos e a ABA Recepcao dentro dela, travada por
+// podeVerRecepcao() em js/portaria.js.
 const PERFIS = {
-  consultor:   { rotulo: 'Consultor',   paginas: ['painel', 'estoque', 'chat', 'refeicoes'] },
-  estoque_alm: { rotulo: 'Estoque ALM', paginas: ['painel', 'estoque', 'sesmt', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'debitodireto', 'devolucao', 'metragem', 'analise', 'mfg', 'chat', 'refeicoes'] },
-  estoque_aco: { rotulo: 'Estoque Aço', paginas: ['painel', 'bobinas', 'requisicao', 'chat', 'refeicoes'] },
-  admin:       { rotulo: 'Admin',       paginas: ['painel', 'estoque', 'sesmt', 'bobinas', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'debitodireto', 'devolucao', 'metragem', 'analise', 'mfg', 'config', 'chat', 'refeicoes'] }
+  portaria:    { rotulo: 'Portaria',    paginas: ['portaria', 'chat'] },
+  consultor:   { rotulo: 'Consultor',   paginas: ['painel', 'estoque', 'chat', 'refeicoes', 'portaria'] },
+  estoque_alm: { rotulo: 'Estoque ALM', paginas: ['painel', 'estoque', 'sesmt', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'debitodireto', 'devolucao', 'metragem', 'analise', 'mfg', 'chat', 'refeicoes', 'portaria'] },
+  estoque_aco: { rotulo: 'Estoque Aço', paginas: ['painel', 'bobinas', 'requisicao', 'chat', 'refeicoes', 'portaria'] },
+  admin:       { rotulo: 'Admin',       paginas: ['painel', 'estoque', 'sesmt', 'bobinas', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'debitodireto', 'devolucao', 'metragem', 'analise', 'mfg', 'config', 'chat', 'refeicoes', 'portaria'] }
 };
 
 const PAGINAS = {
@@ -98,6 +116,11 @@ const PAGINAS = {
   // tem menos tela e nenhum outro canal dentro do portal (mesmo motivo do
   // botão de sugestão em montarMenu()).
   chat: { rotulo: 'Chat', icone: '💬', elemento: 'chatContent' },
+  // Visita agendada pelo funcionario, formalizada pela portaria na chegada
+  // (caixa de sugestoes, via Victor, 18/09/2026). Fica por ultimo junto do
+  // chat: como ele, nao e sobre material nenhum -- e a unica tela que fala
+  // de gente de fora. Ver js/portaria.js.
+  portaria: { rotulo: 'Portaria', icone: '🛂', elemento: 'portariaContent' },
   // Robson, 18/09/2026: "Estou montando um sistema de controle de refeições
   // de final de semana" -> "faça uma aba com essa ideia". Aparece pra todo
   // perfil porque quem preenche são os LÍDERES DE SETOR (Produção,
@@ -262,6 +285,7 @@ function mostrarPagina(id) {
     pararTempoRealDocas();
     pararRelogioDocas();
   }
+  if (id === 'portaria') { carregarPortaria(); }
   if (id === 'debitodireto') { carregarDebitoDireto(); }
   if (id === 'devolucao') { carregarDevolucao(); }
   if (id === 'analise') { carregarAnalise(); }

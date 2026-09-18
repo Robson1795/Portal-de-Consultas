@@ -642,3 +642,89 @@ function iniciarAvisoRefeicoes() {
   conferirAvisoRefeicoes();
   refeicoesTimerAviso = setInterval(conferirAvisoRefeicoes, 10 * 60 * 1000);
 }
+
+// ---- Visitante chegou na portaria (18/09/2026) ------------------------------
+//
+// Da caixa de sugestões, via Victor: "Portaria recebe as informações e quando
+// o visitante chega só formaliza e informa o funcionário". Este é o "informa".
+//
+// ⚠️ CANAL POR PESSOA, não por unidade -- e é a diferença que importa em
+// relação aos dois avisos acima. Preparo e devolução são recados de SETOR:
+// filtrar no cliente não esconde de ninguém nada que já não pudesse ver. Aqui
+// o payload tem nome e empresa de um visitante, e um canal por unidade
+// entregaria isso a TODO mundo com o portal aberto na fábrica -- só a tela é
+// que decidiria não desenhar o cartão, com o dado já tendo chegado na máquina
+// de quem não é o anfitrião. `alertas-visita-<meu id>` custa o mesmo e não
+// vaza. Efeito colateral bom: não precisa reassinar ao trocar de unidade.
+let canalAvisoVisita = null;
+
+// Quem recebe visita é qualquer pessoa, então não há recorte de perfil aqui --
+// diferente de todos os outros avisos deste arquivo. A trava é o id: só chega
+// no canal de quem é o anfitrião.
+async function contarVisitantesEsperando() {
+  if (!userIdAtual) return 0;
+  const { count, error } = await sb.from('portaria_visitas')
+    .select('id', { count: 'exact', head: true })
+    .eq('anfitriao_id', userIdAtual)
+    .eq('status', 'presente');
+  if (error) {
+    // Silencioso de propósito: é aviso de cortesia, e a fase68 pode não ter
+    // rodado ainda. A tela da Portaria é que diz isso em voz alta.
+    console.warn('Portaria: não foi possível contar visitantes esperando:', error.message);
+    return 0;
+  }
+  return count || 0;
+}
+
+function irParaPortaria() {
+  if (typeof mostrarPagina === 'function') mostrarPagina('portaria');
+}
+
+function notificarVisitaChegou({ visitanteNome, visitanteEmpresa, porteiro }) {
+  if (!visitanteNome) return;
+  mostrarNotificacao({
+    icone: '🛂',
+    titulo: 'Seu visitante chegou',
+    texto: `<b>${escapeHtml(visitanteNome)}</b>`
+      + (visitanteEmpresa ? ` — ${escapeHtml(visitanteEmpresa)}` : '')
+      + ' está na portaria.'
+      + (porteiro ? `<br><span class="notif-detalhe">Registrado por ${escapeHtml(porteiro)}</span>` : ''),
+    acaoRotulo: 'Abrir Portaria',
+    aoClicarAcao: irParaPortaria,
+    // Chave por visitante + instante: a mesma pessoa voltando outro dia é
+    // evento novo, não duplicata -- mesma decisão do aviso de preparo.
+    chave: 'visita:' + visitanteNome + ':' + Date.now()
+  });
+}
+
+async function iniciarAvisoVisita() {
+  if (canalAvisoVisita) { sb.removeChannel(canalAvisoVisita); canalAvisoVisita = null; }
+  if (!userIdAtual) return;
+
+  garantirPermissaoNotificacao();
+
+  // Rede para quem não estava com o portal aberto na hora: o broadcast se
+  // perde, mas o visitante continua esperando na portaria. Mesmo desenho do
+  // resumo de cadastros pendentes (iniciarAvisoCadastro).
+  const esperando = await contarVisitantesEsperando();
+  if (esperando > 0) {
+    mostrarNotificacao({
+      icone: '🛂',
+      titulo: esperando === 1 ? 'Um visitante seu está na fábrica'
+                              : `${esperando} visitantes seus estão na fábrica`,
+      texto: 'A portaria já registrou a chegada e ainda não há saída registrada.',
+      acaoRotulo: 'Abrir Portaria',
+      aoClicarAcao: irParaPortaria,
+      chave: 'visita-esperando'
+    });
+  }
+
+  canalAvisoVisita = sb.channel(`alertas-visita-${userIdAtual}`)
+    .on('broadcast', { event: 'visita_chegou' }, (msg) => {
+      notificarVisitaChegou(msg.payload || {});
+      // A tela da Portaria já estava aberta atrás? Atualiza, pra não precisar
+      // clicar em Recarregar.
+      if (typeof carregarPortaria === 'function' && paginaAtual === 'portaria') carregarPortaria();
+    })
+    .subscribe();
+}

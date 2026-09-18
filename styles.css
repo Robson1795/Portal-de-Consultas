@@ -1979,3 +1979,39 @@ td.col-acoes { white-space: nowrap; text-align: center; }
   border-top: 2px solid var(--azul-borda);
   font-size: 14px;
 }
+
+/* ---- Portaria: visitas (18/09/2026) ---------------------------------------
+   Quatro classes, todas em TOKEN e nenhuma cor fixa -- cor fixa aqui viraria
+   mancha clara no tema escuro, que e o proprio sinal de que passou reto
+   (ver a secao de tema claro/escuro no CLAUDE.md). */
+
+/* Visita que passou do horario previsto e ninguem chegou. Nao e erro --
+   visitante atrasa --, por isso usa o tom de AVISO e nao o de erro: o que a
+   portaria precisa e enxergar sem procurar, nao levar um alarme. */
+.visita-atrasada td {
+  background: var(--aviso-fundo);
+}
+
+.visita-aviso {
+  font-size: 11px;
+  color: var(--aviso-texto);
+  font-weight: 600;
+}
+
+/* Cracha e placa: campo pequeno dentro da linha, gravado ao sair (ver
+   js/portaria.js). Herda a fonte da tabela pra nao destoar da celula. */
+.visita-campo {
+  padding: 3px 6px;
+  font-size: 13px;
+  font-family: inherit;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.visita-detalhe {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}

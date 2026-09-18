@@ -288,6 +288,10 @@ async function mostrarTelaCorreta(session) {
     // A unidade nova entra sozinha no próximo ping de presença.
     if (typeof iniciarPresencaChat === 'function') iniciarPresencaChat();
     if (typeof iniciarAvisoChat === 'function') iniciarAvisoChat();
+    // Portaria: mesmo motivo do chat -- vale pro portal INTEIRO, não só pra
+    // tela de visitas, e o canal é por PESSOA (js/notificacoes.js), então
+    // também não precisa reassinar ao trocar de unidade.
+    if (typeof iniciarAvisoVisita === 'function') iniciarAvisoVisita();
     // Cobrança de sexta das refeições: só pra quem tem a aba (fase66), e
     // depois de montarMenu() porque depende de `unidadeAtual`.
     if (typeof iniciarAvisoRefeicoes === 'function' && podeVerRefeicoesCache) iniciarAvisoRefeicoes();

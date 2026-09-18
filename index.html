@@ -52,6 +52,7 @@
           <option value="consultor">Consultor</option>
           <option value="estoque_alm">Estoque ALM</option>
           <option value="estoque_aco">Estoque Aço</option>
+          <option value="portaria">Portaria</option>
         </select>
         <input type="text" id="authNomeCompleto" placeholder="Seu nome completo" style="width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:10px; font-size:14px; display:none;">
         <input type="text" id="authEmail" placeholder="Nome de usuário (ex: joao.silva)" style="width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:10px; font-size:14px;">
@@ -984,6 +985,128 @@
     </div>
   </div>
   <!-- ================= FIM REFEIÇÕES FIM DE SEMANA ================= -->
+
+  <!-- ================= PORTARIA ================= -->
+  <!-- Da caixa de sugestoes (Victor, 18/09/2026): o funcionario cadastra quem
+       vem, e a portaria so formaliza a chegada e avisa quem recebe. O aviso
+       ao anfitriao usa o mesmo empilhador de notificacao do resto do portal
+       (js/notificacoes.js), num canal por PESSOA -- ver js/portaria.js. -->
+  <div id="portariaContent" style="display:none;">
+    <div class="panel">
+      <h2 style="margin:0 0 4px;">🛂 Portaria</h2>
+      <div class="modal-text" style="margin-bottom:12px;">
+        Cadastre quem vem visitar você: a portaria já vê na lista e, quando a
+        pessoa chegar, você recebe o aviso na hora.
+      </div>
+
+      <div class="stats">
+        <div class="stat-pill">Na fábrica agora<strong id="portariaDentro">0</strong><span style="font-size:11px;">visitantes sem saída registrada</span></div>
+        <div class="stat-pill">Previstas para hoje<strong id="portariaHoje">0</strong><span style="font-size:11px;">ainda não chegaram</span></div>
+      </div>
+
+      <div class="cfg-barra" id="portariaAbas">
+        <button class="btn btn-primary" data-portaria-aba="minhas">Minhas visitas</button>
+        <button class="btn" data-portaria-aba="recepcao" id="portariaAbaRecepcaoBtn">Recepção</button>
+        <button class="btn" data-portaria-aba="historico">Histórico</button>
+        <button class="btn" id="portariaRecarregarBtn" title="Buscar de novo no banco">🔄 Recarregar</button>
+      </div>
+      <div class="status-msg" id="portariaMsg" style="padding:0 16px;"></div>
+
+      <!-- ---- MINHAS VISITAS ---- -->
+      <div id="portariaMinhas">
+        <div class="cfg-barra">
+          <input type="text" id="portariaVisitanteNome" placeholder="Nome de quem vem *" style="flex:2; min-width:180px;">
+          <input type="text" id="portariaVisitanteDoc" placeholder="Documento" style="flex:1; min-width:120px;">
+          <input type="text" id="portariaVisitanteEmpresa" placeholder="Empresa" style="flex:1; min-width:140px;">
+        </div>
+        <div class="cfg-barra">
+          <input type="datetime-local" id="portariaPrevistoEm" title="Data e hora previstas *" style="flex:1; min-width:190px;">
+          <input type="text" id="portariaVisitantePlaca" placeholder="Placa do veículo" style="flex:1; min-width:130px;">
+          <input type="text" id="portariaMotivo" placeholder="Motivo da visita" style="flex:2; min-width:160px;">
+          <button class="btn btn-primary" id="portariaAgendarBtn">+ Agendar visita</button>
+        </div>
+        <div class="status-msg" id="portariaAgendarMsg" style="padding:0 16px;"></div>
+
+        <div class="scroll-area">
+          <table>
+            <thead>
+              <tr>
+                <th>Previsto</th>
+                <th>Visitante</th>
+                <th>Empresa</th>
+                <th>Situação</th>
+                <th>Chegou</th>
+                <th>Ação</th>
+              </tr>
+            </thead>
+            <tbody id="portariaMinhasBody"></tbody>
+          </table>
+          <div id="portariaMinhasVazio" class="modal-text" style="padding:12px 16px; display:none;">
+            Você ainda não agendou nenhuma visita.
+          </div>
+        </div>
+      </div>
+
+      <!-- ---- RECEPÇÃO (só perfil portaria e admin) ---- -->
+      <div id="portariaRecepcao" style="display:none;">
+        <div class="cfg-barra">
+          <input type="text" id="portariaBusca" placeholder="Buscar visitante, empresa, documento ou quem recebe..." style="flex:2; min-width:220px;">
+          <label style="display:flex; align-items:center; gap:6px; font-size:13px;">
+            <input type="checkbox" id="portariaSoHoje" checked> Só hoje
+          </label>
+        </div>
+        <div class="status-msg" id="portariaRecepcaoMsg" style="padding:0 16px;"></div>
+
+        <div class="scroll-area">
+          <table>
+            <thead>
+              <tr>
+                <th>Previsto</th>
+                <th>Visitante</th>
+                <th>Documento</th>
+                <th>Empresa</th>
+                <th>Quem recebe</th>
+                <th>Situação</th>
+                <th>Crachá</th>
+                <th>Placa</th>
+                <th>Ação</th>
+              </tr>
+            </thead>
+            <tbody id="portariaRecepcaoBody"></tbody>
+          </table>
+          <div id="portariaRecepcaoVazio" class="modal-text" style="padding:12px 16px; display:none;"></div>
+        </div>
+      </div>
+
+      <!-- ---- HISTÓRICO ---- -->
+      <div id="portariaHistorico" style="display:none;">
+        <div class="cfg-barra">
+          <input type="text" id="portariaHistBusca" placeholder="Buscar no histórico..." style="flex:1; min-width:200px;">
+        </div>
+        <div class="scroll-area">
+          <table>
+            <thead>
+              <tr>
+                <th>Previsto</th>
+                <th>Visitante</th>
+                <th>Empresa</th>
+                <th>Quem recebeu</th>
+                <th>Situação</th>
+                <th>Entrada</th>
+                <th>Saída</th>
+                <th>Atendido por</th>
+              </tr>
+            </thead>
+            <tbody id="portariaHistBody"></tbody>
+          </table>
+          <div id="portariaHistVazio" class="modal-text" style="padding:12px 16px; display:none;">
+            Nenhuma visita encerrada ainda.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- ================= FIM PORTARIA ================= -->
 
   <!-- ================= ANÁLISE DE COMPRAS ================= -->
   <!-- Cola a planilha dos pedidos que estão entrando pra separação e compara
@@ -2713,6 +2836,7 @@
 <script src="js/metragem.js"></script>
 <script src="js/chat.js"></script>
 <script src="js/refeicoes.js"></script>
+<script src="js/portaria.js"></script>
 <script src="js/painelseparacao.js"></script>
 <script src="js/mfg.js"></script>
 <script src="js/tour.js"></script>
