@@ -24,9 +24,20 @@ let podeVerRefeicoesCache = false;
 
 async function atualizarPermissaoRefeicoes() {
   const { data, error } = await sb.rpc('pode_ver_refeicoes');
-  // Erro (inclusive "função não existe", antes de rodar a fase67) fecha a
-  // aba em vez de abrir: permissão que falha tem que falhar fechando.
-  podeVerRefeicoesCache = !error && data === true;
+  if (!error) { podeVerRefeicoesCache = data === true; return; }
+
+  // A FUNÇÃO PODE NEM EXISTIR AINDA (antes de rodar a fase67) -- e foi
+  // exatamente o que aconteceu no dia em que a aba subiu: Robson, 18/09/2026,
+  // com print do menu sem ela, "nao atualizou ainda". A aba sumia calada, sem
+  // dizer que faltava rodar a SQL, e justamente pra quem ia rodar.
+  //
+  // Erro fecha a aba pra todo mundo, MENOS admin. Não é abrir exceção de
+  // permissão: admin passa em `eh_admin()` dentro da própria função -- se ela
+  // existisse, ele veria a aba de qualquer jeito. O que isto evita é o modo de
+  // falha silencioso, porque quem entra por aqui cai na tela e lê "rode
+  // sql/faseNN" em vez de ficar procurando um menu que não aparece.
+  podeVerRefeicoesCache = !!isAdminAtual;
+  console.warn('Refeições: pode_ver_refeicoes() indisponível (sql/fase67-refeicoes-acesso.sql):', error.message);
 }
 
 let refeicoesLinhas = [];   // linhas do fim de semana escolhido, desta unidade
