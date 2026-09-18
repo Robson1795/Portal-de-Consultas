@@ -506,26 +506,22 @@ function notificarMensagemChat({ remetenteId, remetenteNome, destinatarioId, tex
   // o conteúdo, mas o broadcast é solto: sem este filtro, o portal mostraria
   // um aviso sobre conversa alheia.
   if (destinatarioId && destinatarioId !== userIdAtual) return;
-
-  const privada = !!destinatarioId;
+  // Sem mural (18/09/2026), mensagem sem destinatário não é mais dirigida a
+  // ninguém. Se alguma sobrar no ar vinda de uma aba antiga, ignora.
+  if (!destinatarioId) return;
 
   // Já está com a conversa aberta na tela? Não precisa de popup -- a
   // mensagem aparece sozinha ali (releitura de 20s / envio).
-  const conversaAberta = paginaAtual === 'chat'
-    && chatConversaAtual === (privada ? remetenteId : CHAT_MURAL);
-  if (conversaAberta) return;
+  if (paginaAtual === 'chat' && chatConversaAtual === remetenteId) return;
 
   mostrarNotificacao({
     icone: '💬',
-    titulo: privada ? `Mensagem de ${remetenteNome || 'alguém'}`
-                    : `${remetenteNome || 'Alguém'} escreveu no Geral`,
+    titulo: `Mensagem de ${remetenteNome || 'alguém'}`,
     texto: escapeHtml(texto || ''),
     acaoRotulo: 'Responder',
     aoClicarAcao: () => {
       if (typeof mostrarPagina === 'function') mostrarPagina('chat');
-      if (typeof abrirConversaChat === 'function') {
-        abrirConversaChat(privada ? remetenteId : CHAT_MURAL);
-      }
+      if (typeof abrirConversaChat === 'function') abrirConversaChat(remetenteId);
     },
     // Chave por remetente + instante: cada mensagem é um aviso novo. Duas
     // mensagens seguidas da mesma pessoa são duas coisas pra ler, não uma
@@ -549,7 +545,6 @@ async function iniciarAvisoChat() {
   // abrisse o chat por conta própria.
   if (typeof carregarNaoLidasChat === 'function') {
     await carregarNaoLidasChat();
-    await carregarNaoLidasMural();
     atualizarBadgeChat();
     const total = chatTotalNaoLidas();
     if (total > 0) {
@@ -571,7 +566,6 @@ async function iniciarAvisoChat() {
       // Bolinha do menu e, se a tela estiver aberta, a conversa em si.
       if (typeof carregarNaoLidasChat === 'function' && payload.remetenteId !== userIdAtual) {
         await carregarNaoLidasChat();
-        await carregarNaoLidasMural();
         atualizarBadgeChat();
         if (paginaAtual === 'chat') {
           await carregarMensagensChat();
