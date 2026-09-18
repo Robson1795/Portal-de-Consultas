@@ -7827,3 +7827,60 @@ notificação nos 4 casos (notifica pra mim / não notifica de terceiros / não
 notifica eco / não notifica com a conversa aberta), badge somando mural +
 privadas, e **XSS**: mensagem com `<img onerror>` virou texto, sem executar
 nem criar elemento. Sem erro no console.
+
+## 79. Refeições de fim de semana (18/09/2026) — sql/fase66 e fase67
+
+O Robson: *"Estou montando um sistema de controle de refeições de final de
+semana na minha empresa"*, com três partes (líder informa / gerente
+consolida / texto pro refeitório). Pedido primeiro como página avulsa; logo
+depois: *"faça uma aba com essa ideia"* — dentro do portal, onde já existe
+login, unidade e permissão, em vez de link separado pra distribuir.
+
+**Uma tela só, três seções numeradas.** São o mesmo fim de semana visto de
+três distâncias. Separar em abas obrigaria a lembrar em qual delas escolheu a
+data — e o erro mais caro aqui é mandar pro refeitório o número da semana
+passada.
+
+**A chave é (unidade, sábado, setor)** — o líder volta e corrige o número até
+a hora do envio sem criar uma segunda linha do mesmo setor. Sem isso,
+"Produção: 30" e "Produção: 45" apareceriam os dois e o refeitório receberia
+soma errada. O formulário já abre com o que o setor informou, pra corrigir
+ser trocar um número, não redigitar.
+
+**Setor que não respondeu aparece na tabela como "Aguardando".** A informação
+que o gerente precisa antes de enviar é justamente quem FALTA — tabela só com
+quem preencheu esconde isso. No texto do refeitório eles saem de fora (não se
+cozinha "aguardando"), mas o rodapé diz "X de 5 setores respondidos", pra
+quem recebe saber se o número está fechado.
+
+**O relatório é texto pra copiar**, não PDF: é assim que esse recado anda
+hoje (WhatsApp/e-mail). Por isso o botão principal é Copiar, com seleção
+automática como plano B quando o navegador bloqueia a área de transferência.
+
+**Alerta de sexta** — *"quero tambem que envie alertas em todas as sextas
+feira até o meio dia tem que ter a relaçao"*. Diferente de todos os outros
+avisos do portal, este não nasce de broadcast: ninguém dispara uma
+sexta-feira. É conferido no login e a cada 10 min com o portal aberto — é o
+que faz a virada do meio-dia acontecer pra quem deixou a tela aberta a manhã
+inteira. Duas caras: antes do meio-dia ainda dá tempo; depois, o prazo
+venceu e o tom (e o som) mudam. Não cobra quem já fechou a relação —
+cobrar quem respondeu é o jeito mais rápido de ensinar a ignorar a
+notificação.
+
+**Acesso por pessoa (fase67)** — *"dai eu vou selecionar as pessoas que vao
+ter acesso"* / *"por enquanto só eu e o Victor e o Ivair"*. Mesmo desenho da
+Análise de Compras (fase21): tabela de e-mails + RPC `pode_ver_refeicoes()`
+`security definer` (necessária porque a lista é só de admin — sem ela, quem
+está liberado e não é admin não leria nem a própria permissão). Diferença
+proposital em relação à fase21: **tem tela**. Configurações → "Quem acessa
+Refeições FDS" adiciona e remove sem abrir o SQL Editor, que é o incômodo da
+lista da Análise até hoje. Permissão que falha, falha FECHANDO a aba.
+
+Testado localmente: sábado padrão caindo mesmo num sábado; três setores
+lançados e a Produção corrigida de 30→28 sem duplicar; total 43/22/65
+conferindo com a soma; "Aguardando" nos que faltam; texto do refeitório com
+as duas datas, os dois blocos, observações e rodapé; aba some do menu quando
+`podeVerRefeicoesCache` é falso; lista de acesso listando o Ivair; e o aviso
+nos quatro casos (sexta de manhã / sexta à tarde com texto e som diferentes /
+quinta não avisa / relação fechada não cobra), sem empilhar na releitura de
+10 minutos. Sem erro no console.

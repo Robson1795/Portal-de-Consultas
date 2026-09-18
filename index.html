@@ -885,6 +885,99 @@
   </div>
   <!-- ================= FIM CHAT ================= -->
 
+  <!-- ================= REFEIÇÕES FIM DE SEMANA ================= -->
+  <!-- Robson, 18/09/2026: "Estou montando um sistema de controle de refeições
+       de final de semana na minha empresa" -> "faça uma aba com essa ideia".
+       Três partes na mesma tela (líder informa / gerente consolida / texto
+       pro refeitório) -- ver js/refeicoes.js. -->
+  <div id="refeicoesContent" style="display:none;">
+    <div class="panel">
+      <h2 style="margin:0 0 4px;">🍽️ Refeições de Fim de Semana</h2>
+      <div class="modal-text" style="margin-bottom:12px;">
+        Cada líder informa quantas refeições o setor dele precisa no sábado e no domingo.
+        O consolidado soma tudo sozinho e o botão do fim gera o texto pronto pra mandar pro refeitório.
+      </div>
+
+      <div class="cfg-barra" style="flex-wrap:wrap; align-items:flex-end;">
+        <div>
+          <label style="font-size:11px; color:var(--muted); display:block;">Sábado do fim de semana</label>
+          <input type="date" id="refeicoesSabado"
+                 style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+        </div>
+        <div>
+          <label style="font-size:11px; color:var(--muted); display:block;">Domingo</label>
+          <div id="refeicoesDomingoRotulo" style="padding:8px 0; font-size:13px; font-weight:700;">—</div>
+        </div>
+        <div style="flex:1; text-align:right; font-size:13px; color:var(--muted);" id="refeicoesResumoTopo"></div>
+      </div>
+
+      <div class="status-msg" id="refeicoesMsg" style="margin:6px 0 14px;"></div>
+
+      <!-- ---- 1. Formulário do líder ---- -->
+      <h3 style="margin:0 0 6px; font-size:15px;">1 · Informe o seu setor</h3>
+      <div class="cfg-barra" style="flex-wrap:wrap; align-items:flex-end;">
+        <div>
+          <label style="font-size:11px; color:var(--muted); display:block;">Setor</label>
+          <select id="refeicoesSetor"
+                  style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px; min-width:150px;"></select>
+        </div>
+        <div>
+          <label style="font-size:11px; color:var(--muted); display:block;">Refeições sábado</label>
+          <input type="text" inputmode="numeric" id="refeicoesQtdSabado" placeholder="0"
+                 style="width:110px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px; text-align:right;">
+        </div>
+        <div>
+          <label style="font-size:11px; color:var(--muted); display:block;">Refeições domingo</label>
+          <input type="text" inputmode="numeric" id="refeicoesQtdDomingo" placeholder="0"
+                 style="width:110px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px; text-align:right;">
+        </div>
+        <div style="flex:1; min-width:220px;">
+          <label style="font-size:11px; color:var(--muted); display:block;">Observações dietéticas</label>
+          <input type="text" id="refeicoesObs" placeholder="Ex.: 2 sem lactose, 1 vegetariano"
+                 style="width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+        </div>
+        <button class="btn btn-primary" id="refeicoesSalvarBtn">Salvar setor</button>
+        <button class="btn" id="refeicoesLimparBtn" title="Apagar o lançamento deste setor neste fim de semana">🗑</button>
+      </div>
+      <div id="refeicoesFormInfo" style="font-size:11.5px; color:var(--muted); margin:6px 0 18px;"></div>
+
+      <!-- ---- 2. Consolidado do gerente ---- -->
+      <h3 style="margin:0 0 6px; font-size:15px;">2 · Consolidado do fim de semana</h3>
+      <div class="scroll-area">
+        <table id="refeicoesTabela">
+          <thead>
+            <tr>
+              <th>Setor</th>
+              <th class="num">Sábado</th>
+              <th class="num">Domingo</th>
+              <th class="num">Total</th>
+              <th>Observações dietéticas</th>
+              <th>Quem informou</th>
+            </tr>
+          </thead>
+          <tbody id="refeicoesBody"></tbody>
+        </table>
+      </div>
+      <div class="empty-msg" id="refeicoesVazio" style="display:none;">
+        Nenhum setor informou refeições para este fim de semana ainda.
+      </div>
+
+      <!-- ---- 3. Relatório pro refeitório ---- -->
+      <h3 style="margin:18px 0 6px; font-size:15px;">3 · Envio pro refeitório</h3>
+      <button class="btn btn-primary" id="refeicoesGerarBtn">📋 Gerar Relatório de Envio</button>
+      <div id="refeicoesRelatorioBox" style="display:none; margin-top:10px;">
+        <textarea id="refeicoesRelatorioTexto" rows="16" readonly
+                  style="width:100%; box-sizing:border-box; padding:10px; font-family:inherit; font-size:13px;
+                         border:1px solid var(--border); border-radius:8px; background:var(--panel-2); color:var(--ink);"></textarea>
+        <div class="cfg-barra" style="margin-top:8px;">
+          <button class="btn btn-primary" id="refeicoesCopiarBtn">📄 Copiar texto</button>
+          <div class="status-msg" id="refeicoesRelatorioMsg" style="flex:1;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- ================= FIM REFEIÇÕES FIM DE SEMANA ================= -->
+
   <!-- ================= ANÁLISE DE COMPRAS ================= -->
   <!-- Cola a planilha dos pedidos que estão entrando pra separação e compara
        o total pedido de cada item com o saldo do almoxarifado da unidade:
@@ -2127,6 +2220,33 @@
       </div>
     </div>
 
+    <!-- ============ QUEM ACESSA REFEIÇÕES FDS (18/09/2026) ============
+         Robson: "dai eu vou selecionar as pessoas que vao ter acesso". Sem
+         esta tela, mudar a lista exigiria abrir o SQL Editor do Supabase a
+         cada pessoa nova — que é o que acontece hoje com a lista da Análise
+         de Compras (fase21) e incomoda. Ver js/refeicoes.js. -->
+    <div class="panel">
+      <h3 style="margin-top:0;">🍽️ Quem acessa Refeições FDS</h3>
+      <div class="modal-text" style="margin-bottom:10px;">
+        Só quem estiver nesta lista vê a aba <b>Refeições FDS</b> e recebe o aviso de sexta-feira.
+        Use o e-mail de <b>login no portal</b> da pessoa. Admin enxerga a aba de qualquer forma.
+      </div>
+      <div class="cfg-barra">
+        <input type="email" id="refeicoesAcessoEmail" placeholder="email@portal.kingspanisoeste.local"
+               style="flex:1; min-width:240px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px;">
+        <button class="btn btn-primary" id="refeicoesAcessoAddBtn">Liberar acesso</button>
+      </div>
+      <div class="status-msg" id="refeicoesAcessoMsg" style="margin:6px 0;"></div>
+      <div class="scroll-area">
+        <table id="refeicoesAcessoTabela">
+          <thead>
+            <tr><th>E-mail</th><th>Liberado por</th><th>Quando</th><th></th></tr>
+          </thead>
+          <tbody id="refeicoesAcessoCorpo"></tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- ============ BACKUP DE UM CLIQUE (14/09/2026) ============
          O CLAUDE.md lista "sem backup automático" e "hospedagem com ponto
          único de falha" como riscos abertos, e o sistema está prestes a ter
@@ -2585,6 +2705,7 @@
 <script src="js/devolucao.js"></script>
 <script src="js/metragem.js"></script>
 <script src="js/chat.js"></script>
+<script src="js/refeicoes.js"></script>
 <script src="js/painelseparacao.js"></script>
 <script src="js/mfg.js"></script>
 <script src="js/tour.js"></script>

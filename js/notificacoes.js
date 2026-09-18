@@ -582,3 +582,69 @@ async function iniciarAvisoChat() {
     })
     .subscribe();
 }
+
+// ---- Refeições de fim de semana: cobrança de sexta (18/09/2026) -------------
+//
+// Robson: "quero tambem que envie alertas em todas as sextas feira até o meio
+// dia tem que ter a relaçao". Prazo é sexta ao meio-dia -- então o aviso tem
+// duas caras: DE MANHÃ ainda dá tempo ("faltam X setores, fecha meio-dia"),
+// DEPOIS DO MEIO-DIA o prazo já venceu e o tom muda ("passou do meio-dia").
+//
+// Diferente de todos os outros avisos daqui, este não nasce de um broadcast:
+// ninguém "dispara" uma sexta-feira. Ele é olhado no login e de novo a cada
+// 10 minutos com o portal aberto -- é o que faz a virada do meio-dia
+// acontecer pra quem deixou a tela aberta a manhã inteira.
+//
+// Todo perfil recebe: quem preenche são os líderes de setor (Produção,
+// Manutenção, Qualidade), que no portal são consultor.
+function podeVerAvisoRefeicoes() {
+  return !!unidadeAtual;
+}
+
+function irParaRefeicoes() {
+  if (typeof mostrarPagina === 'function') mostrarPagina('refeicoes');
+}
+
+let refeicoesTimerAviso = null;
+
+async function conferirAvisoRefeicoes() {
+  if (!podeVerAvisoRefeicoes() || typeof setoresFaltandoRefeicoes !== 'function') return;
+
+  const agora = new Date();
+  if (agora.getDay() !== 5) return;  // só sexta-feira
+
+  const { faltando, sabado, erro } = await setoresFaltandoRefeicoes();
+  // Relação fechada não vira aviso -- cobrar quem já respondeu é o jeito mais
+  // rápido de ensinar a ignorar a notificação.
+  if (erro || !faltando.length) return;
+
+  const passouPrazo = agora.getHours() >= REFEICOES_PRAZO_HORA;
+  const lista = faltando.join(', ');
+
+  mostrarNotificacao({
+    icone: '🍽️',
+    titulo: passouPrazo
+      ? `Passou do meio-dia e faltam ${faltando.length} setor(es)`
+      : `Refeições do fim de semana: faltam ${faltando.length} setor(es)`,
+    texto: (passouPrazo
+        ? 'O prazo era hoje ao meio-dia e a relação ainda não fechou.'
+        : 'A relação precisa estar fechada hoje até o meio-dia.')
+      + `<br><span class="notif-detalhe">Sem informar: ${escapeHtml(lista)}</span>`
+      + `<br><span class="notif-detalhe">Fim de semana de ${escapeHtml(dataCurtaRefeicoes(sabado))}</span>`,
+    acaoRotulo: 'Preencher',
+    aoClicarAcao: irParaRefeicoes,
+    // Chave por dia + fase do prazo: a cobrança da manhã e a de depois do
+    // meio-dia são dois recados diferentes, mas nenhum dos dois empilha
+    // sozinho a cada releitura de 10 minutos.
+    chave: 'refeicoes:' + sabado + (passouPrazo ? ':tarde' : ':manha'),
+    som: passouPrazo ? 'devolucao' : undefined
+  });
+}
+
+// Chamado no login (js/auth.js). O intervalo é o que faz o aviso da tarde
+// aparecer pra quem entrou de manhã e não recarregou mais.
+function iniciarAvisoRefeicoes() {
+  if (refeicoesTimerAviso) clearInterval(refeicoesTimerAviso);
+  conferirAvisoRefeicoes();
+  refeicoesTimerAviso = setInterval(conferirAvisoRefeicoes, 10 * 60 * 1000);
+}

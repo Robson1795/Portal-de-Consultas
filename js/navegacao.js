@@ -19,10 +19,10 @@
 // ela move separacao, enderecamento e saida de material de verdade, diferente
 // da Requisicao (que e so pedir). Quem faz esse fluxo e o ALM da unidade.
 const PERFIS = {
-  consultor:   { rotulo: 'Consultor',   paginas: ['painel', 'estoque', 'chat'] },
-  estoque_alm: { rotulo: 'Estoque ALM', paginas: ['painel', 'estoque', 'sesmt', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'debitodireto', 'devolucao', 'metragem', 'analise', 'mfg', 'chat'] },
-  estoque_aco: { rotulo: 'Estoque Aço', paginas: ['painel', 'bobinas', 'requisicao', 'chat'] },
-  admin:       { rotulo: 'Admin',       paginas: ['painel', 'estoque', 'sesmt', 'bobinas', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'debitodireto', 'devolucao', 'metragem', 'analise', 'mfg', 'config', 'chat'] }
+  consultor:   { rotulo: 'Consultor',   paginas: ['painel', 'estoque', 'chat', 'refeicoes'] },
+  estoque_alm: { rotulo: 'Estoque ALM', paginas: ['painel', 'estoque', 'sesmt', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'debitodireto', 'devolucao', 'metragem', 'analise', 'mfg', 'chat', 'refeicoes'] },
+  estoque_aco: { rotulo: 'Estoque Aço', paginas: ['painel', 'bobinas', 'requisicao', 'chat', 'refeicoes'] },
+  admin:       { rotulo: 'Admin',       paginas: ['painel', 'estoque', 'sesmt', 'bobinas', 'requisicao', 'programacao', 'expacessorios', 'docas', 'expbenchmark', 'debitodireto', 'devolucao', 'metragem', 'analise', 'mfg', 'config', 'chat', 'refeicoes'] }
 };
 
 const PAGINAS = {
@@ -97,7 +97,13 @@ const PAGINAS = {
   // material nenhum. Aparece pra TODO perfil, inclusive consultor: é quem
   // tem menos tela e nenhum outro canal dentro do portal (mesmo motivo do
   // botão de sugestão em montarMenu()).
-  chat: { rotulo: 'Chat', icone: '💬', elemento: 'chatContent' }
+  chat: { rotulo: 'Chat', icone: '💬', elemento: 'chatContent' },
+  // Robson, 18/09/2026: "Estou montando um sistema de controle de refeições
+  // de final de semana" -> "faça uma aba com essa ideia". Aparece pra todo
+  // perfil porque quem preenche são os LÍDERES DE SETOR (Produção,
+  // Manutenção, Qualidade...), gente que no portal é consultor -- se
+  // dependesse de perfil de estoque, justamente quem informa não veria.
+  refeicoes: { rotulo: 'Refeições FDS', icone: '🍽️', elemento: 'refeicoesContent' }
 };
 
 let perfilAtual = 'consultor';
@@ -124,7 +130,10 @@ function montarMenu() {
   // dentro do setor. Não mistura as duas.
   const visiveis = (PERFIS[perfilAtual] || PERFIS.consultor).paginas
     .filter(id => id !== 'analise' || podeVerAnaliseCache)
-    .filter(id => id !== 'debitodireto' || podeVerDebitoDiretoCache);
+    .filter(id => id !== 'debitodireto' || podeVerDebitoDiretoCache)
+    // Mesma ideia, terceira tela com lista própria (fase66): Robson,
+    // 18/09/2026, "dai eu vou selecionar as pessoas que vao ter acesso".
+    .filter(id => id !== 'refeicoes' || podeVerRefeicoesCache);
 
   nav.innerHTML = visiveis.map(id => {
     const p = PAGINAS[id];
@@ -218,6 +227,7 @@ function mostrarPagina(id) {
   } else if (typeof pararChatTempoReal === 'function') {
     pararChatTempoReal();
   }
+  if (id === 'refeicoes') { carregarRefeicoes(); }
   // Catálogo EXP primeiro, DEPOIS a Programação -- buscarDescricoesItens()
   // olha catalogoExpItens em memória (não busca de novo), então se essa
   // promise ainda não tivesse terminado (o catálogo tem centenas de linhas,
@@ -257,6 +267,7 @@ function mostrarPagina(id) {
   if (id === 'config')  {
     carregarUsuarios().then(carregarAcessos);
     carregarConfigUnidades(); carregarLote(); carregarSugestoes();
+    if (typeof carregarAcessoRefeicoes === 'function') carregarAcessoRefeicoes();
   }
 }
 

@@ -262,6 +262,7 @@ async function mostrarTelaCorreta(session) {
     montarCabecalho();
     await atualizarPermissaoAnalise(); // precisa rodar antes do menu, pra saber se mostra "Análise de Compras"
     await atualizarPermissaoDebitoDireto(); // mesmo motivo, pra "Itens Débito Direto"
+    if (typeof atualizarPermissaoRefeicoes === 'function') await atualizarPermissaoRefeicoes(); // idem, pra "Refeições FDS"
     montarMenu();           // ja abre a primeira pagina permitida
     await atualizarBotaoEditar();
     // O botão de contagem virou trava por cargo quando a senha saiu (11/09/2026):
@@ -287,6 +288,9 @@ async function mostrarTelaCorreta(session) {
     // A unidade nova entra sozinha no próximo ping de presença.
     if (typeof iniciarPresencaChat === 'function') iniciarPresencaChat();
     if (typeof iniciarAvisoChat === 'function') iniciarAvisoChat();
+    // Cobrança de sexta das refeições: só pra quem tem a aba (fase66), e
+    // depois de montarMenu() porque depende de `unidadeAtual`.
+    if (typeof iniciarAvisoRefeicoes === 'function' && podeVerRefeicoesCache) iniciarAvisoRefeicoes();
   } else {
     authScreen.style.display = 'none';
     pendingScreen.style.display = 'block';

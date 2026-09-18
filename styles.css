@@ -1923,3 +1923,14 @@ td.col-acoes { white-space: nowrap; text-align: center; }
   margin-left: auto; background: var(--erro-borda); color: var(--sobre-acento);
   font-size: 11px; font-weight: 700; border-radius: 10px; padding: 1px 6px;
 }
+
+/* ---- Refeições de fim de semana (18/09/2026) ----
+   Setor que ainda não respondeu aparece na tabela mesmo assim (a informação
+   que o gerente precisa antes de enviar é quem FALTA), mas apagado -- não
+   pode competir visualmente com o número que já veio. */
+.refeicoes-pendente td { color: var(--muted); }
+.refeicoes-total td {
+  background: var(--azul-fundo);
+  border-top: 2px solid var(--azul-borda);
+  font-size: 14px;
+}
