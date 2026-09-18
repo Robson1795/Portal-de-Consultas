@@ -110,6 +110,13 @@
             <button class="topbar-tema" id="sugestaoBtn" style="display:none;"
                     title="Sugestão de melhoria — abre um chat no Teams com o Robson e o Victor"
                     aria-label="Sugestão de melhoria: abre um chat no Teams">💡</button>
+            <!-- Chat (18/09/2026, Victor): o item do menu lateral continua
+                 existindo, mas o menu abre fechado no celular -- e mensagem
+                 que chega precisa ser vista sem ninguém procurar. O número
+                 de não lidas vive em #chatBadge (ver atualizarBadgeChat). -->
+            <button class="topbar-tema topbar-chat" id="chatBtn" style="display:none;"
+                    title="Conversar com quem usa o portal"
+                    aria-label="Abrir o chat">💬<span class="topbar-badge" id="chatBadge" style="display:none;"></span></button>
             <button class="topbar-tema" id="tourBtn" title="Ver o tour do portal"
                     aria-label="Ver o tour do portal">🎓</button>
             <button class="topbar-tema" id="temaToggle" title="Alternar entre modo claro e escuro"
@@ -862,8 +869,8 @@
     <div class="panel">
       <h2 style="margin:0 0 4px;">💬 Chat</h2>
       <div class="modal-text" style="margin-bottom:12px;">
-        Conversa com quem usa o portal, de qualquer unidade. Em <b>📢 Geral</b> todo mundo lê;
-        clicando num nome, a conversa fica só entre vocês dois. Quem está offline recebe assim que entrar.
+        Conversa com quem usa o portal, de qualquer unidade. Clique num nome e a conversa fica
+        só entre vocês dois. Quem está offline aparece na lista do mesmo jeito e recebe assim que entrar.
       </div>
       <div class="status-msg" id="chatMsg" style="margin-bottom:8px;"></div>
 

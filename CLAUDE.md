@@ -3,7 +3,7 @@
 Contexto do projeto para qualquer agente de IA ou pessoa que for mexer neste repositório.
 Sempre em **português do Brasil**.
 
-**Atualizado:** 15/09/2026 (Análise MFG: índice do químico em kg/m² e por sistema químico)
+**Atualizado:** 18/09/2026 (Chat: botão no cabeçalho, agenda completa, sem mural)
 **Mantenedores:** Robson (dono do projeto e admin geral) · Victor Dobner (colaborador)
 
 > Este arquivo é lido automaticamente pelo Claude Code ao abrir a pasta do projeto.
@@ -7827,6 +7827,109 @@ notificação nos 4 casos (notifica pra mim / não notifica de terceiros / não
 notifica eco / não notifica com a conversa aberta), badge somando mural +
 privadas, e **XSS**: mensagem com `<img onerror>` virou texto, sem executar
 nem criar elemento. Sem erro no console.
+
+### Três ajustes no chat (18/09/2026) — sql/fase65-chat-contatos.sql
+
+O Victor, vendo o chat no ar: *"Crie um botão de chat que fique com os outros
+botões no topo da pagina. Quando tiver mensagens, mostre um icone de
+notificação com numero de mensagens pendentes"*, *"quando uma pessoa não
+estiver online, poder pesquisar o nome da pessoa mesmo estando offline"* e
+*"Remover o chat geral"*.
+
+#### 1. Botão 💬 no cabeçalho, com a contagem
+
+O item do menu lateral **continua existindo** — o botão não o substitui. O
+motivo de ter os dois: no celular o menu abre fechado, e mensagem que chega
+com a pessoa em outra tela precisa ser vista sem ninguém ir procurar. O
+`.nav-badge` do menu e o `#chatBadge` do cabeçalho são atualizados pela mesma
+`atualizarBadgeChat()`, que passou a escrever nos dois.
+
+- A bolinha é `position: absolute` ancorada no botão (`.topbar-chat` ganhou
+  `position: relative` só para isso) e leva `pointer-events: none` — o clique
+  é do botão, não do número em cima dele.
+- A borda da bolinha é da cor do cabeçalho, o que a recorta do botão embaixo.
+  Sem ela, número vermelho encostado na borda clara do botão fica ilegível.
+- Quem vê o botão segue `podeVer('chat')`, a **mesma** regra do item do menu,
+  em vez de aparecer sempre: se o chat sair de algum perfil um dia, o botão
+  sai junto sem ninguém lembrar dele aqui.
+
+⚠️ **Nasceu um token novo, `--erro-acao`.** As duas bolinhas usavam
+`--erro-borda`, que no tema escuro é um vermelho claro (`#e05c5c`): branco em
+cima dava **3,59:1**, abaixo do mínimo de 4,5:1 do projeto (seção 16). O
+projeto já tinha `--ok-acao` e `--aviso-acao` exatamente para "fundo colorido
+com texto branco" — faltava o vermelho. Agora são 6,47:1 no claro e 5,62:1 no
+escuro. **O `.nav-badge` do menu tinha o mesmo defeito e foi corrigido junto.**
+
+⚠️ **E o cabeçalho já estourava a tela no celular, antes deste botão.** Com
+cinco ícones ele chegava a 396px numa tela de 375 e o "Sair" ficava fora; o
+sexto levaria a 440. Os ícones e o espaçamento encolhem abaixo de 640px
+(30px e gap de 5px), e aí os seis mais o avatar e o "Sair" cabem com folga.
+Esconder algum não serviria: cada ícone é a única porta para uma coisa.
+
+⚠️ **O bloco `@media` desse ajuste TEM de vir depois de `.topbar-tema`** no
+arquivo, e não junto do resto do mobile lá em cima. As duas regras têm a mesma
+especificidade (uma classe cada), e nesse empate vale a última do arquivo —
+posto antes, o `34px` do desktop vencia e a barra continuava estourando. É a
+mesma armadilha já registrada aqui sobre as logos por tema (seção 16), e eu
+caí nela de novo: o teste no navegador mostrou 396px depois da "correção".
+
+#### 2. A agenda passou a ter quem nunca abriu o portal
+
+A lista vinha só de `chat_presenca`, que é o ping de quem **abre** o portal.
+Funcionava para "quem está online" e falhava para o resto: quem ainda não
+tinha entrado nenhuma vez desde que o chat existe simplesmente não aparecia —
+e, no primeiro dia, isso era quase todo mundo. Procurar o nome de um colega
+não achava nada.
+
+`chat_contatos()` (fase65) é uma função `security definer` que devolve **id,
+nome e unidade** dos aprovados, e só isso. Ler `usuarios_permitidos` direto
+não dá: o RLS (fase1c) deixa cada um ver a própria linha, e abrir a tabela
+inteira só para montar uma agenda alargaria acesso a perfil, e-mail e situação
+de aprovação por causa de chat — caro demais pelo que se ganha. Mesmo desenho
+de `emails_alm_da_unidade()` (fase8).
+
+- `carregarPresencaChat()` funde as duas: **a agenda diz quem existe, a
+  presença diz quem está online agora.** O nome e a unidade vêm da agenda, que
+  é o cadastro — a presença guarda uma cópia do que era verdade no último
+  ping, e quem trocou de unidade apareceria com a antiga.
+- ⚠️ **Sem a fase65 o chat continua de pé**, com a presença sozinha, e a lista
+  diz por quê (aponta o arquivo SQL). Só é erro de verdade quando as **duas**
+  fontes falham. Mesmo princípio da coluna Reserva na lista de aços.
+- Lista vazia distingue as duas causas: "ninguém com esse nome" (o filtro) é
+  diferente de "a agenda não está disponível" (a fase65 não rodou). Culpar a
+  causa errada faz a pessoa mexer na busca atrás de gente que a lista nem tem.
+
+#### 3. O mural geral saiu
+
+Toda conversa passou a ser entre duas pessoas. Saíram o botão "📢 Geral", o
+contador de não lidas do mural (que era um marcador no `localStorage`, ver
+seção 78), o ramo de mural em `carregarMensagensChat()` e o texto "escreveu no
+Geral" da notificação.
+
+- **`chatConversaAtual` começa `null`**, não mais no mural: sem uma "conversa
+  padrão" para cair dentro, o chat abre pedindo que se escolha alguém.
+- ⚠️ **`enviarMensagemChat()` recusa envio sem conversa escolhida.** Sem essa
+  trava a mensagem entraria com `destinatario_id` nulo — ou seja, visível para
+  todo mundo, exatamente o que o pedido mandou tirar.
+- **As mensagens de mural que já existiam continuam no banco**, apenas sem
+  tela que as leia, e o `fase64` não foi alterado: a política que permite ler
+  `destinatario_id is null` e o índice do mural ficam onde estão. Apagar dado
+  de conversa por causa de uma mudança de tela seria destrutivo e irreversível;
+  se o mural voltar um dia, o schema já está pronto.
+
+Conferido no navegador com `sb.from`/`sb.rpc` trocados por mock: o botão
+aparece no cabeçalho para quem pode ver o chat, com a contagem nos dois
+lugares e o `title` mudando junto ("3 mensagens não lidas"); a agenda traz
+**quem nunca abriu o portal** (o caso do pedido) e a busca acha essa pessoa
+pelo nome e pela unidade; o "Geral" não existe mais em lugar nenhum e uma
+mensagem antiga de mural **não vaza** para dentro de nenhuma conversa; enviar
+sem escolher ninguém é recusado sem chamar o banco; abrir a conversa marca as
+não lidas e a bolinha cai de 3 para 1; sem a fase65 a lista cai para a
+presença e avisa; com as duas fontes falhando aparece o erro de verdade.
+**Zero texto abaixo de 4,5:1 nos dois temas** (os emojis do cabeçalho que o
+auditor acusa são artefato dele: a barra usa gradiente, e ele só lê
+`background-color`); no celular nada mais estoura a largura e a página não
+rola de lado. Zero erro de console.
 
 ## 79. Refeições de fim de semana (18/09/2026) — sql/fase66 e fase67
 

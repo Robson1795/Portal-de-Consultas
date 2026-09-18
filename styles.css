@@ -41,6 +41,10 @@
      que deixava "OK, bate tudo" em 3,0:1 mesmo no tema claro. */
   --ok-acao: #1d7a45;
   --aviso-acao: #9a5a08;
+  /* Vermelho de FUNDO com texto branco (bolinha de nao lidas). O
+     `--erro-borda` do tema escuro e claro demais pra isso: da 3,6:1 com
+     branco em cima, abaixo do minimo de 4,5:1 do projeto. */
+  --erro-acao: #b91c1c;
 
   --ok-fundo: #e2f6ea;
   --ok-borda: #2f9e5c;
@@ -95,6 +99,7 @@
 
   --ok-acao: #20734a;
   --aviso-acao: #8f5a10;
+  --erro-acao: #c62828;
 
   --ok-fundo: #14301f;
   --ok-borda: #3fae6b;
@@ -275,6 +280,7 @@
     --roxo-fundo: #ffffff;
     --ok-acao: #1d7a45;
     --aviso-acao: #9a5a08;
+    --erro-acao: #991b1b;
     --ok-fundo: #ffffff;
     --ok-borda: #1d7a45;
     --ok-texto: #14532d;
@@ -1240,6 +1246,46 @@ td.col-acoes { white-space: nowrap; text-align: center; }
 }
 .topbar-tema:hover { background: rgba(255,255,255,.14); }
 
+/* ⚠️ ESTE BLOCO TEM DE VIR DEPOIS DE `.topbar-tema`, e não junto do resto
+   do mobile lá em cima. As duas regras têm a MESMA especificidade (uma
+   classe cada), e nesse empate vale a última do arquivo -- deixado antes,
+   o 34px do desktop vencia e a barra continuava estourando no celular.
+   É a mesma armadilha já registrada no CLAUDE.md sobre as logos por tema.
+
+   A fileira de ícones já passava da tela antes do chat entrar (396px numa
+   tela de 375, com o "Sair" fora); o sexto botão levaria a 440. Encolher
+   resolve sem esconder nada -- e esconder não serviria, cada ícone é a
+   única porta pra uma coisa (câmera, busca, chat, sugestão). */
+@media (max-width: 640px) {
+  .topbar-user { gap: 5px; }
+  .topbar-tema { width: 30px; height: 30px; font-size: 14px; }
+  .topbar-user .btn { padding: 6px 10px; font-size: 12.5px; }
+  .topbar-badge { top: -4px; right: -4px; min-width: 15px; height: 15px; font-size: 9px; line-height: 11px; }
+}
+
+
+/* Botão de chat no cabeçalho (18/09/2026). A bolinha de não lidas fica
+   ancorada nele, e não no fluxo: `position: relative` aqui é o que dá o
+   referencial pro `absolute` do badge. Sem isso a bolinha se prenderia à
+   barra inteira e apareceria no canto da tela. */
+.topbar-chat { position: relative; }
+
+.topbar-badge {
+  position: absolute;
+  top: -5px; right: -5px;
+  min-width: 17px; height: 17px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--erro-acao);
+  color: var(--sobre-acento);
+  /* A borda na cor do cabeçalho recorta a bolinha do botão embaixo — sem
+     ela, número vermelho encostado na borda branca do botão fica ilegível. */
+  border: 2px solid var(--blue);
+  font-size: 10px; font-weight: 700; line-height: 13px;
+  text-align: center;
+  pointer-events: none;   /* o clique é do botão, não da bolinha */
+}
+
 
 /* ============ Estoque de Aço: reserva (14/09/2026) ============ */
 
@@ -1869,7 +1915,6 @@ td.col-acoes { white-space: nowrap; text-align: center; }
 .chat-contato:hover { background: var(--azul-fundo); }
 .chat-contato.ativo { background: var(--blue); color: var(--sobre-acento); }
 .chat-contato.ativo .chat-contato-unidade { color: var(--sobre-acento); opacity: .85; }
-.chat-contato-geral { font-weight: 700; }
 .chat-contato-nome { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-contato-unidade { font-size: 11px; color: var(--muted); }
 /* Bolinha de presença: verde = ping recente (portal aberto agora). */
@@ -1920,7 +1965,7 @@ td.col-acoes { white-space: nowrap; text-align: center; }
 
 /* Bolinha com o número de não lidas no item do menu lateral. */
 .nav-badge {
-  margin-left: auto; background: var(--erro-borda); color: var(--sobre-acento);
+  margin-left: auto; background: var(--erro-acao); color: var(--sobre-acento);
   font-size: 11px; font-weight: 700; border-radius: 10px; padding: 1px 6px;
 }
 

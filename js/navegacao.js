@@ -157,6 +157,12 @@ function montarMenu() {
   const btnSugestao = document.getElementById('sugestaoBtn');
   if (btnSugestao) btnSugestao.style.display = '';
 
+  // Chat no cabeçalho (18/09/2026, Victor). Segue a MESMA regra do item no
+  // menu -- `podeVer('chat')` -- em vez de aparecer sempre: se um dia o chat
+  // sair de algum perfil, o botão sai junto, sem ninguém lembrar dele aqui.
+  const btnChat = document.getElementById('chatBtn');
+  if (btnChat) btnChat.style.display = podeVer('chat') ? '' : 'none';
+
   // Abre na primeira pagina que a pessoa pode ver.
   if (!paginaAtual || !podeVer(paginaAtual)) mostrarPagina(visiveis[0]);
   else marcarItemAtivo();

@@ -5,23 +5,27 @@
 // (quem está na mesma unidade normalmente está no mesmo prédio -- o valor é
 // falar com Anápolis/Cambuí) e mural geral + conversa privada.
 //
-// A LISTA DE PESSOAS VEM DE `chat_presenca`, NÃO DE `usuarios_permitidos`
+// DUAS FONTES PRA UMA LISTA SÓ (18/09/2026)
 //
-// Parece o contrário do óbvio, mas o RLS de `usuarios_permitidos` (fase1c)
-// só deixa cada um ver a PRÓPRIA linha -- a lista inteira é de admin. Se o
-// chat lesse de lá, consultor abriria a tela e não veria ninguém. E abrir
-// aquela tabela pra todo mundo só pra montar uma lista de contatos seria
-// alargar permissão de cadastro (perfil, unidade, aprovação) por causa de
-// chat: caro demais pelo que se ganha.
+// `chat_presenca` (fase64) responde "quem está online": é o ping de quem
+// abre o portal. Só ela, porém, deixava de fora quem ainda não tinha entrado
+// nenhuma vez desde que o chat existe -- e procurar o nome de um colega não
+// achava nada. O Victor: *"quando uma pessoa não estiver online, poder
+// pesquisar o nome da pessoa mesmo estando offline"*.
 //
-// `chat_presenca` (fase64) resolve os dois de uma vez: é lida por qualquer
-// aprovado, tem nome/unidade pra mostrar, e só entra quem realmente abriu o
-// portal. O efeito colateral é bom -- a agenda é "quem usa o portal", não
-// "todo cadastro que já existiu".
+// A agenda completa vem de `chat_contatos()` (fase65), função `security
+// definer` que devolve id, nome e unidade dos aprovados -- e só isso. Ler
+// `usuarios_permitidos` direto não dá: o RLS (fase1c) deixa cada um ver a
+// própria linha, e abrir a tabela inteira pra montar uma agenda alargaria
+// acesso a perfil, e-mail e situação de aprovação por causa de chat.
 //
-// O preço: no primeiro dia a lista começa vazia e vai enchendo conforme cada
-// um abre o portal. O mural funciona desde o primeiro minuto de qualquer
-// jeito.
+// As duas se somam em `chatPresencaLista`: a agenda dá QUEM EXISTE, a
+// presença dá QUEM ESTÁ ONLINE AGORA. Se a fase65 ainda não tiver rodado, o
+// chat continua funcionando com a presença sozinha (e a tela diz isso).
+//
+// NÃO EXISTE MAIS MURAL GERAL (18/09/2026, pedido do Victor). Toda conversa
+// é entre duas pessoas. As mensagens de mural que já existiam continuam no
+// banco, apenas sem tela que as leia -- ver CLAUDE.md.
 
 // Ping recente = online. 2 minutos cobre com folga o intervalo de 45s do
 // ping (uma falha de rede isolada não derruba ninguém da lista) sem deixar
@@ -33,12 +37,14 @@ const CHAT_PING_MS          = 45 * 1000;
 // relida do banco. Só enquanto a tela do chat está aberta.
 const CHAT_ATUALIZA_MS      = 20 * 1000;
 const CHAT_LIMITE_MENSAGENS = 200;
-const CHAT_MURAL            = 'geral';
 
-let chatPresencaLista = [];      // linhas de chat_presenca (todo mundo que já abriu o portal)
+let chatPresencaLista = [];      // agenda + presença, já fundidas (ver carregarPresencaChat)
 let chatMensagens     = [];      // mensagens da conversa aberta agora
 let chatNaoLidasMap   = new Map(); // remetente_id -> quantas mensagens não lidas pra mim
-let chatConversaAtual = CHAT_MURAL;
+// null = nenhuma conversa aberta. Sem mural, o chat abre pedindo que se
+// escolha alguém -- não há mais uma "conversa padrão" pra cair dentro.
+let chatConversaAtual = null;
+let chatSemAgenda     = false;   // a fase65 ainda não rodou: só quem já abriu o portal aparece
 let chatTimerPing     = null;
 let chatTimerAtualiza = null;
 let canalChat         = null;
@@ -76,15 +82,53 @@ async function chatPingPresenca() {
   if (error) console.warn('Chat: não foi possível atualizar a presença:', error.message);
 }
 
+// Junta a agenda (quem existe) com a presença (quem está online agora).
+//
+// A agenda manda no nome e na unidade -- é o cadastro, e a presença guarda
+// uma cópia do que era verdade no último ping. Quem trocou de unidade
+// apareceria com a antiga se a presença vencesse.
 async function carregarPresencaChat() {
-  const { data, error } = await sb.from('chat_presenca')
-    .select('user_id, nome, email, unidade, ultimo_ping')
-    .order('ultimo_ping', { ascending: false });
-  if (error) {
-    chatPresencaLista = [];
-    return error.message;
+  const [presenca, agenda] = await Promise.all([
+    sb.from('chat_presenca')
+      .select('user_id, nome, email, unidade, ultimo_ping')
+      .order('ultimo_ping', { ascending: false }),
+    sb.rpc('chat_contatos')
+  ]);
+
+  const porId = new Map();
+
+  // A fase65 pode não ter rodado ainda: sem agenda, o chat continua de pé
+  // com quem já abriu o portal, e a tela avisa por quê.
+  chatSemAgenda = !!agenda.error;
+  if (!agenda.error) {
+    (agenda.data || []).forEach(c => {
+      porId.set(c.user_id, {
+        user_id: c.user_id, nome: c.nome, unidade: c.unidade, ultimo_ping: null
+      });
+    });
+  } else {
+    console.warn('Chat: agenda indisponível (sql/fase65-chat-contatos.sql):', agenda.error.message);
   }
-  chatPresencaLista = (data || []).filter(p => p.user_id !== userIdAtual);
+
+  if (!presenca.error) {
+    (presenca.data || []).forEach(p => {
+      const jaTem = porId.get(p.user_id);
+      if (jaTem) {
+        jaTem.ultimo_ping = p.ultimo_ping;          // só o que a agenda não sabe
+      } else {
+        porId.set(p.user_id, {
+          user_id: p.user_id, nome: p.nome, unidade: p.unidade, ultimo_ping: p.ultimo_ping
+        });
+      }
+    });
+  }
+
+  chatPresencaLista = [...porId.values()]
+    .filter(p => p.user_id !== userIdAtual)
+    .sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR'));
+
+  // Só é erro de verdade se as DUAS falharem: com uma delas ainda há lista.
+  if (presenca.error && agenda.error) return presenca.error.message;
   return null;
 }
 
@@ -102,80 +146,76 @@ async function carregarNaoLidasChat() {
   });
 }
 
-// O mural não tem "lido por" no banco (seria uma linha por pessoa por
-// mensagem, pra um mural que todo mundo lê). O marcador de "até onde eu já
-// vi" é local do navegador -- se a pessoa abrir em outro computador, vê o
-// mural como novo. Aceitável pra um aviso de "tem mensagem nova"; não seria
-// pra mensagem privada, que por isso tem `lido_em` de verdade.
-function chatMuralVistoEm() {
-  try { return localStorage.getItem('chatMuralVisto') || ''; } catch (e) { return ''; }
-}
-function marcarMuralVisto() {
-  try { localStorage.setItem('chatMuralVisto', new Date().toISOString()); } catch (e) { /* modo privado */ }
-}
-
-let chatMuralNaoLidas = 0;
-async function carregarNaoLidasMural() {
-  chatMuralNaoLidas = 0;
-  const visto = chatMuralVistoEm();
-  if (!visto) return; // nunca abriu o mural: não fica cobrando o que ele nem sabe que existe
-  const { count, error } = await sb.from('chat_mensagens')
-    .select('id', { count: 'exact', head: true })
-    .is('destinatario_id', null)
-    .neq('remetente_id', userIdAtual)
-    .gt('criado_em', visto);
-  if (!error) chatMuralNaoLidas = count || 0;
-}
-
 function chatTotalNaoLidas() {
-  let total = chatMuralNaoLidas;
+  let total = 0;
   chatNaoLidasMap.forEach(qtd => { total += qtd; });
   return total;
 }
 
-// Bolinha com o número no item do menu lateral. Sem isso, mensagem que chega
-// enquanto a pessoa está em outra tela só apareceria no popup -- que ela pode
-// ter fechado ou perdido.
+// A contagem aparece em DOIS lugares, e os dois importam:
+//
+//   * item do menu lateral -- onde já estava;
+//   * botão 💬 do cabeçalho (18/09/2026, pedido do Victor) -- que fica
+//     visível mesmo com o menu fechado, que é como o portal abre no celular.
+//
+// Sem o segundo, mensagem que chega com a pessoa em outra tela só apareceria
+// no popup, que ela pode ter fechado ou perdido.
 function atualizarBadgeChat() {
-  const item = document.querySelector('.nav-item[data-pagina="chat"]');
-  if (!item) return;
-  let badge = item.querySelector('.nav-badge');
   const total = chatTotalNaoLidas();
-  if (!total) { if (badge) badge.remove(); return; }
-  if (!badge) {
-    badge = document.createElement('span');
-    badge.className = 'nav-badge';
-    item.appendChild(badge);
+  const rotulo = total > 99 ? '99+' : String(total);
+
+  const item = document.querySelector('.nav-item[data-pagina="chat"]');
+  if (item) {
+    let badge = item.querySelector('.nav-badge');
+    if (!total) {
+      if (badge) badge.remove();
+    } else {
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'nav-badge';
+        item.appendChild(badge);
+      }
+      badge.textContent = rotulo;
+    }
   }
-  badge.textContent = total > 99 ? '99+' : String(total);
+
+  const bolha = document.getElementById('chatBadge');
+  const botao = document.getElementById('chatBtn');
+  if (bolha) {
+    bolha.textContent = rotulo;
+    bolha.style.display = total ? '' : 'none';
+  }
+  if (botao) {
+    botao.title = total
+      ? (total === 1 ? '1 mensagem não lida' : total + ' mensagens não lidas')
+      : 'Conversar com quem usa o portal';
+  }
 }
 
 // ---- Mensagens --------------------------------------------------------------
 async function carregarMensagensChat() {
-  let q = sb.from('chat_mensagens')
+  // Sem conversa escolhida não há o que buscar -- e buscar "tudo" traria
+  // conversa de outra pessoa pra tela.
+  if (!chatConversaAtual) { chatMensagens = []; return null; }
+
+  // Os dois sentidos da conversa. O RLS já garante que só volta conversa
+  // de quem participa dela -- este filtro é pra pegar A conversa certa,
+  // não pra proteger nada.
+  const { data, error } = await sb.from('chat_mensagens')
     .select('id, remetente_id, remetente_nome, remetente_unidade, destinatario_id, texto, criado_em')
+    .not('destinatario_id', 'is', null)
+    .or(`and(remetente_id.eq.${userIdAtual},destinatario_id.eq.${chatConversaAtual}),`
+      + `and(remetente_id.eq.${chatConversaAtual},destinatario_id.eq.${userIdAtual})`)
     .order('criado_em', { ascending: false })
     .limit(CHAT_LIMITE_MENSAGENS);
 
-  if (chatConversaAtual === CHAT_MURAL) {
-    q = q.is('destinatario_id', null);
-  } else {
-    // Os dois sentidos da conversa. O RLS já garante que só volta conversa
-    // de quem participa dela -- este filtro é pra pegar A conversa certa,
-    // não pra proteger nada.
-    q = q.not('destinatario_id', 'is', null)
-         .or(`and(remetente_id.eq.${userIdAtual},destinatario_id.eq.${chatConversaAtual}),`
-           + `and(remetente_id.eq.${chatConversaAtual},destinatario_id.eq.${userIdAtual})`);
-  }
-
-  const { data, error } = await q;
   if (error) { chatMensagens = []; return error.message; }
   chatMensagens = (data || []).reverse(); // mais antiga em cima, como todo chat
   return null;
 }
 
 async function marcarConversaLidaChat(outroId) {
-  if (!userIdAtual || outroId === CHAT_MURAL) { marcarMuralVisto(); chatMuralNaoLidas = 0; return; }
+  if (!userIdAtual || !outroId) return;
   if (!chatNaoLidasMap.get(outroId)) return;
   const { error } = await sb.from('chat_mensagens')
     .update({ lido_em: new Date().toISOString() })
@@ -187,7 +227,6 @@ async function marcarConversaLidaChat(outroId) {
 
 // ---- Render -----------------------------------------------------------------
 function chatNomeDaConversa(id) {
-  if (id === CHAT_MURAL) return 'Geral';
   const p = chatPresencaLista.find(u => u.user_id === id);
   return p ? p.nome : 'Conversa';
 }
@@ -213,16 +252,26 @@ function renderListaChat() {
             </button>`;
   };
 
+  // Busca sem resultado é diferente de agenda vazia: a primeira é o filtro,
+  // a segunda quase sempre é a fase65 não ter rodado. Culpar a causa errada
+  // faz a pessoa ficar mexendo na busca atrás de gente que a lista nem tem.
+  const nada = !online.length && !offline.length;
+  if (nada) {
+    alvo.innerHTML = `<div class="chat-vazio-mini">${
+      busca ? 'Ninguém com esse nome ou unidade.'
+            : (chatSemAgenda
+                ? 'A agenda ainda não está disponível — falta rodar sql/fase65-chat-contatos.sql no Supabase. Por enquanto só aparece quem já abriu o portal.'
+                : 'Nenhuma outra pessoa cadastrada ainda.')
+    }</div>`;
+    return;
+  }
+
   alvo.innerHTML = `
-    <button class="chat-contato chat-contato-geral${chatConversaAtual === CHAT_MURAL ? ' ativo' : ''}" data-conversa="${CHAT_MURAL}">
-      <span class="chat-contato-nome">📢 Geral</span>
-      <span class="chat-contato-unidade">todas as unidades</span>
-      ${chatMuralNaoLidas ? `<span class="chat-nao-lidas">${chatMuralNaoLidas}</span>` : ''}
-    </button>
     <div class="chat-grupo-titulo">Online agora (${online.length})</div>
     ${online.map(item).join('') || '<div class="chat-vazio-mini">Ninguém mais com o portal aberto agora.</div>'}
     <div class="chat-grupo-titulo">Offline (${offline.length})</div>
     ${offline.map(item).join('') || '<div class="chat-vazio-mini">—</div>'}
+    ${chatSemAgenda ? '<div class="chat-vazio-mini">Só aparece quem já abriu o portal — falta rodar sql/fase65-chat-contatos.sql.</div>' : ''}
   `;
 }
 
@@ -231,14 +280,18 @@ function renderMensagensChat() {
   const topo = document.getElementById('chatConversaTopo');
   if (!alvo || !topo) return;
 
-  if (chatConversaAtual === CHAT_MURAL) {
-    topo.innerHTML = `<b>📢 Geral</b> <span class="chat-topo-info">todo mundo do portal vê estas mensagens</span>`;
-  } else {
-    const p = chatPresencaLista.find(u => u.user_id === chatConversaAtual);
-    const on = p && chatEstaOnline(p.ultimo_ping);
-    topo.innerHTML = `<b>${escapeHtml(chatNomeDaConversa(chatConversaAtual))}</b>
-      <span class="chat-topo-info">${on ? '🟢 online agora' : '⚪ offline — vai ver quando entrar'}${p && p.unidade ? ' · unidade ' + escapeHtml(p.unidade) : ''}</span>`;
+  if (!chatConversaAtual) {
+    topo.innerHTML = `<b>Nenhuma conversa aberta</b>
+      <span class="chat-topo-info">escolha um nome na lista ao lado</span>`;
+    alvo.innerHTML = `<div class="chat-vazio">Escolha alguém na lista para conversar.
+      Quem está offline recebe assim que entrar no portal.</div>`;
+    return;
   }
+
+  const p = chatPresencaLista.find(u => u.user_id === chatConversaAtual);
+  const on = p && chatEstaOnline(p.ultimo_ping);
+  topo.innerHTML = `<b>${escapeHtml(chatNomeDaConversa(chatConversaAtual))}</b>
+    <span class="chat-topo-info">${on ? '🟢 online agora' : '⚪ offline — vai ver quando entrar'}${p && p.unidade ? ' · unidade ' + escapeHtml(p.unidade) : ''}</span>`;
 
   if (!chatMensagens.length) {
     alvo.innerHTML = `<div class="chat-vazio">Nenhuma mensagem ainda. Escreva a primeira aí embaixo.</div>`;
@@ -269,7 +322,6 @@ async function carregarChat() {
   await chatPingPresenca(); // entra na lista dos outros antes de tudo
   const erroPresenca = await carregarPresencaChat();
   await carregarNaoLidasChat();
-  await carregarNaoLidasMural();
   const erroMensagens = await carregarMensagensChat();
 
   if (msg) {
@@ -308,6 +360,17 @@ async function enviarMensagemChat() {
   if (!texto) return;
   if (!userIdAtual) return;
 
+  // Sem mural, mensagem sem destinatário não existe mais. Sem esta trava ela
+  // entraria no banco com destinatario_id nulo -- ou seja, visível pra todo
+  // mundo -- justamente o que o Victor pediu pra tirar.
+  if (!chatConversaAtual) {
+    if (msg) {
+      msg.textContent = 'Escolha na lista com quem você quer falar antes de enviar.';
+      msg.className = 'status-msg status-err';
+    }
+    return;
+  }
+
   const btn = document.getElementById('chatEnviarBtn');
   btn.disabled = true;
 
@@ -315,7 +378,7 @@ async function enviarMensagemChat() {
     remetente_id: userIdAtual,
     remetente_nome: nomeUsuarioAtual || emailUsuarioAtual || 'Sem nome',
     remetente_unidade: unidadeAtual || null,
-    destinatario_id: chatConversaAtual === CHAT_MURAL ? null : chatConversaAtual,
+    destinatario_id: chatConversaAtual,
     texto: texto.slice(0, 2000)
   };
 
@@ -378,6 +441,9 @@ function iniciarChatTempoReal() {
     await carregarPresencaChat();
     await carregarNaoLidasChat();
     await carregarMensagensChat();
+    // (a agenda não muda de minuto em minuto, mas vem junto no mesmo
+    //  carregarPresencaChat -- é uma chamada a mais e mantém nome/unidade
+    //  em dia pra quem foi cadastrado agora há pouco)
     renderListaChat();
     renderMensagensChat();
     atualizarBadgeChat();
@@ -410,6 +476,11 @@ document.getElementById('chatMensagens').addEventListener('click', (e) => {
 
 document.getElementById('chatBusca').addEventListener('input', renderListaChat);
 document.getElementById('chatEnviarBtn').addEventListener('click', enviarMensagemChat);
+
+// Botão do cabeçalho: mesma tela do item do menu, só mais perto da mão.
+document.getElementById('chatBtn').addEventListener('click', () => {
+  if (typeof mostrarPagina === 'function') mostrarPagina('chat');
+});
 
 // Enter manda, Shift+Enter quebra linha -- é o que a mão já espera de um chat.
 document.getElementById('chatTexto').addEventListener('keydown', (e) => {
